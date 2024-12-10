@@ -48,3 +48,4 @@ def readEEG(filepath, preload=True):
 		EEG.crop(tmin=60, tmax=360)
 		return EEG
 	raise Exception(f"No EEG found for file type: {filepath}")
+
