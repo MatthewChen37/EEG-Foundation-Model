@@ -38,6 +38,9 @@ def createDistanceMatrix(info):
 	for i in range(n_channels):
 		for j in range(n_channels):
 			distance_matrix[i, j] = np.linalg.norm(positions[i] - positions[j])
+
+	# Normalize values between 0 and 1 as per https://stats.stackexchange.com/questions/70801/how-to-normalize-data-to-0-1-range
+	distance_matrix = (distance_matrix - distance_matrix.min())/ (distance_matrix.max() - distance_matrix.min())
 	return distance_matrix
 
 def _get_channel_positions(list):
