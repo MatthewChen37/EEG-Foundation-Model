@@ -33,7 +33,7 @@ def convertTUSZtoBIDS(subject_dir, subject_name):
 					onset = annotations_df['start_time']
 					duration = annotations_df['stop_time'] - annotations_df['start_time']
 					description = annotations_df['label']
-					ch_names = [x.split("-") for x in annotations_df['channel'].values.tolist()]
+					ch_names = [_channel_mapping(x.split("-")) for x in annotations_df['channel'].values.tolist()]
 					
 					global_annotations_df = pd.read_csv(global_annotation_file_path, delimiter=',', comment='#')
 					onset = pd.concat([onset, global_annotations_df['start_time']])
@@ -48,7 +48,7 @@ def convertTUSZtoBIDS(subject_dir, subject_name):
 					raw.set_annotations(annotations)
 					raw.set_montage("standard_1005", on_missing="ignore")
 
-					bids_path = BIDSPath(subject="aaaaaaac", session=session, run=file[:-4].split("_")[-1], task="Rest", root="SampleData/TUH-BIDS")
+					bids_path = BIDSPath(subject=subject_name, session=session.replace("_", ""), recording=file[:-4].split("_")[-1], task="Rest", root="SampleData/TUH-BIDS")
 					write_raw_bids(raw, bids_path, overwrite=True)
 
 def _channel_mapping(channel_list):
