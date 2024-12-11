@@ -10,6 +10,6 @@ def simplePipeline(raw):
 	'''
 	raw.filter(0.5, 50) # Should be max 40 but we set it to 50 just in case
 	raw = raw.resample(128) # Downsample to 128 Hz 
-	epochs = [make_fixed_length_epochs(raw, duration=duration) for duration in [1, 5, 15, 60]]
-	cleaned_epochs = [AutoReject(verbose=False).fit_transform(epoch) for epoch in epochs]
+	epochs = [make_fixed_length_epochs(raw, duration=duration, preload=True) for duration in [1, 5, 15, 60]]
+	cleaned_epochs = [AutoReject(verbose=False, cv=min(5, len(epoch))).fit_transform(epoch) for epoch in epochs]
 	return cleaned_epochs

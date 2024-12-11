@@ -31,7 +31,7 @@ def readEEG(bidsPath, dataset):
 	'''
 	Read EEG data from a BIDS dataset.
 	'''
-	raw = read_raw_bids(bidsPath)
+	raw = read_raw_bids(bidsPath, extra_params={'verbose':False}, verbose=False)
 	if dataset == "TUH":
 		raw.load_data()
 		raw.set_eeg_reference(ref_channels=['A1', 'A2'])
@@ -39,6 +39,7 @@ def readEEG(bidsPath, dataset):
 	elif dataset == "HBN":
 		electrodes = [f'E{i}' for i in range(1, 129)]
 		to_drop = [electrode for electrode in electrodes if electrode not in HBN_ELECTRODE_MAP.values()]
+		raw.drop_channels(to_drop)
 
 		# For some reason MNE reads in positions as cm so convert back to m
 		transformation_matrix = np.asarray([[0, -100, 0, 0], [100, 0, 0, 0], [0, 0, 100, 0], [0, 0, 0, 100]])
