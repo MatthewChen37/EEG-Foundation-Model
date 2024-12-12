@@ -1,0 +1,24 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: hbndownload
+display_name: hbndownload
+description: Download EEG data from the Healthy Brain Network
+tags:
+  project: EEGFoundationModel
+version: 1
+inputs:
+  openneuro_accession_number:
+    type: string
+  max_concurrent_downloads:
+    type: integer
+outputs:
+  output_dir:
+    type: uri_folder
+environment: azureml:HBNDownloadEnvironment:1
+code: .
+command: |
+  python HBNDownload.py \
+    --openneuro_accession_number ${{inputs.openneuro_accession_number}} \
+    --max_concurrent_downloads ${{inputs.max_concurrent_downloads}} \
+    --output_dir ${{outputs.output_dir}}
