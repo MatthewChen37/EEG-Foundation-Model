@@ -2,11 +2,117 @@ import mne
 from mne_bids import BIDSPath, read_raw_bids, write_raw_bids
 import pandas as pd
 import numpy as np
-import os
+import os, argparse
+from pathlib import Path
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-def convertTUHtoBIDS(filepath):
-	pass
+CHANNELS_TO_KEEP = {
+	"Fp1",
+	"Fp2",
+	"F3"
+	"F4",
+	"C3",
+	"C4",
+	"A1",
+	"A2",
+	"P3",
+	"P4",
+	"O1",
+	"O2",
+	"F7",
+	"F8",
+	"T3",
+	"T4",
+	"T5",
+	"T6",
+	"Fz",
+	"Cz",
+	"Pz",
+}
 
+def process_file(args, subfolder, subject, session, montage_layout, file_token):
+        if file_token.endswith(".edf"):
+            _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_token)
+        else:
+            print("-----------------------------------", file_token)
+
+def convertTUHtoBIDS(args):
+    '''
+    Converts TUH EEG data to BIDS format.
+    '''
+
+    
+    # Collect all files to be processed
+    files_to_process = []
+    for subfolder in tqdm(os.listdir(args.input_dir)):
+        for subject in os.listdir(os.path.join(args.input_dir, subfolder)):
+            if not os.path.isdir(os.path.join(args.output_dir, "sub-" + subject)):
+                subject_dir = os.path.join(args.input_dir, subfolder, subject)
+                for session in os.listdir(subject_dir):
+                    for montage_layout in os.listdir(os.path.join(subject_dir, session)):
+                        for file_token in os.listdir(os.path.join(subject_dir, session, montage_layout)):
+                            files_to_process.append((args, subfolder, subject, session, montage_layout, file_token))
+
+    # Use ProcessPoolExecutor to process files concurrently
+    with ProcessPoolExecutor(max_workers=16) as executor:
+        futures = [executor.submit(process_file, *file_args) for file_args in files_to_process]
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            future.result()  # To raise exceptions if any
+
+'''
+def convertTUHtoBIDS(args):
+'''
+# Converts TUH EEG data to BIDS format.
+'''
+
+	# iterate over files in
+	# that directory
+	for subfolder in tqdm(os.listdir(args.input_dir)):
+		for subject in os.listdir(os.path.join(args.input_dir, subfolder)):
+			if not os.path.isdir(os.path.join(args.output_dir, "sub-" + subject)):
+				subject_dir = os.path.join(args.input_dir, subfolder, subject)
+				for session in os.listdir(subject_dir):
+					for montage_layout in os.listdir(os.path.join(subject_dir, session)):
+						for file_token in os.listdir(os.path.join(subject_dir, session, montage_layout)):
+							if file_token.endswith(".edf"):
+								_convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_token)
+							else:
+								print("-----------------------------------", file_token)
+'''
+
+
+'''
+Unused function
+'''
+def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_token):
+	'''
+	Converts an EDF file to BIDS format.
+	'''
+	filepath = os.path.join(args.input_dir, subfolder, subject, session, montage_layout, file_token)
+	raw = mne.io.read_raw_edf(filepath, preload=True, verbose=False)
+	_rename_channels(raw)
+
+	to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
+	raw.drop_channels(to_drop)
+
+	'''
+	BIDS Format requires line frequency to be specified.
+	Line frequency is the frequency of the power line in the country where the data was recorded.
+	For the United States, the line frequency is (typically) 60 Hz.	
+	'''
+	raw.info["line_freq"] = 60
+	raw.set_montage("standard_1005", on_missing="ignore")
+
+	bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
+					     recording=file_token[:-4].split("_")[-1], task="Unknown", root=args.output_dir)
+	try:
+		write_raw_bids(raw, bids_path, overwrite=True, allow_preload=True, verbose=False, format="EDF")
+	except ValueError as e:
+		raw.set_meas_date(None)
+		write_raw_bids(raw, bids_path, overwrite=True, allow_preload=True, verbose=False, format="EDF")
+	except FileExistsError as e:
+		pass
 
 def convertTUSZtoBIDS(subject_dir, subject_name):
 	
@@ -105,3 +211,20 @@ def _rename_channels(raw):
 		)
 		# Fix capitalized EEG channel names:
 		raw.rename_channels(mapping_eeg_names)
+
+if __name__ == "__main__":
+
+	parser = argparse.ArgumentParser()
+
+	default_output_dir = "/home/azureuser/mycontainer/TUH-BIDS"
+	parser.add_argument(
+		"--input_dir", type=str, help="Input directory", default="/home/azureuser/mycontainer/edf"
+	)
+	parser.add_argument(
+		"--output_dir", type=str, help="Output directory", default=default_output_dir
+	)
+
+	Path(default_output_dir).mkdir(parents=True, exist_ok=True)
+
+	args = parser.parse_args()
+	convertTUHtoBIDS(args)
