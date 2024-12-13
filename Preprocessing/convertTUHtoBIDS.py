@@ -82,9 +82,6 @@ def convertTUHtoBIDS(args):
 '''
 
 
-'''
-Unused function
-'''
 def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_token):
 	'''
 	Converts an EDF file to BIDS format.
@@ -114,6 +111,9 @@ def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_to
 	except FileExistsError as e:
 		pass
 
+'''
+Unused function - assumed annotations exist
+'''
 def convertTUSZtoBIDS(subject_dir, subject_name):
 	
 	for session in os.listdir(subject_dir):
