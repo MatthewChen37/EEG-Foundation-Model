@@ -8,6 +8,8 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import warnings
 import gc
+import traceback
+
 
 CHANNELS_TO_KEEP = {
 	"Fp1",
@@ -44,7 +46,6 @@ def get_files_to_process(args):
 	# Collect all files to be processed
     files_to_process = []
 
-    count = 0
     for subfolder in tqdm(os.listdir(args.input_dir)):
         for subject in os.listdir(os.path.join(args.input_dir, subfolder)):
             subject_dir = os.path.join(args.input_dir, subfolder, subject)
@@ -55,9 +56,7 @@ def get_files_to_process(args):
 														    "eeg", "sub-" + subject + "_ses-" + session.replace("_", "") + "_task-rest_proc-"
 															+ montage_layout.replace("_", "") + "_rec-" + file_token[:-4].split("_")[-1] + "_eeg.edf")):
                             files_to_process.append((args, subfolder, subject, session, montage_layout, file_token))
-                            count += 1
-                            if count >= 100:
-                                break
+    return files_to_process
 def convertTUHtoBIDS(args):
 	'''
 	Converts TUH EEG data to BIDS format.
@@ -66,12 +65,18 @@ def convertTUHtoBIDS(args):
 	print("Files to process: ", len(files_to_process))
 	failed_files = []
 
+	'''
 	# Use ThreadPoolExecutor to process files concurrently
 	with ThreadPoolExecutor(max_workers=16) as executor:
 		futures = [executor.submit(process_file, *file_args, failed_files) for file_args in files_to_process]
 		for future in tqdm(as_completed(futures), total=len(futures)):
 			future.result()  # To raise exceptions if any
+	'''
 
+	for file_args in tqdm(files_to_process):
+		process_file(*file_args, failed_files)
+
+	print("Failed files: ", len(failed_files))
 	if failed_files:
 		pd.DataFrame(failed_files, columns=["subfolder", "subject", "session", "montage_layout", "file_token", "error"]).to_csv(
 			os.path.join(args.output_dir,"failed_files.csv"), index=False
@@ -103,32 +108,31 @@ def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_to
 	'''
 	Converts an EDF file to BIDS format.
 	'''
+	filepath = os.path.join(args.input_dir, subfolder, subject, session, montage_layout, file_token)
+	raw = mne.io.read_raw_edf(filepath, preload=True, verbose=False)
+	_rename_channels(raw)
+
+	to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
+	raw.drop_channels(to_drop)
+	'''
+	BIDS Format requires line frequency to be specified.
+	Line frequency is the frequency of the power line in the country where the data was recorded.
+	For the United States, the line frequency is (typically) 60 Hz.	
+	'''
+	raw.info["line_freq"] = 60
+	raw.set_montage("standard_1005", on_missing="ignore")
+
+	assert len(raw.info["ch_names"]) == 21 or len(raw.info["ch_names"]) == 19
+	bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
+						recording=file_token[:-4].split("_")[-1], task="rest", root=args.output_dir)
 	try:
-		filepath = os.path.join(args.input_dir, subfolder, subject, session, montage_layout, file_token)
-		raw = mne.io.read_raw_edf(filepath, preload=True, verbose=False)
-		_rename_channels(raw)
-
-		to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
-		raw.drop_channels(to_drop)
-
-		'''
-		BIDS Format requires line frequency to be specified.
-		Line frequency is the frequency of the power line in the country where the data was recorded.
-		For the United States, the line frequency is (typically) 60 Hz.	
-		'''
-		raw.info["line_freq"] = 60
-		raw.set_montage("standard_1005", on_missing="ignore")
-
-		assert len(raw.info["ch_names"]) == 21 or len(raw.info["ch_names"]) == 19
-		bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
-							recording=file_token[:-4].split("_")[-1], task="rest", root=args.output_dir)
 		try:
 			write_raw_bids(raw, bids_path, overwrite=False, allow_preload=True, verbose=False, format="EDF")
 		except ValueError as e:
 			raw.set_meas_date(None)
 			write_raw_bids(raw, bids_path, overwrite=False, allow_preload=True, verbose=False, format="EDF")
 	except Exception as e:
-		failed_files.append((subfolder, subject, session, montage_layout, file_token, e))
+		failed_files.append((subfolder, subject, session, montage_layout, file_token, traceback.format_exc()))
 
 	gc.collect()
 
