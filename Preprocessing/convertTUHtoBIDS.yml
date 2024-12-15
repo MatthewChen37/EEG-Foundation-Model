@@ -13,7 +13,7 @@ inputs:
 outputs:
   output_dir:
     type: uri_folder
-environment: azureml:PreprocessingEnvironment:1
+environment: azureml:PreprocessingEnvironment:@latest
 code: .
 command: |
   python convertTUHtoBIDS.py \

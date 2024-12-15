@@ -1,12 +1,13 @@
 import mne
-from mne_bids import BIDSPath, read_raw_bids, write_raw_bids
+from mne_bids import BIDSPath, write_raw_bids
 import pandas as pd
 import numpy as np
 import os, argparse
 from pathlib import Path
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import warnings
+import gc
 
 CHANNELS_TO_KEEP = {
 	"Fp1",
@@ -38,30 +39,41 @@ def process_file(args, subfolder, subject, session, montage_layout, file_token, 
         else:
             print("-----------------------------------", file_token)
 
-def convertTUHtoBIDS(args):
-    '''
-    Converts TUH EEG data to BIDS format.
-    '''
-    # Collect all files to be processed
+
+def get_files_to_process(args):
+	# Collect all files to be processed
     files_to_process = []
+
+    count = 0
     for subfolder in tqdm(os.listdir(args.input_dir)):
         for subject in os.listdir(os.path.join(args.input_dir, subfolder)):
-            if not os.path.isdir(os.path.join(args.output_dir, "sub-" + subject)):
-                subject_dir = os.path.join(args.input_dir, subfolder, subject)
-                for session in os.listdir(subject_dir):
-                    for montage_layout in os.listdir(os.path.join(subject_dir, session)):
-                        for file_token in os.listdir(os.path.join(subject_dir, session, montage_layout)):
+            subject_dir = os.path.join(args.input_dir, subfolder, subject)
+            for session in os.listdir(subject_dir):
+                for montage_layout in os.listdir(os.path.join(subject_dir, session)):
+                    for file_token in os.listdir(os.path.join(subject_dir, session, montage_layout)):
+                        if not os.path.isfile(os.path.join(args.output_dir, "sub-" + subject, "ses-" + session.replace("_", ""),
+														    "eeg", "sub-" + subject + "_ses-" + session.replace("_", "") + "_task-rest_proc-"
+															+ montage_layout.replace("_", "") + "_rec-" + file_token[:-4].split("_")[-1] + "_eeg.edf")):
                             files_to_process.append((args, subfolder, subject, session, montage_layout, file_token))
+                            count += 1
+                            if count >= 100:
+                                break
+def convertTUHtoBIDS(args):
+	'''
+	Converts TUH EEG data to BIDS format.
+	'''
+	files_to_process = get_files_to_process(args)
+	print("Files to process: ", len(files_to_process))
+	failed_files = []
 
-    failed_files = []
-    # Use ThreadPoolExecutor to process files concurrently
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = [executor.submit(process_file, *file_args, failed_files) for file_args in files_to_process]
-        for future in tqdm(as_completed(futures), total=len(futures)):
-            future.result()  # To raise exceptions if any
+	# Use ThreadPoolExecutor to process files concurrently
+	with ThreadPoolExecutor(max_workers=16) as executor:
+		futures = [executor.submit(process_file, *file_args, failed_files) for file_args in files_to_process]
+		for future in tqdm(as_completed(futures), total=len(futures)):
+			future.result()  # To raise exceptions if any
 
-    if failed_files:
-        pd.DataFrame(failed_files, columns=["subfolder", "subject", "session", "montage_layout", "file_token", "error"]).to_csv(
+	if failed_files:
+		pd.DataFrame(failed_files, columns=["subfolder", "subject", "session", "montage_layout", "file_token", "error"]).to_csv(
 			os.path.join(args.output_dir,"failed_files.csv"), index=False
 		)
 		
@@ -108,7 +120,6 @@ def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_to
 		raw.set_montage("standard_1005", on_missing="ignore")
 
 		assert len(raw.info["ch_names"]) == 21 or len(raw.info["ch_names"]) == 19
-
 		bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
 							recording=file_token[:-4].split("_")[-1], task="rest", root=args.output_dir)
 		try:
@@ -118,6 +129,9 @@ def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_to
 			write_raw_bids(raw, bids_path, overwrite=False, allow_preload=True, verbose=False, format="EDF")
 	except Exception as e:
 		failed_files.append((subfolder, subject, session, montage_layout, file_token, e))
+
+	gc.collect()
+
 	
 '''
 Unused function - assumed annotations exist
@@ -229,8 +243,6 @@ if __name__ == "__main__":
 	# Ignore MNE warnings
 	warnings.filterwarnings("ignore", category=RuntimeWarning, module="mne")
 
-
-	default_output_dir = "/home/azureuser/mycontainer/TUH-BIDS"
 	parser.add_argument(
 		"--input_dir", type=str, help="Input directory", required=True
 	)
