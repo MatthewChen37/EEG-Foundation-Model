@@ -52,9 +52,10 @@ def get_files_to_process(args):
             for session in os.listdir(subject_dir):
                 for montage_layout in os.listdir(os.path.join(subject_dir, session)):
                     for file_token in os.listdir(os.path.join(subject_dir, session, montage_layout)):
-                        if not os.path.isfile(os.path.join(args.output_dir, "sub-" + subject, "ses-" + session.replace("_", ""),
-														    "eeg", "sub-" + subject + "_ses-" + session.replace("_", "") + "_task-rest_proc-"
-															+ montage_layout.replace("_", "") + "_rec-" + file_token[:-4].split("_")[-1] + "_eeg.edf")):
+                        file_directory = os.path.join(args.output_dir, f"sub-{subject}", f"ses-{session.replace('_', '')}", "eeg")
+                        file_name = f"sub-{subject}_ses-{session.replace('_', '')}_task-rest_proc-" + f"{montage_layout.replace('_', '')}_rec-{file_token[:-4].split('_')[-1]}_eeg.edf"
+                        output_file = os.path.join(file_directory, file_name)
+                        if not os.path.isfile(output_file):
                             files_to_process.append((args, subfolder, subject, session, montage_layout, file_token))
     return files_to_process
 def convertTUHtoBIDS(args):
@@ -108,24 +109,24 @@ def _convertEDFtoBIDS(args, subfolder, subject, session, montage_layout, file_to
 	'''
 	Converts an EDF file to BIDS format.
 	'''
-	filepath = os.path.join(args.input_dir, subfolder, subject, session, montage_layout, file_token)
-	raw = mne.io.read_raw_edf(filepath, preload=True, verbose=False)
-	_rename_channels(raw)
-
-	to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
-	raw.drop_channels(to_drop)
-	'''
-	BIDS Format requires line frequency to be specified.
-	Line frequency is the frequency of the power line in the country where the data was recorded.
-	For the United States, the line frequency is (typically) 60 Hz.	
-	'''
-	raw.info["line_freq"] = 60
-	raw.set_montage("standard_1005", on_missing="ignore")
-
-	assert len(raw.info["ch_names"]) == 21 or len(raw.info["ch_names"]) == 19
-	bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
-						recording=file_token[:-4].split("_")[-1], task="rest", root=args.output_dir)
 	try:
+		filepath = os.path.join(args.input_dir, subfolder, subject, session, montage_layout, file_token)
+		raw = mne.io.read_raw_edf(filepath, preload=True, verbose=False)
+		_rename_channels(raw)
+
+		to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
+		raw.drop_channels(to_drop)
+		'''
+		BIDS Format requires line frequency to be specified.
+		Line frequency is the frequency of the power line in the country where the data was recorded.
+		For the United States, the line frequency is (typically) 60 Hz.	
+		'''
+		raw.info["line_freq"] = 60
+		raw.set_montage("standard_1005", on_missing="ignore")
+
+		assert len(raw.info["ch_names"]) == 21 or len(raw.info["ch_names"]) == 19
+		bids_path = BIDSPath(subject=subject, session=session.replace("_", ""), processing=montage_layout.replace("_", ""),
+							recording=file_token[:-4].split("_")[-1], task="rest", root=args.output_dir)
 		try:
 			write_raw_bids(raw, bids_path, overwrite=False, allow_preload=True, verbose=False, format="EDF")
 		except ValueError as e:
