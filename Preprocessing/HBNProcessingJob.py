@@ -41,21 +41,21 @@ def _process_dataset_release(dataset_release, args):
 		subject_all_data = []
 		bids_path.update(subject=subject)
 		for bp in tqdm(bids_path.match()):
-			raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
-			raw.drop_channels(TO_DROP)
-			raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
-			if indices is None:
-				indices = raw.ch_names
-			subject_all_data.append(raw.get_data())
+			if not os.path.exists(file_path):
+				if bp.run:
+					file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}-{bp.run}.fif")
+				else:
+					file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}.fif")
 
-			epochs = simplePipeline(raw)
+				raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
+				raw.drop_channels(TO_DROP)
+				raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
+				if indices is None:
+					indices = raw.ch_names
+				subject_all_data.append(raw.get_data())
 
-			if bp.run:
-				file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}-{bp.run}.fif")
-			else:
-				file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}.fif")
-
-			epochs.save(file_path, overwrite=False)
+				epochs = simplePipeline(raw)
+				epochs.save(file_path, overwrite=False)
 
 		subject_all_data = np.concatenate(subject_all_data, axis=1)
 
