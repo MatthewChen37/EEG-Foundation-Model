@@ -29,8 +29,6 @@ HBN_ELECTRODE_MAP = {
 	'T6': 'E96',
 	'O1': 'E70',
 	'O2': 'E83',
-	'A1': 'E49',
-	'A2': 'E113'
 }
 
 '''
@@ -63,9 +61,8 @@ def readEEG(bidsPath, dataset):
 	'''
 	Read EEG data from a BIDS dataset.
 	'''
-	raw = read_raw_bids(bidsPath, extra_params={'verbose':False}, verbose=False)
+	raw = read_raw_bids(bidsPath, extra_params={'preload':True,'verbose':False}, verbose=False)
 	if dataset == "TUH":
-		raw.load_data()
 		raw.set_eeg_reference(ref_channels=['A1', 'A2'])
 		raw.set_eeg_reference(ref_channels=['Cz'])
 	elif dataset == "HBN":
@@ -73,8 +70,8 @@ def readEEG(bidsPath, dataset):
 		to_drop = [electrode for electrode in electrodes if electrode not in HBN_ELECTRODE_MAP.values()]
 		raw.drop_channels(to_drop)
 
-		# For some reason MNE reads in positions as cm so convert back to m
-		transformation_matrix = np.asarray([[0, -100, 0, 0], [100, 0, 0, 0], [0, 0, 100, 0], [0, 0, 0, 100]])
+		# For some reason the data is rotated 90 degrees clockwise so we unrotate it for visualization purposes
+		transformation_matrix = np.asarray([[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 		montage = raw.get_montage()
 		montage.apply_trans(mne.transforms.Transform(fro='ctf_head', to='unknown', trans=transformation_matrix))
 		raw.set_montage(montage)
