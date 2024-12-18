@@ -11,6 +11,7 @@ from preprocessingPipeline import simplePipeline
 from concurrent.futures import ProcessPoolExecutor
 import warnings
 import traceback
+import pickle as pkl
 
 ELECTRODES = [f'E{i}' for i in range(1, 129)]
 TO_DROP = [electrode for electrode in ELECTRODES if electrode not in HBN_ELECTRODE_MAP.values()]
@@ -176,6 +177,74 @@ def main2(args):
 	gc.collect()
 
 
+def main3(args):
+	dataset_releases = os.listdir(args.input_directory)
+
+	patient_means = pd.DataFrame()
+	patient_stds = pd.DataFrame()
+
+
+	with open("completed_patients.pkl", "rb") as f:
+		completed_patients = pkl.load(f)
+
+	completed_patients = set(completed_patients)
+
+	for dataset_release in dataset_releases:
+		_process_missing(dataset_release, args, patient_means, patient_stds, completed_patients)
+
+	patient_means.to_csv(os.path.join(args.output_dir, "missing_patient_means.csv"))
+	patient_stds.to_csv(os.path.join(args.output_dir, "missing_patient_stds.csv"))
+
+
+	
+def _process_missing(dataset_release, args, patient_means, patient_stds, completed_patients):
+	bids_path = BIDSPath(root=os.path.join(args.input_directory, dataset_release),
+					    datatype="eeg", suffix="eeg", extension=".set")
+		
+	subjects = set([bp.subject for bp in bids_path.match()])
+
+	missing_subjects = subjects.difference(completed_patients)
+
+	indices = None
+	failed_files = []
+
+	for subject in missing_subjects:
+		print(f"Processing subject: {subject} in dataset release: {dataset_release}")
+		subject_all_data = []
+		bids_path.update(subject=subject)
+
+		for bp in bids_path.match():
+			try:		
+				raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
+				raw.drop_channels(TO_DROP)
+				raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
+				if indices is None:
+					indices = raw.ch_names
+				subject_all_data.append(raw.get_data())
+			except Exception as e:
+				failed_files.append((subject, e, bp.task, traceback.format_exc()))
+				print(f"Failed to process subject: {subject} in dataset release: {dataset_release}")
+
+		if subject_all_data:
+			subject_all_data = np.concatenate(subject_all_data, axis=1)
+
+			# Z-score Transform By Channel
+			mean = np.mean(subject_all_data, axis=1)
+			std = np.std(subject_all_data, axis=1)
+
+			patient_means[subject] = mean
+			patient_stds[subject] = std
+
+		completed_patients.add(subject)
+
+	if failed_files:
+		pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"]).to_csv(
+			os.path.join(args.output_dir, f"missing_subjects_failed_files.csv"), index=False
+		)
+
+	gc.collect()
+
+
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()
@@ -197,4 +266,4 @@ def parse_args():
 
 if __name__ == "__main__":
 	args = parse_args()
-	main2(args)
+	main3(args)
