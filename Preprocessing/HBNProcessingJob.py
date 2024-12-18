@@ -184,31 +184,37 @@ def main3(args):
 	patient_stds = pd.DataFrame()
 
 
-	with open("completed_patients.pkl", "rb") as f:
-		completed_patients = pkl.load(f)
+	with open("missing_subjects.pkl", "rb") as f:
+		missing_patients = pkl.load(f)
 
-	completed_patients = set(completed_patients)
+	missing_patients = set(missing_patients)
 
 	for dataset_release in dataset_releases:
-		_process_missing(dataset_release, args, patient_means, patient_stds, completed_patients)
+		print(f"Processing dataset release: {dataset_release}")
+		_process_missing(dataset_release, args, patient_means, patient_stds, missing_patients)
+		print(f"Finished processing dataset release: {dataset_release}, {patient_means.shape[1]} subjects processed")
 
 	patient_means.to_csv(os.path.join(args.output_dir, "missing_patient_means.csv"))
 	patient_stds.to_csv(os.path.join(args.output_dir, "missing_patient_stds.csv"))
 
 
 	
-def _process_missing(dataset_release, args, patient_means, patient_stds, completed_patients):
+def _process_missing(dataset_release, args, patient_means, patient_stds, missing_patients):
 	bids_path = BIDSPath(root=os.path.join(args.input_directory, dataset_release),
 					    datatype="eeg", suffix="eeg", extension=".set")
 		
 	subjects = set([bp.subject for bp in bids_path.match()])
 
-	missing_subjects = subjects.difference(completed_patients)
+	print(f"Found {len(subjects)} subjects for dataset release: {dataset_release}")
+
+	missing_subjects_in_dataset = subjects.intersection(missing_patients)
+
+	print(f"Found {len(missing_subjects_in_dataset)} subjects for dataset release: {dataset_release}")
 
 	indices = None
 	failed_files = []
 
-	for subject in missing_subjects:
+	for subject in missing_subjects_in_dataset:
 		print(f"Processing subject: {subject} in dataset release: {dataset_release}")
 		subject_all_data = []
 		bids_path.update(subject=subject)
@@ -234,8 +240,6 @@ def _process_missing(dataset_release, args, patient_means, patient_stds, complet
 
 			patient_means[subject] = mean
 			patient_stds[subject] = std
-
-		completed_patients.add(subject)
 
 	if failed_files:
 		pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"]).to_csv(
