@@ -33,7 +33,7 @@ def main(args):
 	failed_files = []
 
 	with ThreadPoolExecutor() as executor:
-		futures = [executor.submit(_process_subject, args, subject) for subject in subjects]
+		futures = [executor.submit(_process_subject, args, subject, failed_files) for subject in subjects]
 		for future in tqdm(futures):
 			result = future.result()
 			if result:
@@ -66,6 +66,8 @@ def _process_subject(args, subject, failed_files):
 				ch_names = raw.ch_names
 				if 'A1' and 'A2' in ch_names:
 					raw = raw.drop_channels(['A1', 'A2'])
+
+				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
 				subject_all_data.append(raw.get_data())
 				
 				epochs = simplePipeline(raw)
