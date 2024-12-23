@@ -1,0 +1,13 @@
+name: EEG-ML
+channels:
+  - defaults
+  - conda-forge
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.8
+  - numpy
+  - pandas
+  - mne
+  - mne-bids
+  - pyaml
