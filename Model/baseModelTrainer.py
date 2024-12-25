@@ -11,7 +11,7 @@ from pandas import DataFrame
 Based on:
 1. https://github.com/SPOClab-ca/dn3/blob/master/dn3/trainable/processes.py
 '''
-def ModelTrainer():
+class BaseModelTrainer(object):
 
     def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, **kwargs):
         """
@@ -41,14 +41,9 @@ def ModelTrainer():
         assert isinstance(cuda, str)
         self.cuda = cuda
         self.device = torch.device(cuda)
-        if metrics is not None:
-            if isinstance(metrics, (list, tuple)):
-                metrics = {m.__class__.__name__: m for m in metrics}
-            if isinstance(metrics, dict):
-                self.add_metrics(metrics)
-
+        
         _before_members = set(self.__dict__.keys())
-        self.build_network(**kwargs)
+
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
         self._trainables = list()
@@ -355,9 +350,8 @@ def ModelTrainer():
 
         return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
     
-    def fit(self, training_dataset, epochs=1, validation_dataset=None, step_callback=None,
-            resume_epoch=None, resume_iteration=None, log_callback=None, validation_callback=None,
-            epoch_callback=None, batch_size=8, warmup_frac=0.2, retain_best='loss',
+    def fit(self, training_dataset, epochs=1, validation_dataset=None,
+            resume_epoch=None, resume_iteration=None, batch_size=8, warmup_frac=0.2, retain_best='loss',
             validation_interval=None, train_log_interval=None, **loader_kwargs):
         """
         sklearn/keras-like convenience method to simply proceed with training across multiple epochs of the provided
@@ -377,17 +371,6 @@ def ModelTrainer():
                           conjunction with `start_epoch`. If used alone, the start epoch is the floor of
                           `start_iteration` divided by batches per epoch. In other words this specifies cumulative
                           batches if start_epoch is not specified, and relative to the current epoch otherwise.
-        step_callback : callable
-                        Function to run after every training step that has signature: fn(train_metrics) -> None
-        log_callback : callable
-                       Function to run after every log interval that has signature: fn(train_metrics) -> None
-        validation_callback : callable
-                        Function to run after every time the validation dataset is run through. This typically has the
-                        result of this and the `epoch_callback` called at the end of the epoch, but this is also called
-                        after `validation_interval` batches.
-                        This callback has the signature: fn(validation_metrics) -> None
-        epoch_callback : callable
-                        Function to run after every epoch that has signature: fn(validation_metrics) -> None
         batch_size : int
                      The batch_size to be used for the training and validation datasets. This is ignored if they are
                      provided as `DataLoader`.
@@ -454,8 +437,6 @@ def ModelTrainer():
                 self.standard_logging(_metrics, "Validation: End of Epoch {}".format(epoch))
             _metrics['epoch'] = epoch
             validation_log.append(_metrics)
-            if callable(validation_callback):
-                validation_callback(_metrics)
             return _metrics
 
         epoch_bar = tqdm.trange(resume_epoch, epochs + 1, desc="Epoch", unit='epoch', initial=resume_epoch, total=epochs)
@@ -490,3 +471,138 @@ def ModelTrainer():
             self.load_best(best_model)
 
         return DataFrame(train_log), DataFrame(validation_log)
+
+class StandardClassification(BaseModelTrainer):
+
+    def __init__(self, classifier: torch.nn.Module, loss_fn=None, cuda=None, metrics=None, learning_rate=0.01,
+                 label_smoothing=None, **kwargs):
+        if isinstance(metrics, dict):
+            metrics.setdefault('Accuracy', self._simple_accuracy)
+        else:
+            metrics = dict(Accuracy=self._simple_accuracy)
+        super(StandardClassification, self).__init__(cuda=cuda, lr=learning_rate, classifier=classifier,
+                                                     metrics=metrics, **kwargs)
+        if label_smoothing is not None and isinstance(label_smoothing, float) and (0 < label_smoothing < 1):
+            self.loss = LabelSmoothedCrossEntropyLoss(self.classifier.targets, smoothing=label_smoothing).\
+                to(self.device)
+        elif loss_fn is None:
+            self.loss = torch.nn.CrossEntropyLoss().to(self.device)
+        else:
+            self.loss = loss_fn.to(self.device)
+        self.best_metric = None
+
+    @staticmethod
+    def _simple_accuracy(inputs, outputs):
+        if isinstance(outputs, (list, tuple)):
+            outputs = outputs[0]
+        # average over last dimensions
+        while len(outputs.shape) >= 3:
+            outputs = outputs.mean(dim=-1)
+        return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
+
+    def forward(self, *inputs):
+        if isinstance(self.classifier, Classifier) and self.classifier.return_features:
+            prediction, _ = self.classifier(*inputs[:-1])
+        else:
+            prediction = self.classifier(*inputs[:-1])
+        return prediction
+
+    def calculate_loss(self, inputs, outputs):
+        inputs = list(inputs)
+
+        def expand_for_strided_loss(factors):
+            inputs[-1] = inputs[-1].unsqueeze(-1).expand(-1, *factors)
+
+        check_me = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
+        if len(check_me.shape) >= 3:
+            expand_for_strided_loss(check_me.shape[2:])
+
+        return super(StandardClassification, self).calculate_loss(inputs, outputs)
+
+    def fit(self, training_dataset, epochs=1, validation_dataset=None, step_callback=None, epoch_callback=None,
+            batch_size=8, warmup_frac=0.2, retain_best='loss', balance_method=None, **loader_kwargs):
+        """
+        sklearn/keras-like convenience method to simply proceed with training across multiple epochs of the provided
+        dataset
+
+        Parameters
+        ----------
+        training_dataset : DN3ataset, DataLoader
+        validation_dataset : DN3ataset, DataLoader
+        epochs : int
+        step_callback : callable
+                        Function to run after every training step that has signature: fn(train_metrics) -> None
+        epoch_callback : callable
+                        Function to run after every epoch that has signature: fn(validation_metrics) -> None
+        batch_size : int
+                     The batch_size to be used for the training and validation datasets. This is ignored if they are
+                     provided as `DataLoader`.
+        warmup_frac : float
+                      The fraction of iterations that will be spent *increasing* the learning rate under the default
+                      1cycle policy (with cosine annealing). Value will be automatically clamped values between [0, 0.5]
+        retain_best : (str, None)
+                      **If `validation_dataset` is provided**, which model weights to retain. If 'loss' (default), will
+                      retain the model at the epoch with the lowest validation loss. If another string, will assume that
+                      is the metric to monitor for the *highest score*. If None, the final model is used.
+        balance_method : (None, str)
+                         If and how to balance training samples when training. `None` (default) will simply randomly
+                         sample all training samples equally. 'undersample' will sample each class N_min times
+                         where N_min is equal to the number of examples in the minority class. 'oversample' will sample
+                         each class N_max times, where N_max is the number of the majority class.
+        loader_kwargs :
+                      Any remaining keyword arguments will be passed as such to any DataLoaders that are automatically
+                      constructed. If both training and validation datasets are provided as `DataLoaders`, this will be
+                      ignored.
+
+        Notes
+        -----
+        If the datasets above are provided as DN3atasets, automatic optimizations are performed to speed up loading.
+        These include setting the number of workers = to the number of CPUs/system threads - 1, and pinning memory for
+        rapid CUDA transfer if leveraging the GPU. Unless you are very comfortable with PyTorch, it's probably better
+        to not provide your own DataLoader, and let this be done automatically.
+
+        Returns
+        -------
+        train_log : Dataframe
+                    Metrics after each iteration of training as a pandas dataframe
+        validation_log : Dataframe
+                         Validation metrics after each epoch of training as a pandas dataframe
+        """
+        return super(StandardClassification, self).fit(training_dataset, epochs=epochs, step_callback=step_callback,
+                                                       epoch_callback=epoch_callback, batch_size=batch_size,
+                                                       warmup_frac=warmup_frac, retain_best=retain_best,
+                                                       validation_dataset=validation_dataset,
+                                                       balance_method=balance_method,
+                                                       **loader_kwargs)
+
+    BALANCE_METHODS = ['undersample', 'oversample', 'ldam']
+    def _make_dataloader(self, dataset, training=False, **loader_kwargs):
+        if isinstance(dataset, DataLoader):
+            return dataset
+
+        loader_kwargs = self._dataloader_args(dataset, training=training, **loader_kwargs)
+
+        if training and loader_kwargs.get('sampler', None) is None and loader_kwargs.get('balance_method', None) \
+                is not None:
+            method = loader_kwargs.pop('balance_method')
+            assert method.lower() in self.BALANCE_METHODS
+            if not hasattr(dataset, 'get_targets'):
+                print("Failed to create dataloader with {} balancing. {} does not support `get_targets()`.".format(
+                    method, dataset
+                ))
+            elif method.lower() != 'ldam':
+                sampler = balanced_undersampling(dataset) if method.lower() == 'undersample' \
+                    else balanced_oversampling(dataset)
+                # Shuffle is implied by the balanced sampling
+                # loader_kwargs['shuffle'] = None
+                loader_kwargs['sampler'] = sampler
+            else:
+                self.loss = create_ldam_loss(dataset)
+
+        if loader_kwargs.get('sampler', None) is not None:
+            loader_kwargs['shuffle'] = None
+
+        # Make sure balance method is not passed to DataLoader at this point.
+        loader_kwargs.pop('balance_method', None)
+
+        return DataLoader(dataset, **loader_kwargs)
