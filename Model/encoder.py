@@ -87,3 +87,12 @@ class ConvEncoder(nn.Module):
     def freeze_features(self, unfreeze=False):
         for param in self.parameters():
             param.requires_grad = unfreeze
+
+
+if __name__ == "__main__":
+
+    # Define the encoder
+    encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
+                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+
+    print(encoder.description(sfreq=256, sequence_len=15360)) 
