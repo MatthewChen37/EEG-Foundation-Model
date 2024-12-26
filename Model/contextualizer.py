@@ -146,5 +146,7 @@ if __name__ == "__main__":
 
     mask = _make_mask((32, 512), 0.1, 512, 6)
 
-    print(mask.shape, "Most Frequent Element:", mask.mode())
-    print(contextualizer(torch.randn(32, 512, 512), mask_t=mask).shape)
+    print("Mask Shape:", mask.shape, "Mask Rate:", mask.float().mean().item())
+    print("Mask sum:", mask.sum())
+    print("Contextualizer Output Shape:",
+           contextualizer(torch.randn(32, 512, 512), mask_t=mask).shape)
