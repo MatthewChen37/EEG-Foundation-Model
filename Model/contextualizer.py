@@ -139,3 +139,12 @@ def _make_span_from_seeds(seeds, span, total=None):
             elif i not in inds:
                 inds.append(int(i))
     return np.array(inds)
+
+
+if __name__ == "__main__":
+    contextualizer = Contextualizer(512, layer_drop=0.01)
+
+    mask = _make_mask((32, 512), 0.1, 512, 6)
+
+    print(mask.shape, "Most Frequent Element:", mask.mode())
+    print(contextualizer(torch.randn(32, 512, 512), mask_t=mask).shape)

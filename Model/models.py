@@ -57,13 +57,12 @@ class BaseModel(nn.Module):
             param.requires_grad = unfreeze
 
     @classmethod
-    def from_dataset(cls, dataset: DN3ataset, **modelargs):
+    def from_dataset(cls, dataset: EEGDataset, **modelargs):
         print("Creating {} using: {} channels with trials of {} samples at {}Hz".format(cls.__name__,
                                                                                         len(dataset.channels),
                                                                                         dataset.sequence_length,
                                                                                         dataset.sfreq))
         return cls(samples=dataset.sequence_length, channels=len(dataset.channels), **modelargs)
-
 
 class Classifier(BaseModel):
     """
