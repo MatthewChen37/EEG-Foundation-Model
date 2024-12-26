@@ -2,3 +2,4 @@
 # to test each module of the model
 python encoder.py
 python contextualizer.py
+python foundationModelTrainer.py

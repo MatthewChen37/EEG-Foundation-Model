@@ -121,3 +121,16 @@ class BENDRTrainer(BaseModelTrainer):
         # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
         return self.loss_fn(logits, labels) + self.beta * outputs[1].pow(2).mean()
 
+if __name__ == "__main__":
+
+    from encoder import ConvEncoder
+    from contextualizer import Contextualizer
+
+    encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
+                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+
+    contextualizer = Contextualizer(512, layer_drop=0.01)
+
+    trainer = BENDRTrainer(encoder, contextualizer, mask_rate=0.1, mask_span=6, learning_rate=0.01, temp=0.5)
+
+    print(trainer.description(sequence_len=15360))

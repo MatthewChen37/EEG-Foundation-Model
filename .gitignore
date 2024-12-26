@@ -4,4 +4,4 @@ PEARL
 nedc_pyprint_edf/*
 *.fif
 /External
-.pyc
+*.pyc
