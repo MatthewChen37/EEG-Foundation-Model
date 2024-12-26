@@ -22,10 +22,8 @@ class EEGDataset(TorchDataset):
 
         assert len(self.data.shape) == 3, "Data must be in the shape of [N, C, T]"
 
-        ## Scale Factor ##
         self._scaling_factor = scale_factor
 
-        ## Verbose ##
         self._verbose : bool = verbose 
 
         self._transforms = transforms

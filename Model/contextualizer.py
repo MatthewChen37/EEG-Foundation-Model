@@ -2,6 +2,7 @@ import copy
 import torch
 import numpy as np
 from torch import nn
+from models import Permute, Flatten
 
 '''
 Based on:
@@ -117,18 +118,6 @@ class _Hax(nn.Module):
     def forward(self, x):
         return x
 
-class Permute(nn.Module):
-    def __init__(self, axes):
-        super().__init__()
-        self.axes = axes
-
-    def forward(self, x):
-        return x.permute(self.axes)
-    
-class Flatten(nn.Module):
-    def forward(self, x):
-        return x.contiguous().view(x.size(0), -1)
-    
 def _make_mask(shape, p, total, span, allow_no_inds=False):
     mask = torch.zeros(shape, requires_grad=False, dtype=torch.bool)
 
