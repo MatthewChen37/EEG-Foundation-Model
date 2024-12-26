@@ -45,7 +45,7 @@ class Contextualizer(nn.Module):
             conv = nn.Conv1d(in_features, in_features, position_encoder, padding=position_encoder // 2, groups=16)
             nn.init.normal_(conv.weight, mean=0, std=2 / self._transformer_dim)
             nn.init.constant_(conv.bias, 0)
-            conv = nn.utils.weight_norm(conv, dim=2)
+            conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
             self.relative_position = nn.Sequential(conv, nn.GELU())
 
         self.input_conditioning = nn.Sequential(

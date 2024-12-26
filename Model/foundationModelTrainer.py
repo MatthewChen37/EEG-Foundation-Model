@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from baseModelTrainer import BaseModelTrainer, _make_mask, _make_span_from_seeds
+from baseModelTrainer import BaseModelTrainer, StandardClassification
+from contextualizer import _make_mask, _make_span_from_seeds
 
 """
 Based on: 
@@ -51,7 +52,6 @@ class BENDRTrainer(BaseModelTrainer):
         batch_size, feat, full_len = z.shape
         z_k = z.permute([0, 2, 1]).reshape(-1, feat)
         with torch.no_grad():
-            # candidates = torch.arange(full_len).unsqueeze(-1).expand(-1, self.num_negatives).flatten()
             negative_inds = torch.randint(0, full_len-1, size=(batch_size, full_len * self.num_negatives))
             # From wav2vec 2.0 implementation, I don't understand
             # negative_inds[negative_inds >= candidates] += 1

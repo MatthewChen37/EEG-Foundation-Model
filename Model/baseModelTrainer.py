@@ -6,6 +6,7 @@ from sys import gettrace
 import numpy as np
 from transforms import BatchTransform
 from pandas import DataFrame
+from models import Classifier
 
 '''
 Based on:
@@ -43,7 +44,7 @@ class BaseModelTrainer(object):
         self.device = torch.device(cuda)
         
         _before_members = set(self.__dict__.keys())
-
+        self.__dict__.update(**kwargs)
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
         self._trainables = list()
@@ -52,7 +53,6 @@ class BaseModelTrainer(object):
                 if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
-
         self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True,
                                          momentum=0.9)
         self.scheduler = None
@@ -482,10 +482,7 @@ class StandardClassification(BaseModelTrainer):
             metrics = dict(Accuracy=self._simple_accuracy)
         super(StandardClassification, self).__init__(cuda=cuda, lr=learning_rate, classifier=classifier,
                                                      metrics=metrics, **kwargs)
-        if label_smoothing is not None and isinstance(label_smoothing, float) and (0 < label_smoothing < 1):
-            self.loss = LabelSmoothedCrossEntropyLoss(self.classifier.targets, smoothing=label_smoothing).\
-                to(self.device)
-        elif loss_fn is None:
+        if loss_fn is None:
             self.loss = torch.nn.CrossEntropyLoss().to(self.device)
         else:
             self.loss = loss_fn.to(self.device)
@@ -606,3 +603,37 @@ class StandardClassification(BaseModelTrainer):
         loader_kwargs.pop('balance_method', None)
 
         return DataLoader(dataset, **loader_kwargs)
+
+def balanced_undersampling(dataset, replacement=False):
+    tqdm.tqdm.write("Undersampling for balanced distribution.")
+    sample_weights, counts = get_label_balance(dataset)
+    return WeightedRandomSampler(sample_weights, len(counts) * int(counts.min()), replacement=replacement)
+
+def balanced_oversampling(dataset, replacement=True):
+    tqdm.tqdm.write("Oversampling for balanced distribution.")
+    sample_weights, counts = get_label_balance(dataset)
+    return WeightedRandomSampler(sample_weights, len(counts) * int(counts.max()), replacement=replacement)
+
+def get_label_balance(dataset):
+    """
+    Given a dataset, return the proportion of each target class and the counts of each class type
+
+    Parameters
+    ----------
+    dataset
+
+    Returns
+    -------
+    sample_weights, counts
+    """
+    assert hasattr(dataset, 'get_targets')
+    labels = dataset.get_targets()
+    counts = np.bincount(labels)
+    train_weights = 1. / torch.tensor(counts, dtype=torch.float)
+    sample_weights = train_weights[labels]
+    class_freq = counts/counts.sum()
+    if len(counts) < 10:
+        tqdm.tqdm.write('Class frequency: {}'.format(' | '.join('{:.2f}'.format(c) for c in class_freq)))
+    else:
+        tqdm.tqdm.write("Class frequencies range from {:.2e} to {:.2e}".format(class_freq.min(), class_freq.max()))
+    return sample_weights, counts
