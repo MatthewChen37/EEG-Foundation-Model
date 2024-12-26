@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import re
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 from sys import gettrace
@@ -214,7 +215,7 @@ class BaseModelTrainer(object):
 
         Parameters
         ----------
-        dataset: DN3ataset, DataLoader
+        dataset: EEGDataset
                  The dataset that will be used for evaluation, if not a DataLoader, one will be constructed
         loader_kwargs: dict
                        Args that will be passed to the dataloader, but `shuffle` and `drop_last` will be both be
@@ -237,7 +238,7 @@ class BaseModelTrainer(object):
 
         Parameters
         ----------
-        dataset: DN3ataset, DataLoader
+        dataset: EEGDataset
                  The dataset that will be used for evaluation, if not a DataLoader, one will be constructed
         loader_kwargs: dict
                        Args that will be passed to the dataloader, but `shuffle` and `drop_last` will be both be
@@ -351,16 +352,16 @@ class BaseModelTrainer(object):
         return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
     
     def fit(self, training_dataset, epochs=1, validation_dataset=None,
-            resume_epoch=None, resume_iteration=None, batch_size=8, warmup_frac=0.2, retain_best='loss',
-            validation_interval=None, train_log_interval=None, **loader_kwargs):
+            resume_epoch=None, resume_iteration=None, batch_size=8, warmup_frac=0.2,
+            retain_best='loss', validation_interval=None, train_log_interval=None, **loader_kwargs):
         """
         sklearn/keras-like convenience method to simply proceed with training across multiple epochs of the provided
         dataset
 
         Parameters
         ----------
-        training_dataset : DN3ataset, DataLoader
-        validation_dataset : DN3ataset, DataLoader
+        training_dataset : EEGDataset
+        validation_dataset : EEGDataset
         epochs : int
                  Total number of epochs to fit
         resume_epoch : int
@@ -372,8 +373,7 @@ class BaseModelTrainer(object):
                           `start_iteration` divided by batches per epoch. In other words this specifies cumulative
                           batches if start_epoch is not specified, and relative to the current epoch otherwise.
         batch_size : int
-                     The batch_size to be used for the training and validation datasets. This is ignored if they are
-                     provided as `DataLoader`.
+                     The batch_size to be used for the training and validation datasets.
         warmup_frac : float
                       The fraction of iterations that will be spent *increasing* the learning rate under the default
                       1cycle policy (with cosine annealing). Value will be automatically clamped values between [0, 0.5]
@@ -516,24 +516,20 @@ class StandardClassification(BaseModelTrainer):
 
         return super(StandardClassification, self).calculate_loss(inputs, outputs)
 
-    def fit(self, training_dataset, epochs=1, validation_dataset=None, step_callback=None, epoch_callback=None,
-            batch_size=8, warmup_frac=0.2, retain_best='loss', balance_method=None, **loader_kwargs):
+    def fit(self, training_dataset, epochs, validation_dataset=None, batch_size=8, warmup_frac=0.2,
+             retain_best='loss', balance_method=None, **loader_kwargs):
         """
         sklearn/keras-like convenience method to simply proceed with training across multiple epochs of the provided
         dataset
 
         Parameters
         ----------
-        training_dataset : DN3ataset, DataLoader
-        validation_dataset : DN3ataset, DataLoader
+        training_dataset : EEGDataset
+        validation_dataset : EEGDataset
         epochs : int
-        step_callback : callable
-                        Function to run after every training step that has signature: fn(train_metrics) -> None
-        epoch_callback : callable
-                        Function to run after every epoch that has signature: fn(validation_metrics) -> None
+                Total number of epochs to fit
         batch_size : int
-                     The batch_size to be used for the training and validation datasets. This is ignored if they are
-                     provided as `DataLoader`.
+                     The batch_size to be used for the training and validation datasets.
         warmup_frac : float
                       The fraction of iterations that will be spent *increasing* the learning rate under the default
                       1cycle policy (with cosine annealing). Value will be automatically clamped values between [0, 0.5]
@@ -553,10 +549,8 @@ class StandardClassification(BaseModelTrainer):
 
         Notes
         -----
-        If the datasets above are provided as DN3atasets, automatic optimizations are performed to speed up loading.
-        These include setting the number of workers = to the number of CPUs/system threads - 1, and pinning memory for
-        rapid CUDA transfer if leveraging the GPU. Unless you are very comfortable with PyTorch, it's probably better
-        to not provide your own DataLoader, and let this be done automatically.
+        Optimized data loading by setting the number of workers = to the number of CPUs/system threads - 1, and pinning memory for
+        rapid CUDA transfer if leveraging the GPU. 
 
         Returns
         -------
@@ -565,8 +559,7 @@ class StandardClassification(BaseModelTrainer):
         validation_log : Dataframe
                          Validation metrics after each epoch of training as a pandas dataframe
         """
-        return super(StandardClassification, self).fit(training_dataset, epochs=epochs, step_callback=step_callback,
-                                                       epoch_callback=epoch_callback, batch_size=batch_size,
+        return super(StandardClassification, self).fit(training_dataset, epochs=epochs, batch_size=batch_size,
                                                        warmup_frac=warmup_frac, retain_best=retain_best,
                                                        validation_dataset=validation_dataset,
                                                        balance_method=balance_method,
