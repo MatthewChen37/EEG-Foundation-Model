@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
+import tqdm
 import re
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from tqdm import tqdm
 from sys import gettrace
 import numpy as np
 from transforms import BatchTransform
@@ -37,7 +37,7 @@ class BaseModelTrainer(object):
         if cuda is None:
             cuda = torch.cuda.is_available()
             if cuda:
-                tqdm.write("GPU(s) detected: training and model execution will be performed on GPU.")
+                tqdm.tqdm.write("GPU(s) detected: training and model execution will be performed on GPU.")
         if isinstance(cuda, bool):
             cuda = "cuda" if cuda else "cpu"
         assert isinstance(cuda, str)
@@ -474,8 +474,8 @@ class BaseModelTrainer(object):
 
 class StandardClassification(BaseModelTrainer):
 
-    def __init__(self, classifier: torch.nn.Module, loss_fn=None, cuda=None, metrics=None, learning_rate=0.01,
-                 label_smoothing=None, **kwargs):
+    def __init__(self, classifier: torch.nn.Module, loss_fn=None,
+                cuda=None, metrics=None, learning_rate=0.01, **kwargs):
         if isinstance(metrics, dict):
             metrics.setdefault('Accuracy', self._simple_accuracy)
         else:

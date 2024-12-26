@@ -12,13 +12,13 @@ from torch.utils.data import ConcatDataset, DataLoader
 class EEGDataset(TorchDataset):
 
     def __init__(self,
-                 eeg_data : np.ndarray,
+                 eeg_data : torch.tensor,
                  transforms = list(),
                  verbose : bool = False,
                  scale_factor : float = 1e6,
                  sfreq : float = 256):
         
-        self.data : np.ndarray = eeg_data * scale_factor
+        self.data : torch.tensor = eeg_data * scale_factor
 
         assert len(self.data.shape) == 3, "Data must be in the shape of [N, C, T]"
 
