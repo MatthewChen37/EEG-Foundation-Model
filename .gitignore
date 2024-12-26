@@ -5,3 +5,4 @@ nedc_pyprint_edf/*
 *.fif
 /External
 *.pyc
+*/__pycache__/*
