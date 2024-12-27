@@ -36,7 +36,6 @@ class Squeeze(_SingleAxisOperation):
     def forward(self, x):
         return x.squeeze(self.axis)
 
-
 class Permute(nn.Module):
     def __init__(self, axes):
         super().__init__()
@@ -44,7 +43,6 @@ class Permute(nn.Module):
 
     def forward(self, x):
         return x.permute(self.axes)
-
 
 class Concatenate(_SingleAxisOperation):
     def forward(self, *x):
