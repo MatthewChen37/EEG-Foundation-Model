@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from baseModelTrainer import BaseModelTrainer, StandardClassification
+import numpy as np
+from baseModelTrainer import BaseModelTrainer
 from contextualizer import _make_mask, _make_span_from_seeds
 
 """
@@ -62,6 +63,7 @@ class BENDRTrainer(BaseModelTrainer):
         z_k = z_k[negative_inds.view(-1)].view(batch_size, full_len, self.num_negatives, feat)
         return z_k, negative_inds
 
+    @staticmethod
     def _calculate_similarity(self, z, c, negatives):
         c = c[..., 1:].permute([0, 2, 1]).unsqueeze(-2)
         z = z.permute([0, 2, 1]).unsqueeze(-2)
@@ -75,7 +77,8 @@ class BENDRTrainer(BaseModelTrainer):
             logits[1:][negative_in_target] = float("-inf")
 
         return logits.view(-1, logits.shape[-1])
-
+    
+    
     def forward(self, *inputs):
         z = self.encoder(inputs[0])
 
@@ -106,15 +109,25 @@ class BENDRTrainer(BaseModelTrainer):
         return logits, z, mask
 
     @staticmethod
-    def _mask_pct(inputs, outputs):
+    def _mask_pct(self, inputs, outputs):
         return outputs[2].float().mean().item()
 
     @staticmethod
-    def _contrastive_accuracy(inputs, outputs):
+    def _contrastive_accuracy(self, inputs, outputs):
         logits = outputs[0]
         labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-        return StandardClassification._simple_accuracy([labels], logits)
+        return self._simple_accuracy([labels], logits)
+    
+    @staticmethod
+    def _simple_accuracy(self, inputs, outputs):
+        if isinstance(outputs, (list, tuple)):
+            outputs = outputs[0]
+        # average over last dimensions
+        while len(outputs.shape) >= 3:
+            outputs = outputs.mean(dim=-1)
+        return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
 
+    @staticmethod
     def calculate_loss(self, inputs, outputs):
         logits = outputs[0]
         labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
