@@ -23,8 +23,9 @@ class BENDRTrainer(BaseModelTrainer):
             encoder = nn.DataParallel(encoder)
             context_fn = nn.DataParallel(context_fn)
         if encoder_grad_frac < 1:
-            encoder.register_backward_hook(lambda module, in_grad, out_grad:
-                                           tuple(encoder_grad_frac * ig for ig in in_grad))
+            # TODO: I hope this works...
+            encoder.register_full_backward_hook(lambda module, in_grad, out_grad:
+                                           tuple(encoder_grad_frac * ig if ig is not None else None for ig in in_grad))
         super(BENDRTrainer, self).__init__(encoder=encoder, context_fn=context_fn,
                                                     loss_fn=nn.CrossEntropyLoss(), lr=learning_rate,
                                                     l2_weight_decay=l2_weight_decay,
