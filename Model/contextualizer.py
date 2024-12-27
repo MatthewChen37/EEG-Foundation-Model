@@ -2,7 +2,7 @@ import copy
 import torch
 import numpy as np
 from torch import nn
-from Model.layers import Permute, Flatten
+from layers import Permute, Flatten
 
 '''
 Based on:

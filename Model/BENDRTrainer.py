@@ -63,7 +63,6 @@ class BENDRTrainer(BaseModelTrainer):
         z_k = z_k[negative_inds.view(-1)].view(batch_size, full_len, self.num_negatives, feat)
         return z_k, negative_inds
 
-    @staticmethod
     def _calculate_similarity(self, z, c, negatives):
         c = c[..., 1:].permute([0, 2, 1]).unsqueeze(-2)
         z = z.permute([0, 2, 1]).unsqueeze(-2)
@@ -105,35 +104,43 @@ class BENDRTrainer(BaseModelTrainer):
         negatives, negative_inds = self._generate_negatives(z)
 
         # Prediction -> batch_size x predict_length x predict_length
-        logits = self._calculate_similarity(unmasked_z, c, negatives)
+        logits = self._calculate_similarity(z=unmasked_z, c=c, negatives=negatives)
         return logits, z, mask
-
-    @staticmethod
-    def _mask_pct(self, inputs, outputs):
-        return outputs[2].float().mean().item()
-
-    @staticmethod
+    
+    def calculate_loss(self, inputs, outputs):
+        logits = outputs[0]
+        labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
+        # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
+        return self.loss_fn(logits, labels) + self.beta * outputs[1].pow(2).mean()
+    
     def _contrastive_accuracy(self, inputs, outputs):
         logits = outputs[0]
         labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
         return self._simple_accuracy([labels], logits)
     
+    def calculate_metrics(self, inputs, outputs):
+        """
+        Basic MSE 
+        """
+        print(inputs.shape, outputs[1].shape)
+
+        return {
+            'MSE': F.mse_loss(inputs, outputs[1]),
+        }
+
     @staticmethod
-    def _simple_accuracy(self, inputs, outputs):
+    def _mask_pct(inputs, outputs):
+        return outputs[2].float().mean().item()
+
+    @staticmethod
+    def _simple_accuracy(inputs, outputs):
         if isinstance(outputs, (list, tuple)):
             outputs = outputs[0]
         # average over last dimensions
         while len(outputs.shape) >= 3:
             outputs = outputs.mean(dim=-1)
         return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
-
-    @staticmethod
-    def calculate_loss(self, inputs, outputs):
-        logits = outputs[0]
-        labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-        # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
-        return self.loss_fn(logits, labels) + self.beta * outputs[1].pow(2).mean()
-
+    
 if __name__ == "__main__":
 
     from encoder import ConvEncoder

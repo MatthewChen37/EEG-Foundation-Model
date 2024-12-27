@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from torch import nn
-from math import ceil
+
 
 '''
 Based on https://github.com/SPOClab-ca/BENDR/blob/main/dn3_ext.py
@@ -34,7 +34,7 @@ class ConvEncoder(nn.Module):
         for i, (width, downsample) in enumerate(zip(enc_width, enc_downsample)):
             self.encoder.add_module("Encoder_{}".format(i), nn.Sequential(
                 nn.Conv1d(in_features, encoder_h, width, stride=downsample, padding=width // 2),
-                nn.Dropout2d(dropout),
+                nn.Dropout1d(dropout),
                 nn.GroupNorm(encoder_h // 2, encoder_h),
                 nn.GELU(),
             ))
@@ -43,7 +43,7 @@ class ConvEncoder(nn.Module):
         if projection_head:
             self.encoder.add_module("projection-1", nn.Sequential(
                 nn.Conv1d(in_features, in_features, 1),
-                nn.Dropout2d(dropout*2),
+                nn.Dropout1d(dropout*2),
                 nn.GroupNorm(in_features // 2, in_features),
                 nn.GELU()
             ))
@@ -95,4 +95,10 @@ if __name__ == "__main__":
     encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
                           dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
 
-    print(encoder.description(sfreq=256, sequence_len=15360)) 
+    print(encoder.description(sfreq=256, sequence_len=15360))
+
+    input = torch.randn(1, 19, 15360)
+
+    output = encoder(input)
+
+    print("Input shape:", input.shape, "Output shape:", output.shape)

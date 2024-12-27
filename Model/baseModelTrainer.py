@@ -120,7 +120,7 @@ class BaseModelTrainer(object):
         return loader_kwargs
 
     def _get_batch(self, iterator):
-        batch = [x.to(self.device, non_blocking=self.cuda == 'cuda') for x in next(iterator)]
+        batch = next(iterator).to(self.device, non_blocking=self.cuda == 'cuda')
         xforms = self._batch_transforms if self._training else self._eval_transforms
         for xform in xforms:
             if xform.only_trial_data:
@@ -166,6 +166,17 @@ class BaseModelTrainer(object):
 
         """
         raise NotImplementedError
+    
+    def calculate_metrics(self, inputs, outputs):
+        """
+        Given the inputs to and outputs from underlying modules, calculate the metrics.
+
+        Returns
+        -------
+        metrics : dict
+                  Dictionary of metrics to be recorded.
+        """
+        raise NotImplementedError
 
     def calculate_loss(self, inputs, outputs):
         """
@@ -194,9 +205,9 @@ class BaseModelTrainer(object):
         for member in self._trainables:
             self.__dict__[member].train(mode=mode)
 
-    def train_step(self, *inputs):
+    def train_step(self, inputs):
         self.train(True)
-        outputs = self.forward(*inputs)
+        outputs = self.forward(inputs)
         loss = self.calculate_loss(inputs, outputs)
         self.backward(loss)
 
@@ -351,11 +362,27 @@ class BaseModelTrainer(object):
 
         return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
     
-    def fit(self, training_dataset, validation_dataset=None, batch_size=8, **kwargs):
+    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, **loader_kwargs):
         loader_kwargs.setdefault('batch_size', batch_size)
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataset = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
 
+        for epoch in range(epochs):
+            self.epoch = epoch
+            pbar = tqdm.trange(len(training_dataset), desc="Epoch {}".format(epoch))
+            data_iterator = iter(training_dataset)
+            self.train(True)
+            for iteration in pbar:
+                input_batch = self._get_batch(data_iterator)
+                train_metrics = self.train_step(input_batch)
+                pbar.set_postfix(train_metrics)
+
+            if validation_dataset is not None:
+                val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
+                self.standard_logging(val_metrics, "End of Epoch")
+                self._retain_best(val_metrics, val_metrics, 'loss')
+            if self.scheduler is not None and not self.scheduler_after_batch:
+                self.scheduler.step()
 
 def balanced_undersampling(dataset, replacement=False):
     tqdm.tqdm.write("Undersampling for balanced distribution.")

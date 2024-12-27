@@ -94,7 +94,7 @@ class ConvBlock2D(nn.Module):
 
         self.conv = nn.Conv2d(in_filters, out_filters, kernel, stride=stride, padding=padding, dilation=dilation,
                            groups=groups, bias=not batch_norm)
-        self.dropout = nn.Dropout2d(p=do_rate)
+        self.dropout = nn.Dropout1d(p=do_rate)
         self.batch_norm = nn.BatchNorm2d(out_filters)
 
     def forward(self, input, **kwargs):
@@ -135,7 +135,7 @@ class DenseFilter(nn.Module):
             nn.BatchNorm2d(bottleneck * growth_rate),
             activation(),
             nn.Conv2d(bottleneck * growth_rate, growth_rate, kernel, padding=tuple((k // 2 for k in kernel))),
-            nn.Dropout2d(do)
+            nn.Dropout1d(do)
         )
 
     def forward(self, x):
