@@ -369,7 +369,7 @@ class BaseModelTrainer(object):
 
         for epoch in range(epochs):
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataset), desc="Epoch {}".format(epoch))
+            pbar = tqdm.trange(len(training_dataset), desc="Epoch {}".format(epoch), ncols=200)
             data_iterator = iter(training_dataset)
             self.train(True)
             for iteration in pbar:
