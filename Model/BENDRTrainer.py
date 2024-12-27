@@ -120,12 +120,12 @@ class BENDRTrainer(BaseModelTrainer):
     
     def calculate_metrics(self, inputs, outputs):
         """
-        Basic MSE 
+        Cosine Similarity from Calculating Similarity
         """
-        print(inputs.shape, outputs[1].shape)
-
+        # "Logits" from _calculate_similarity
+        similarity = outputs[0].mean().item()
         return {
-            'MSE': F.mse_loss(inputs, outputs[1]),
+            'Similarity': similarity
         }
 
     @staticmethod
