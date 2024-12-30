@@ -97,3 +97,4 @@ if __name__ == "__main__":
     output = encoder(input)
 
     print("Input shape:", input.shape, "Output shape:", output.shape)
+

@@ -63,7 +63,7 @@ def _createEdgeIndexTensor(adjMatrix):
 	'''
 	Converts the adjacency matrix to a tensor of edge indices.
 	'''
-	edge_indices = np.argwhere(adjMatrix)
+	edge_indices = np.argwhere(adjMatrix != None)
 	edge_indices = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
 	return edge_indices
 
@@ -93,8 +93,8 @@ def createPositionMatrix(info):
 	return positions
 
 if __name__ == "__main__":
-	adj_matrix = np.random.rand(5, 5)
-	adj_matrix_list = [adj_matrix, adj_matrix, adj_matrix]
+	adj_matrix = np.random.rand(19, 19)
+	adj_matrix_list = [adj_matrix]
 	edge_indices, edge_weights = createEdges(adj_matrix_list)
 	print("Edge Indices:", edge_indices.shape, "Edge Weights:", edge_weights.shape)
 
