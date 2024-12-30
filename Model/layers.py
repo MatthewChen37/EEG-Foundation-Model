@@ -1,13 +1,5 @@
-
-from copy import deepcopy
-
-import numpy as np
 import torch
-
-import torch
-import numpy as np
 from torch import nn
-from dataset import EEGDataset
 
 '''
 Useful layers for building models.

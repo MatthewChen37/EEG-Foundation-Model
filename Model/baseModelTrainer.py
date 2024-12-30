@@ -1,12 +1,9 @@
 import torch
-import torch.nn as nn
 import tqdm
 import re
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 from sys import gettrace
-import numpy as np
 from transforms import BatchTransform
-from pandas import DataFrame
 
 '''
 Based on:
@@ -41,12 +38,12 @@ class BaseModelTrainer(object):
                 tqdm.tqdm.write("No GPU detected: training and model execution will be performed on CPU.")
         if isinstance(cuda, bool):
             cuda = "cuda" if cuda else "cpu"
-        assert isinstance(cuda, str)
         self.cuda = cuda
         self.device = torch.device(cuda)
         
         _before_members = set(self.__dict__.keys())
         self.__dict__.update(**kwargs)
+
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
         self._trainables = list()
@@ -55,6 +52,8 @@ class BaseModelTrainer(object):
                 if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
+
+
         self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True,
                                          momentum=0.9)
         self.scheduler = None
@@ -383,37 +382,3 @@ class BaseModelTrainer(object):
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
-
-def balanced_undersampling(dataset, replacement=False):
-    tqdm.tqdm.write("Undersampling for balanced distribution.")
-    sample_weights, counts = get_label_balance(dataset)
-    return WeightedRandomSampler(sample_weights, len(counts) * int(counts.min()), replacement=replacement)
-
-def balanced_oversampling(dataset, replacement=True):
-    tqdm.tqdm.write("Oversampling for balanced distribution.")
-    sample_weights, counts = get_label_balance(dataset)
-    return WeightedRandomSampler(sample_weights, len(counts) * int(counts.max()), replacement=replacement)
-
-def get_label_balance(dataset):
-    """
-    Given a dataset, return the proportion of each target class and the counts of each class type
-
-    Parameters
-    ----------
-    dataset
-
-    Returns
-    -------
-    sample_weights, counts
-    """
-    assert hasattr(dataset, 'get_targets')
-    labels = dataset.get_targets()
-    counts = np.bincount(labels)
-    train_weights = 1. / torch.tensor(counts, dtype=torch.float)
-    sample_weights = train_weights[labels]
-    class_freq = counts/counts.sum()
-    if len(counts) < 10:
-        tqdm.tqdm.write('Class frequency: {}'.format(' | '.join('{:.2f}'.format(c) for c in class_freq)))
-    else:
-        tqdm.tqdm.write("Class frequencies range from {:.2e} to {:.2e}".format(class_freq.min(), class_freq.max()))
-    return sample_weights, counts
