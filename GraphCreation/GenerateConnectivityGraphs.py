@@ -1,31 +1,38 @@
 import numpy as np
-from mne_connectivity import spectral_connectivity_epochs, spectral_connectivity_time
+from mne_connectivity import spectral_connectivity_time
 import torch
 
-def createSpectralConnectivityMatrix(epochs):
-  adjMatrix = spectral_connectivity_epochs(epochs,
-											method = 'wpli',
-											sfreq = 128,
-											fmin = 0.5,
-											fmax = 40,
-											faverage = True,
-											n_jobs = 4, verbose=False).get_data('dense')[:, :, 0]
-  adjMatrix = adjMatrix + adjMatrix.T - np.diag(np.diag(adjMatrix))
-  adjMatrix[adjMatrix < (adjMatrix.mean() + adjMatrix.std())] = 0
-  return adjMatrix
+'''
+This is a "Non-Deep" way of featurizing the relationship between
+channels in the EEG data.
 
-
+Not really used, but is a good reference.
+'''
 def createConnectivityTime(epochs):
-	adjMatrix = spectral_connectivity_time(epochs,
-											method = 'wpli',
-											sfreq = 128,
-											fmin = 0.5,
-											fmax = 40,
-											faverage = True,
-											n_jobs = 4, verbose=False).get_data('dense')[:, :, 0]
-	adjMatrix = adjMatrix + adjMatrix.T - np.diag(np.diag(adjMatrix))
-	adjMatrix[adjMatrix < (adjMatrix.mean() + adjMatrix.std())] = 0
-	return adjMatrix
+	min_freq = 0.5
+	max_freq = 128
+
+	# Provide the freq points at 0.25 Hz intervals
+	freqs = np.linspace(min_freq, max_freq, int((max_freq - min_freq) * 4 + 1))
+
+	adj_matrices = torch.zeros((epochs.shape[0], epochs.shape[1], epochs.shape[1]), dtype=torch.float32)
+
+	symmetric_adjMatrix = spectral_connectivity_time(epochs,
+										   freqs=freqs,
+										   method = ['coh', 'wpli'],
+										   sfreq = 256,
+										   fmin = min_freq,
+										   fmax = max_freq,
+										   faverage = True,
+										   n_jobs = 4,
+										   verbose=False)
+	for i in range(len(symmetric_adjMatrix)):
+		for epoch in range(epochs.shape[0]):
+			adjMatrix = symmetric_adjMatrix[i].get_data('dense')[epoch, :, :, 0]
+			adjMatrix = adjMatrix + adjMatrix.T - np.diag(np.diag(adjMatrix))
+			adjMatrix[adjMatrix < (adjMatrix.mean() + adjMatrix.std())] = 0
+			adj_matrices[epoch] = torch.tensor(adjMatrix, dtype=torch.float32)
+	return adj_matrices
 
 
 def createDistanceMatrix(info):
@@ -77,11 +84,19 @@ def createEdges(adjMatrixList):
 			edge_weights[i][j] = adjMatrixList[j][edge_indices[0][i], edge_indices[1][i]]
 	return edge_indices, edge_weights
 
+def createPositionMatrix(info):
+	'''
+	Converts the electrode positions to a tensor.
+	'''
+	positions = _get_channel_positions(info['chs'])
+	positions = torch.tensor(positions, dtype=torch.float32)
+	return positions
+
 if __name__ == "__main__":
 	adj_matrix = np.random.rand(5, 5)
 	adj_matrix_list = [adj_matrix, adj_matrix, adj_matrix]
 	edge_indices, edge_weights = createEdges(adj_matrix_list)
-	print(edge_indices.shape, edge_weights.shape)
+	print("Edge Indices:", edge_indices.shape, "Edge Weights:", edge_weights.shape)
 
 	assert edge_indices.shape[1] == edge_weights.shape[0]
 	assert len(adj_matrix_list) == edge_weights.shape[1]
@@ -90,5 +105,6 @@ if __name__ == "__main__":
 	for i in range(len(edge_indices[1])):
 		for j in range(len(adj_matrix_list)):
 			assert edge_weights[i][j] == adj_matrix_list[j][edge_indices[0][i], edge_indices[1][i]]
+
 	print("All tests passed!")	
 
