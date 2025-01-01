@@ -1,6 +1,7 @@
 import numpy as np
 from mne_connectivity import spectral_connectivity_time
 import torch
+import math
 
 '''
 This is a "Non-Deep" way of featurizing the relationship between
@@ -47,6 +48,26 @@ def createDistanceMatrix(info):
 			distance_matrix[i, j] = np.linalg.norm(positions[i] - positions[j])
 
 	# Normalize values between 0 and 1 as per https://stats.stackexchange.com/questions/70801/how-to-normalize-data-to-0-1-range
+	distance_matrix = (distance_matrix - distance_matrix.min())/ (distance_matrix.max() - distance_matrix.min())
+	return distance_matrix
+
+def createGeodesicDistanceMatrix(info):
+	'''
+	Compute the geodesic distance matrix between all pairs of electrodes.
+	'''
+	positions = _get_channel_positions(info['chs'])
+	n_channels = len(positions)
+	distance_matrix = np.zeros((n_channels, n_channels))
+
+	r = 0.095 # Sphere "Default" https://mne.tools/stable/generated/mne.viz.plot_montage.html
+
+	for i in range(n_channels):
+		for j in range(n_channels):
+			x1, y1, z1 = positions[i]
+			x2, y2, z2 = positions[j]
+			# From https://github.com/neerajwagh/eeg-gcnn/blob/ec9f692a9a5ce53fea27711a3ffcec024581116f/code_psd_deep_eeg_gcnn/EEGGraphDataset.py#L76
+			distance_matrix[i, j] = r * math.acos(round(((x1 * x2) + (y1 * y2) + (z1 * z2)) / (r**2), 2))
+
 	distance_matrix = (distance_matrix - distance_matrix.min())/ (distance_matrix.max() - distance_matrix.min())
 	return distance_matrix
 
@@ -105,6 +126,9 @@ if __name__ == "__main__":
 	for i in range(len(edge_indices[1])):
 		for j in range(len(adj_matrix_list)):
 			assert edge_weights[i][j] == adj_matrix_list[j][edge_indices[0][i], edge_indices[1][i]]
+
+	info = {'chs': [{'loc': [0.0, 0.0, 0.0]}, {'loc': [0.05, 0.05, 0.05]}, {'loc': [0.02, 0.002, 0.002]}]}
+	geodesic_distance_matrix = createGeodesicDistanceMatrix(info)
 
 	print("All tests passed!")	
 
