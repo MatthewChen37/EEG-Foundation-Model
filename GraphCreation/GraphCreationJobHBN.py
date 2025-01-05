@@ -17,7 +17,8 @@ def main(args):
 
 	assert agg_mean.shape[0] == agg_std.shape[0] == EOEC_mean.shape[0] == EOEC_std.shape[0] == 19
 
-	subjects = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
+	subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
+	print("Subjects: ", len(subjects))
 
 	'''
 	Although Pandas Dataframes are not thread-safe,

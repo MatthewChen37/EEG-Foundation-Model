@@ -14,4 +14,4 @@ environment: azureml:PreprocessingEnvironment:29
 code: .
 command: |
   python GraphCreationJobHBN.py \
-    --input_dir ${{outputs.data_dir}} \
+    --input_directory ${{outputs.data_dir}} 

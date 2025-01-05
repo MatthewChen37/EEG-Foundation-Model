@@ -10,19 +10,21 @@ from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
 
 def main(args):
-	agg_mean = pd.read_csv(os.path.join(args.input_directory, 'TUH_means.csv'), index_col=0) 
-	agg_std = pd.read_csv(os.path.join(args.input_directory, 'TUH_stds.csv'), index_col=0)
+    agg_mean = pd.read_csv(os.path.join(args.input_directory, 'TUH_means.csv'), index_col=0) 
+    agg_std = pd.read_csv(os.path.join(args.input_directory, 'TUH_stds.csv'), index_col=0)
+	
+    print(agg_mean.shape, agg_std.shape)
 
-	subjects = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
+    subjects = ['aaaaaova']
 
-	'''
-	Although Pandas Dataframes are not thread-safe,
-	we are only reading from them in this function, so it is safe to use them in a ThreadPoolExecutor.
-	'''
-	with ThreadPoolExecutor() as executor:
-		futures = [executor.submit(_process_subject, args, subject, agg_mean, agg_std) for subject in subjects]
-		for future in tqdm(futures):
-			future.result()
+    '''
+    Although Pandas Dataframes are not thread-safe,
+    we are only reading from them in this function, so it is safe to use them in a ThreadPoolExecutor.
+    '''
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(_process_subject, args, subject, agg_mean, agg_std) for subject in subjects]
+        for future in tqdm(futures):
+            future.result()
 
 def _process_subject(args, subject, agg_mean, agg_std):
     # Create the output directory
