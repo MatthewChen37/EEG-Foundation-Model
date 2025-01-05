@@ -7,13 +7,15 @@ from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from torch_geometric.data import Data
-from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
+from GenerateConnectivityGraphs import createGeodesicDistanceMatrix, createEdges, createPositionMatrix
 
 def main(args):
-	agg_mean = pd.read_csv(os.path.join(args.input_directory, 'agg_mean_combined.csv'), index_col=0) 
-	agg_std = pd.read_csv(os.path.join(args.input_directory, 'agg_std_combined.csv'), index_col=0)
-	EOEC_mean = pd.read_csv(os.path.join(args.input_directory, 'EOEC_means.csv'), index_col=0)
-	EOEC_std = pd.read_csv(os.path.join(args.input_directory, 'EOEC_std.csv'), index_col=0)
+	agg_mean = pd.read_csv(os.path.join(args.input_directory, 'agg_mean_combined.csv'), index_col=0).loc['Fp2':'Cz']
+	agg_std = pd.read_csv(os.path.join(args.input_directory, 'agg_std_combined.csv'), index_col=0).loc['Fp2':'Cz']
+	EOEC_mean = pd.read_csv(os.path.join(args.input_directory, 'EOEC_means.csv'), index_col=0).loc['Fp2':'Cz']
+	EOEC_std = pd.read_csv(os.path.join(args.input_directory, 'EOEC_std.csv'), index_col=0).loc['Fp2':'Cz']
+
+	assert agg_mean.shape[0] == agg_std.shape[0] == EOEC_mean.shape[0] == EOEC_std.shape[0] == 19
 
 	subjects = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
 
@@ -49,7 +51,7 @@ def _process_subject(args, subject, agg_mean, agg_std, EOEC_mean, EOEC_std):
 		np.save(os.path.join(args.input_directory, subject, "normalized_epochs", epoch_file), raw_data)
 
 		# TODO: Add support for multiple features
-		dist_feat = createDistanceMatrix(raw_epoch.info)
+		dist_feat = createGeodesicDistanceMatrix(raw_epoch.info)
 		electrode_pos = createPositionMatrix(raw_epoch.info)
 
 		# Fully connected graph

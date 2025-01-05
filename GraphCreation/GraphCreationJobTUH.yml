@@ -1,0 +1,17 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: tuhgraphcreationjob
+display_name: tuhgraphcreationjob
+description: Normalize and create graphs of TUH EEG data
+tags:
+  project: EEGFoundationModel
+version: 1
+outputs:
+  data_dir:
+    type: uri_folder
+environment: azureml:PreprocessingEnvironment:29
+code: .
+command: |
+  python GraphCreationJobTUH.py \
+    --input_dir ${{outputs.data_dir}} \
