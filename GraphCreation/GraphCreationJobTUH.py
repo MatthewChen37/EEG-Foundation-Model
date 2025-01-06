@@ -3,19 +3,22 @@ import os, argparse
 import numpy as np
 import pandas as pd
 import warnings
+import traceback
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
 
+errors = []
+
 def main(args):
     agg_mean = pd.read_csv(os.path.join(args.input_directory, 'TUH_means.csv'), index_col=0) 
     agg_std = pd.read_csv(os.path.join(args.input_directory, 'TUH_stds.csv'), index_col=0)
-	
-    print(agg_mean.shape, agg_std.shape)
+    subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
 
-    subjects = ['aaaaaova']
+    print(agg_mean.shape, agg_std.shape)
+    print("Subjects: ", len(subjects))
 
     '''
     Although Pandas Dataframes are not thread-safe,
@@ -26,42 +29,50 @@ def main(args):
         for future in tqdm(futures):
             future.result()
 
+    if len(errors) > 0:
+        errors_df = pd.DataFrame(errors, columns=["subject", "error", "traceback"])
+        errors_df.to_csv(os.path.join(args.input_directory, "graph_creation_errors.csv"), index=False)
+
 def _process_subject(args, subject, agg_mean, agg_std):
-    # Create the output directory
-    Path(os.path.join(args.input_directory, subject, "normalized_epochs")).mkdir(parents=True, exist_ok=True)
-    Path(os.path.join(args.input_directory, subject, "graphs")).mkdir(parents=True, exist_ok=True)
 
-    base_path = os.path.join(args.input_directory, subject, "epochs")
+    try:
+        # Create the output directory
+        Path(os.path.join(args.input_directory, subject, "normalized_epochs")).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(args.input_directory, subject, "graphs")).mkdir(parents=True, exist_ok=True)
 
-    for epoch_file in os.listdir(base_path):
-        raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
-        annotations = raw_epoch.get_annotations_per_epoch()
+        base_path = os.path.join(args.input_directory, subject, "epochs")
 
-        raw_data = _normalize_data(raw_epoch.get_data(copy=True), subject, agg_mean, agg_std)
+        for epoch_file in os.listdir(base_path):
+            raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
+            annotations = raw_epoch.get_annotations_per_epoch()
 
-        # Replace all NaNs with 0
-        raw_data = np.nan_to_num(raw_epoch)
+            raw_data = _normalize_data(raw_epoch.get_data(copy=True), subject, agg_mean, agg_std)
 
-        np.save(os.path.join(args.input_directory, subject, "normalized_epochs", epoch_file), raw_data)
+            # Replace all NaNs with 0
+            raw_data = np.nan_to_num(raw_epoch)
 
-        # TODO: Add support for multiple features
-        dist_feat = createDistanceMatrix(raw_epoch.info)
-        electrode_pos = createPositionMatrix(raw_epoch.info)
+            np.save(os.path.join(args.input_directory, subject, "normalized_epochs", epoch_file), raw_data)
 
-        # Fully connected graph
-        edge_indices, edge_weights = createEdges([dist_feat])
+            # TODO: Add support for multiple features
+            dist_feat = createDistanceMatrix(raw_epoch.info)
+            electrode_pos = createPositionMatrix(raw_epoch.info)
 
-        # Create graphs
-        graphs = []
+            # Fully connected graph
+            edge_indices, edge_weights = createEdges([dist_feat])
 
-        for i in range(raw_data.shape[0]):
-            data = Data(x=raw_data[i], edge_index=edge_indices, edge_attr=edge_weights, y=annotations[i], pos=electrode_pos)
-            graphs.append(data)
+            # Create graphs
+            graphs = []
 
-        # Each epoch is saved as a separate graph
-        for idx, graph in enumerate(graphs):
-            torch.save(graph, os.path.join(args.input_directory, subject, "graphs", f"{epoch_file[:-4]}_epoch_{idx}.pt"))
+            for i in range(raw_data.shape[0]):
+                data = Data(x=raw_data[i], edge_index=edge_indices, edge_attr=edge_weights, y=annotations[i], pos=electrode_pos)
+                graphs.append(data)
 
+            # Each epoch is saved as a separate graph
+            for idx, graph in enumerate(graphs):
+                torch.save(graph, os.path.join(args.input_directory, subject, "graphs", f"{epoch_file[:-4]}_epoch_{idx}.pt"))
+    except Exception as e:
+        print(f"Error processing {subject}: {e}, traceback: {traceback.format_exc()}")
+        errors.append((subject, e, traceback.format_exc()))
     return
 
 def _normalize_data(data, subject, mean, std):

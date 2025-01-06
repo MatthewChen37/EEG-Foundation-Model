@@ -18,20 +18,18 @@ INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
 		    'O1', 'O2', 'F7', 'F8', 'T3', 'T4', 'T5', 'T6',
 			  'Fz', 'Cz', 'Pz']
 
-
 def main(args):
-	subfolders = [f.path for f in os.scandir(args.input_directory) if f.is_dir() ]
+	subfolders = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
 	subjects = [x.split("/")[-1][4:] for x in subfolders]
 	print(f"Found {len(subjects)} subjects")
 
 	# Define the columns for the empty DataFrame
-	columns = ['bids_path', 'error_message'] 
+	columns = ['bids_path', 'error', 'traceback'] 
 
 	means = pd.DataFrame(index=INDICES)
 	stds = pd.DataFrame(index=INDICES)
 
 	failed_files = []
-
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_subject, args, subject, failed_files) for subject in subjects]
 		for future in tqdm(futures):
@@ -41,11 +39,18 @@ def main(args):
 				means[subject] = mean
 				stds[subject] = std
 
-		failed_files_df = pd.DataFrame(failed_files, columns=columns)
-		means.to_csv(os.path.join(args.output_dir, "TUH_means.csv"))
-		stds.to_csv(os.path.join(args.output_dir, "TUH_stds.csv"))
-		failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"))
-
+	'''
+	for subject in tqdm(subjects):
+		result = _process_subject(args, subject, failed_files)
+		if result:
+			subject, mean, std = result
+			means[subject] = mean
+			stds[subject] = std
+	'''
+	failed_files_df = pd.DataFrame(failed_files, columns=columns)
+	means.to_csv(os.path.join(args.output_dir, "TUH_means.csv"))
+	stds.to_csv(os.path.join(args.output_dir, "TUH_stds.csv"))
+	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"))
 
 def _process_subject(args, subject, failed_files):
 	Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
@@ -58,32 +63,36 @@ def _process_subject(args, subject, failed_files):
 
 	for bp in bids_path.match():
 		bp = _correct_path(bp)
+		'''
 		file_path = os.path.join(args.output_dir, subject, "epochs",
 						    f"{bp.session}-{bp.processing}-{bp.recording}_epo.fif")
 		if not os.path.exists(file_path):
-			try:
-				raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
-				ch_names = raw.ch_names
-				if 'A1' and 'A2' in ch_names:
-					raw = raw.drop_channels(['A1', 'A2'])
+		'''
+		try:
+			raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
+			ch_names = raw.ch_names
+			if 'A1' and 'A2' in ch_names:
+				raw = raw.drop_channels(['A1', 'A2'])
 
-				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
-				subject_all_data.append(raw.get_data())
+			assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
+			subject_all_data.append(raw.get_data())
+			
+			#epochs = simplePipeline(raw)
+			#epochs.save(file_path, overwrite=False)
+		except Exception as e:
+			print(f"Failed to process {bp}, error: {e}")
+			failed_files.append((bp, e, traceback.format_exc()))
 				
-				epochs = simplePipeline(raw)
-				epochs.save(file_path, overwrite=False)
-
-			except Exception as e:
-				print(f"Failed to process {bp}, error: {e}")
-				failed_files.append((file_path, traceback.format_exc()))
-				
-	if subject_all_data:
+	if len(subject_all_data) > 0:
 		subject_all_data = np.concatenate(subject_all_data, axis=1)
 		# Z-score Transform By Channel
 		mean = np.mean(subject_all_data, axis=1)
 		std = np.std(subject_all_data, axis=1)
 
 		return subject, mean, std
+	else:
+		print(f"No data found for subject: {subject}")
+		return None
 
 def _correct_path(bp):
 	path_str = str(bp.fpath)
