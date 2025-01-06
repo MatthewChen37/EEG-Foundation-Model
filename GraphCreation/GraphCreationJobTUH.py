@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import warnings
 import traceback
-from pathlib import Path
 from tqdm import tqdm
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
@@ -23,11 +23,17 @@ def main(args):
     '''
     Although Pandas Dataframes are not thread-safe,
     we are only reading from them in this function, so it is safe to use them in a ThreadPoolExecutor.
-    '''
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(_process_subject, args, subject, agg_mean, agg_std) for subject in subjects]
         for future in tqdm(futures):
             future.result()
+
+    '''
+
+    pbar = tqdm(subjects)
+    for subject in tqdm(subjects):
+        pbar.set_description(f"Processing {subject}")
+        _process_subject(args, subject, agg_mean, agg_std)
 
     if len(errors) > 0:
         errors_df = pd.DataFrame(errors, columns=["subject", "error", "traceback"])
