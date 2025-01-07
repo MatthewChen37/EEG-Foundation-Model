@@ -31,7 +31,7 @@ def main(args):
     '''
 
     pbar = tqdm(subjects)
-    for subject in tqdm(subjects):
+    for subject in pbar:
         pbar.set_description(f"Processing {subject}")
         _process_subject(args, subject, agg_mean, agg_std)
 
