@@ -49,7 +49,7 @@ class mATTContextualizer(nn.Module):
 		Returns:
 			x: a tensor of shape (batch_size, ???)
 		'''
-		bs, feat, seq = x.shape
+		#bs, feat, seq = x.shape
 
 		if mask_t is not None:
 			x = x.clone()
