@@ -10,7 +10,7 @@ Based on https://github.com/SPOClab-ca/BENDR/blob/main/dn3_ext.py
 '''
 class ConvEncoder(nn.Module):
     def __init__(self, in_features, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
-                 dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2)):
+                 dropout=0., enc_downsample=(3, 2, 2, 2, 2, 2)):
         super().__init__()
         self.in_features = in_features
         self.encoder_h = encoder_h
@@ -34,14 +34,6 @@ class ConvEncoder(nn.Module):
                 nn.GELU(),
             ))
             in_features = encoder_h
-
-        if projection_head:
-            self.encoder.add_module("projection-1", nn.Sequential(
-                nn.Conv1d(in_features, in_features, 1),
-                nn.Dropout1d(dropout*2),
-                nn.GroupNorm(in_features // 2, in_features),
-                nn.GELU()
-            ))
 
     def description(self, sfreq=None, sequence_len=None):
         widths = list(reversed(self._width))[1:]
@@ -88,7 +80,7 @@ if __name__ == "__main__":
 
     # Define the encoder
     encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
-                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+                          dropout=0., enc_downsample=(3, 2, 2, 2, 2, 2))
 
     print(encoder.description(sfreq=256, sequence_len=15360))
 
