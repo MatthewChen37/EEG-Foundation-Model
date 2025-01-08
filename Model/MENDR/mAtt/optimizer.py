@@ -1,6 +1,9 @@
 from mAtt.utils import *
 from mAtt import StiefelParameter
 
+'''
+Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/optimizer.py
+'''
 class MixOptimizer(object):
     """This is a meta optimizer which uses other optimizers for updating parameters
         and remap all StiefelParameter parameters to Stiefel space after they have been updated.

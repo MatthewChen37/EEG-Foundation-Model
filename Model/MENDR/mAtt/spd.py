@@ -7,6 +7,9 @@ import numpy as np
 from mAtt.utils import *
 from mAtt import StiefelParameter
 
+'''
+Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/spd.py
+'''
 class SPDTransform(nn.Module):
 
     def __init__(self, input_size, output_size):

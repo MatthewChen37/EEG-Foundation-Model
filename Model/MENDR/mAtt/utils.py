@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 
+'''
+Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/utils.py
+'''
 def symmetric(A):
     size = list(range(len(A.shape)))
     temp = size[-1]

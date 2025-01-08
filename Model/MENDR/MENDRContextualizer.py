@@ -3,7 +3,8 @@ import torch.nn as nn
 
 
 '''
-BENDR-style Contextualizer using mATT module
+BENDR-style Contextualizer using mATT module 
+augmented from https://github.com/CECNL/MAtt/blob/main/mAtt/mAtt.py
 '''
 class mATTContextualizer(nn.Module):
 	def __init__(self, config):
