@@ -29,6 +29,7 @@ class R2E(nn.Module):
 			shape: a tuple of the original shape of x		
 		'''
 		x = self.tangent(x)
+		print(x.shape, shape)
 		x = x.view(shape[0], shape[1], -1)
-		x = self.flat(x)
+		print(x.shape)
 		return x

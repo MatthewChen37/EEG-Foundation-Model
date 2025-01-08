@@ -24,6 +24,12 @@ class MENDRTrainer(BaseModelTrainer):
 				- encoder_grad_frac: a float
 				- learning_rate: a float
 				- l2_weight_decay: a float	
+				- mask_rate: a float
+				- temp: a float
+				- permuted_contexts: a boolean
+				- enc_feat_l2: a float
+				- unmasked_negative_frac: a float
+				- num_negatives: an integer
 		'''
 		self.predict_length = config.mask_span
 		self._enc_downsample = encoder.downsampling_factor
@@ -39,11 +45,9 @@ class MENDRTrainer(BaseModelTrainer):
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), **kwargs)
 		
-		self.best_metric = None
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span
 		self.temp = config.temp
-		self.permuted_encodings = config.permuted_encodings
 		self.permuted_contexts = config.permuted_contexts
 		self.beta = config.enc_feat_l2
 		self.start_token = getattr(contextualizer, 'start_token', None)
@@ -90,9 +94,6 @@ class MENDRTrainer(BaseModelTrainer):
 	def forward(self, *inputs):
 		z = self.encoder(inputs[0])
 
-		if self.permuted_encodings:
-			z = z.permute([1, 2, 0])
-
 		unmasked_z = z.clone()
 
 		batch_size, feat, samples = z.shape
@@ -107,8 +108,10 @@ class MENDRTrainer(BaseModelTrainer):
 			mask[:, _make_span_from_seeds((samples // half_avg_num_seeds) * np.arange(half_avg_num_seeds).astype(int),
 												self.mask_span)] = True
 
-		c = self.context_fn(z, mask)
+		c, shape = self.contextualizer(z, mask_t=mask)
+		c = self.r2e(c, shape)
 
+		print(c.shape)
 		# Select negative candidates and generate labels for which are correct labels
 		negatives, negative_inds = self._generate_negatives(z)
 
@@ -156,8 +159,8 @@ if __name__ == "__main__":
 	from R2E import R2E
 	from types import SimpleNamespace
 
-	encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
-                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+	encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2),
+                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2))
 
 
 	contextualizer_config = SimpleNamespace(
@@ -188,4 +191,9 @@ if __name__ == "__main__":
 	)
 
 	trainer = MENDRTrainer(encoder, contextualizer, r2e, trainer_config)
-	print(trainer.description(1000))
+	print(trainer.description(27000))
+
+	input = torch.ones(3, 19, 1000)
+	output = trainer.forward(input)
+	print("Input shape:", input.shape, "Output shape:", output[0].shape)
+

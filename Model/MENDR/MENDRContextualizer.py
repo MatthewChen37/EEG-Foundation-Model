@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 from mAtt.mAtt import E2R, AttentionManifold, SPDRectified
+# TODO: Remove this import
+import sys
+sys.path.append("../")
 from layers import Permute, Flatten
 
 '''
@@ -24,7 +27,9 @@ class mATTContextualizer(nn.Module):
 		self._transformer_dim = config.in_features * 3
 		self.dropout = config.dropout
 		self.start_token = config.start_token
-		self.relative_position = self._initializePositionEncoder(config)
+		self.position_encoder = config.position_encoder > 0
+		if self.position_encoder:
+			self.relative_position = self._initializePositionEncoder(config)
 		self.input_conditioning = nn.Sequential(
             Permute([0, 2, 1]),
             nn.LayerNorm(config.in_features),
@@ -33,11 +38,14 @@ class mATTContextualizer(nn.Module):
             nn.Conv1d(config.in_features, self._transformer_dim, 1),
             Permute([2, 0, 1]),
         )
+		# Initialize replacement vector with 0's
+		self.mask_replacement = torch.nn.Parameter(torch.normal(0, self.in_features**(-0.5), size=(self.in_features,)),
+                                                   requires_grad=True)
 
 		#E2R
 		self.ract1 = E2R(config.epochs)
 		#Riemannian Manifold Attention Module
-		self.att = AttentionManifold(15, 12)
+		self.att = AttentionManifold(256, 12)
 		self.ract2 = SPDRectified() 
 
 	def forward(self, x, mask_t=None, mask_c=None):
@@ -49,15 +57,15 @@ class mATTContextualizer(nn.Module):
 		Returns:
 			x: a tensor of shape (batch_size, ???)
 		'''
-		#bs, feat, seq = x.shape
-
+		bs, feat, seq = x.shape
+		print(bs, feat, seq)
 		if mask_t is not None:
 			x = x.clone()
 			x.transpose(2, 1)[mask_t] = self.mask_replacement
 		if mask_c is not None:
 			x = x.clone()
 			x[mask_c] = 0
-
+		'''
 		if self.position_encoder:
 			x = x + self.relative_position(x)
 		x = self.input_conditioning(x)
@@ -65,12 +73,14 @@ class mATTContextualizer(nn.Module):
 		if self.start_token is not None:
 			in_token = self.start_token * torch.ones((1, 1, 1), requires_grad=True).to(x.device).expand([-1, *x.shape[1:]])
 			x = torch.cat([in_token, x], dim=0)
-
+		'''
+		print(x.shape)
 		x = self.ract1(x)
+		print(x.shape)
 		x, shape = self.att(x)
 		x = self.ract2(x)
 
-		return x
+		return x, shape
 	
 	def _initializePositionEncoder(self, config):
 		conv = nn.Conv1d(config.in_features, config.in_features, config.position_encoder, padding=config.position_encoder // 2, groups=16)
@@ -78,3 +88,12 @@ class mATTContextualizer(nn.Module):
 		nn.init.constant_(conv.bias, 0)
 		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
 		return nn.Sequential(conv, nn.GELU())
+	
+if __name__ == "__main__":
+
+	# TODO move this to mAtt.py file
+	# Cannot currently due to import issues
+	
+	input = torch.randn(3, 19, 1000)
+	output = E2R(epochs=3)(input)
+	print(output.shape)
