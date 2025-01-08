@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+# TODO: Bad Practice fix later
+import sys
+sys.path.append("../")
 from baseModelTrainer import BaseModelTrainer
 from contextualizer import _make_mask, _make_span_from_seeds
 
@@ -43,7 +46,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.permuted_encodings = config.permuted_encodings
 		self.permuted_contexts = config.permuted_contexts
 		self.beta = config.enc_feat_l2
-		self.start_token = getattr(context_fn, 'start_token', None)
+		self.start_token = getattr(contextualizer, 'start_token', None)
 		self.unmasked_negative_frac = config.unmasked_negative_frac
 		self.num_negatives = config.num_negatives
 
@@ -146,3 +149,43 @@ class MENDRTrainer(BaseModelTrainer):
 		while len(outputs.shape) >= 3:
 			outputs = outputs.mean(dim=-1)
 		return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
+	
+if __name__ == "__main__":
+	from encoder import ConvEncoder
+	from MENDRContextualizer import mATTContextualizer
+	from R2E import R2E
+	from types import SimpleNamespace
+
+	encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
+                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+
+
+	contextualizer_config = SimpleNamespace(
+		in_features=256,
+		dropout=0.1,
+		start_token=-5,
+		position_encoder=25,
+		epochs=10
+	)
+
+	contextualizer = mATTContextualizer(contextualizer_config)
+	r2e = R2E(contextualizer_config)
+
+
+	trainer_config = SimpleNamespace(
+		mask_span=6,
+		multi_gpu=False,
+		encoder_grad_frac=1,
+		learning_rate=1e-3,
+		l2_weight_decay=1e-5,
+		mask_rate=0.1,
+		temp=0.1,
+		permuted_encodings=False,
+		permuted_contexts=False,
+		enc_feat_l2=1e-5,
+		unmasked_negative_frac=0.1,
+		num_negatives=1
+	)
+
+	trainer = MENDRTrainer(encoder, contextualizer, r2e, trainer_config)
+	print(trainer.description(1000))
