@@ -40,7 +40,6 @@ class mATTContextualizer(nn.Module):
 		self.att = AttentionManifold(15, 12)
 		self.ract2 = SPDRectified() 
 
-
 	def forward(self, x, mask_t=None, mask_c=None):
 		'''
 		Args:
