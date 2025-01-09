@@ -74,6 +74,7 @@ class BENDRTrainer(BaseModelTrainer):
 
         logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
         if negative_in_target.any():
+            print("Negative in target:", logits[1:].shape, negative_in_target.shape)
             logits[1:][negative_in_target] = float("-inf")
 
         return logits.view(-1, logits.shape[-1])
@@ -147,11 +148,15 @@ if __name__ == "__main__":
     from encoder import ConvEncoder
     from contextualizer import Contextualizer
 
-    encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
-                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2, 2, 2, 2))
+    encoder = ConvEncoder(in_features=19, encoder_h=16, enc_width=(3, 2, 2, 2, 2, 2),
+                          dropout=0., enc_downsample=(3, 2, 2, 2, 2, 2))
 
-    contextualizer = Contextualizer(512, layer_drop=0.01)
+    contextualizer = Contextualizer(16, layer_drop=0.01)
 
-    trainer = BENDRTrainer(encoder, contextualizer, mask_rate=0.1, mask_span=6, learning_rate=0.01, temp=0.5)
+    trainer = BENDRTrainer(encoder, contextualizer, mask_rate=0.5, mask_span=3, learning_rate=0.01, temp=0.5)
 
     print(trainer.description(sequence_len=15360))
+
+    input = torch.zeros(1, 19, 500)
+    output = trainer.forward(input)
+    print("Input shape:", input.shape, "Output shape:", output[0].shape)

@@ -77,7 +77,6 @@ class MENDRTrainer(BaseModelTrainer):
 		return z_k, negative_inds
 
 	def _calculate_similarity(self, z, c, negatives):
-		print(c.shape, z.shape, negatives.shape)
 		c = c.permute([0, 2, 1]).unsqueeze(-2)
 		z = z.permute([0, 2, 1]).unsqueeze(-2)
 
@@ -87,9 +86,9 @@ class MENDRTrainer(BaseModelTrainer):
 
 		logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
 
-		print(c.shape, z.shape, negatives.shape, negative_in_target.shape, logits.shape)
 		if negative_in_target.any():
-			logits[1:][negative_in_target] = float("-inf")
+			# BENDR implementation is actually wrong...
+			logits[..., 1:][negative_in_target] = float("-inf")
 
 		return logits.view(-1, logits.shape[-1])
 
@@ -205,7 +204,7 @@ if __name__ == "__main__":
 		permuted_contexts=False,
 		enc_feat_l2=1e-5,
 		unmasked_negative_frac=0.1,
-		num_negatives=1
+		num_negatives=10
 	)
 
 	trainer = MENDRTrainer(encoder, contextualizer, r2e, trainer_config)
