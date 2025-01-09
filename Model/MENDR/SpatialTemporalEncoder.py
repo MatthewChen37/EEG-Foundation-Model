@@ -18,4 +18,3 @@ class SpatialTemporalEncoder(nn.Module):
 		x = self.times_block(x)
 		x = self.gnn_layer(x)
 		return x
-
