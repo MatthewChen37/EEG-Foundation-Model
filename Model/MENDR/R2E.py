@@ -19,7 +19,6 @@ class R2E(nn.Module):
 		super().__init__()
 		self.epochs = config.epochs
 		self.tangent = SPDTangentSpace(12)
-		self.flat = nn.Flatten()
 
 
 	def forward(self, x, shape):
