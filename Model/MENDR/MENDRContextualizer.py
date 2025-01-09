@@ -45,7 +45,7 @@ class mATTContextualizer(nn.Module):
 		#E2R
 		self.ract1 = E2R(config.epochs)
 		#Riemannian Manifold Attention Module
-		self.att = AttentionManifold(256, 12)
+		self.att = AttentionManifold(768, 12)
 		self.ract2 = SPDRectified() 
 
 	def forward(self, x, mask_t=None, mask_c=None):
@@ -57,29 +57,28 @@ class mATTContextualizer(nn.Module):
 		Returns:
 			x: a tensor of shape (batch_size, ???)
 		'''
-		bs, feat, seq = x.shape
-		print(bs, feat, seq)
 		if mask_t is not None:
 			x = x.clone()
 			x.transpose(2, 1)[mask_t] = self.mask_replacement
 		if mask_c is not None:
 			x = x.clone()
 			x[mask_c] = 0
-		'''
 		if self.position_encoder:
 			x = x + self.relative_position(x)
 		x = self.input_conditioning(x)
+		print(x.shape)
 
 		if self.start_token is not None:
 			in_token = self.start_token * torch.ones((1, 1, 1), requires_grad=True).to(x.device).expand([-1, *x.shape[1:]])
 			x = torch.cat([in_token, x], dim=0)
-		'''
+		x = x.permute([1, 2, 0])
 		print(x.shape)
 		x = self.ract1(x)
 		print(x.shape)
 		x, shape = self.att(x)
+		print(x.shape)
 		x = self.ract2(x)
-
+		print(x.shape, "Shape:", shape)
 		return x, shape
 	
 	def _initializePositionEncoder(self, config):
@@ -89,7 +88,15 @@ class mATTContextualizer(nn.Module):
 		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
 		return nn.Sequential(conv, nn.GELU())
 	
+	def freeze_features(self, unfreeze=False, finetuning=False):
+		for param in self.parameters():
+			param.requires_grad = unfreeze
+		if finetuning:
+			self.mask_replacement.requires_grad = False
+
+	
 if __name__ == "__main__":
+
 
 	# TODO move this to mAtt.py file
 	# Cannot currently due to import issues

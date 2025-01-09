@@ -28,8 +28,14 @@ class R2E(nn.Module):
 			x: a tensor
 			shape: a tuple of the original shape of x		
 		'''
+		print("Input to tangent space", x.shape, shape)
 		x = self.tangent(x)
-		print(x.shape, shape)
 		x = x.view(shape[0], shape[1], -1)
-		print(x.shape)
+		print("Output from tangent space", x.shape)
 		return x
+	
+	def freeze_features(self, unfreeze=False, finetuning=False):
+		for param in self.parameters():
+			param.requires_grad = unfreeze
+		if finetuning:
+			self.mask_replacement.requires_grad = False

@@ -87,11 +87,9 @@ class Contextualizer(nn.Module):
         if self.position_encoder:
             x = x + self.relative_position(x)
         x = self.input_conditioning(x)
-
         if self.start_token is not None:
             in_token = self.start_token * torch.ones((1, 1, 1), requires_grad=True).to(x.device).expand([-1, *x.shape[1:]])
             x = torch.cat([in_token, x], dim=0)
-
         for layer in self.transformer_layers:
             if not self.training or torch.rand(1) > self.layer_drop:
                 x = layer(x)

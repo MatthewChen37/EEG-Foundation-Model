@@ -77,16 +77,22 @@ class MENDRTrainer(BaseModelTrainer):
 		return z_k, negative_inds
 
 	def _calculate_similarity(self, z, c, negatives):
-		c = c[..., 1:].permute([0, 2, 1]).unsqueeze(-2)
+		print(z.shape, c.shape, negatives.shape)
+
+		c = c.permute([0, 2, 1]).unsqueeze(-2)
 		z = z.permute([0, 2, 1]).unsqueeze(-2)
+
+		print(z.shape, c.shape, negatives.shape)
 
 		# In case the contextualizer matches exactly, need to avoid divide by zero errors
 		negative_in_target = (c == negatives).all(-1)
 		targets = torch.cat([c, negatives], dim=-2)
 
 		logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
+
+		print(negative_in_target.shape, logits.shape)
 		if negative_in_target.any():
-			logits[1:][negative_in_target] = float("-inf")
+			logits[..., :-1][negative_in_target] = float("-inf")
 
 		return logits.view(-1, logits.shape[-1])
 
@@ -111,12 +117,26 @@ class MENDRTrainer(BaseModelTrainer):
 		c, shape = self.contextualizer(z, mask_t=mask)
 		c = self.r2e(c, shape)
 
-		print(c.shape)
 		# Select negative candidates and generate labels for which are correct labels
 		negatives, negative_inds = self._generate_negatives(z)
 
+		'''
+		Convert z and negatives into SPD matrices 
+		'''
+		self.contextualizer.freeze_features(unfreeze=False)
+		self.r2e.freeze_features(unfreeze=False)
+		spd_z, shape = self.contextualizer(z)
+		spd_z = self.r2e(spd_z, shape)
+
+
+		spd_negatives, shape = self.contextualizer(negatives[:, :, 0, :].permute([0, 2, 1]))
+		spd_negatives = self.r2e(spd_negatives, shape)
+
+		self.contextualizer.freeze_features(unfreeze=True)
+		self.r2e.freeze_features(unfreeze=True)
+
 		# Prediction -> batch_size x predict_length x predict_length
-		logits = self._calculate_similarity(z=unmasked_z, c=c, negatives=negatives)
+		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
 		return logits, z, mask
 	
 	def calculate_loss(self, inputs, outputs):
@@ -158,9 +178,10 @@ if __name__ == "__main__":
 	from MENDRContextualizer import mATTContextualizer
 	from R2E import R2E
 	from types import SimpleNamespace
+	from contextualizer import Contextualizer
 
 	encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2),
-                          dropout=0., projection_head=False, enc_downsample=(3, 2, 2))
+                          dropout=0., enc_downsample=(3, 2, 2))
 
 
 	contextualizer_config = SimpleNamespace(
@@ -168,7 +189,7 @@ if __name__ == "__main__":
 		dropout=0.1,
 		start_token=-5,
 		position_encoder=25,
-		epochs=10
+		epochs=4
 	)
 
 	contextualizer = mATTContextualizer(contextualizer_config)

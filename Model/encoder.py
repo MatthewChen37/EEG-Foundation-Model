@@ -9,8 +9,7 @@ from math import ceil
 Based on https://github.com/SPOClab-ca/BENDR/blob/main/dn3_ext.py
 '''
 class ConvEncoder(nn.Module):
-    def __init__(self, in_features, encoder_h=256, enc_width=(3, 2, 2, 2, 2, 2),
-                 dropout=0., enc_downsample=(3, 2, 2, 2, 2, 2)):
+    def __init__(self, in_features, encoder_h, enc_width, dropout, enc_downsample):
         super().__init__()
         self.in_features = in_features
         self.encoder_h = encoder_h
