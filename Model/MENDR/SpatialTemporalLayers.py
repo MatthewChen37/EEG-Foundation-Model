@@ -101,11 +101,14 @@ class TimesBlock(nn.Module):
 Simple GNN Layer for Geometric Learning
 '''
 class GNNLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, heads=4, dropout=0.5):
+    def __init__(self, configs):
         super(GNNLayer, self).__init__()
-        self.conv = GATConv(in_channels, out_channels, heads=heads, dropout=dropout)
+        self.conv = GATConv(configs.seq_len, configs.seq_len, heads=configs.heads, dropout=configs.dropout)
+        self.projection = nn.Linear(configs.seq_len * configs.heads, configs.seq_len)
 
-    def forward(self, x, edge_index):
-        res = self.conv(x, edge_index)
+    def forward(self, x, edge_index, edge_attr):
+        res = self.conv(x, edge_index, edge_attr)
+        res = self.projection(res)
+        res = F.gelu(res)
         res = res + x
         return res
