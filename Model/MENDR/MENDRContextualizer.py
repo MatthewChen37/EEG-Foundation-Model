@@ -66,19 +66,14 @@ class mATTContextualizer(nn.Module):
 		if self.position_encoder:
 			x = x + self.relative_position(x)
 		x = self.input_conditioning(x)
-		print(x.shape)
 
 		if self.start_token is not None:
 			in_token = self.start_token * torch.ones((1, 1, 1), requires_grad=True).to(x.device).expand([-1, *x.shape[1:]])
 			x = torch.cat([in_token, x], dim=0)
 		x = x.permute([1, 2, 0])
-		print(x.shape)
 		x = self.ract1(x)
-		print(x.shape)
 		x, shape = self.att(x)
-		print(x.shape)
 		x = self.ract2(x)
-		print(x.shape, "Shape:", shape)
 		return x, shape
 	
 	def _initializePositionEncoder(self, config):

@@ -77,12 +77,8 @@ class MENDRTrainer(BaseModelTrainer):
 		return z_k, negative_inds
 
 	def _calculate_similarity(self, z, c, negatives):
-		print(z.shape, c.shape, negatives.shape)
-
 		c = c.permute([0, 2, 1]).unsqueeze(-2)
 		z = z.permute([0, 2, 1]).unsqueeze(-2)
-
-		print(z.shape, c.shape, negatives.shape)
 
 		# In case the contextualizer matches exactly, need to avoid divide by zero errors
 		negative_in_target = (c == negatives).all(-1)
@@ -125,7 +121,7 @@ class MENDRTrainer(BaseModelTrainer):
 		'''
 		self.contextualizer.freeze_features(unfreeze=False)
 		self.r2e.freeze_features(unfreeze=False)
-		spd_z, shape = self.contextualizer(z)
+		spd_z, shape = self.contextualizer(unmasked_z)
 		spd_z = self.r2e(spd_z, shape)
 
 
