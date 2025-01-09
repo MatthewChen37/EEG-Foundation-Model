@@ -64,19 +64,16 @@ class AttentionManifold(nn.Module):
         self.v_trans = SPDTransform(self.d_in, self.d_out).cpu()
 
     def tensor_log(self, t):#4dim
-        t = torch.ones(t.shape) # TODO: Remove this line
         u, s, v = torch.svd(t)
         return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
         
     def tensor_exp(self, t):#4dim
         # condition: t is symmetric!
-        t = torch.ones(t.shape) # TODO: Remove this line
         s, u = torch.linalg.eigh(t)
         return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
     def log_euclidean_distance(self, A, B):
         inner_term = self.tensor_log(A) - self.tensor_log(B)
         inner_multi = inner_term @ inner_term.permute(0, 1, 3, 2)
-        inner_multi = torch.ones(inner_multi.shape) # TODO: Remove this line
         _, s, _= torch.svd(inner_multi)
         final = torch.sum(s, dim=-1)
         return final
