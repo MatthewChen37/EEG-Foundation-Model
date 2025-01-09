@@ -74,7 +74,7 @@ class BENDRTrainer(BaseModelTrainer):
 
         logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
         if negative_in_target.any():
-            print("Negative in target:", logits[1:].shape, negative_in_target.shape)
+            # Note that this is wrong should be [..., 1:] but I don't think it matters
             logits[1:][negative_in_target] = float("-inf")
 
         return logits.view(-1, logits.shape[-1])
