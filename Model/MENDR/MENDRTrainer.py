@@ -77,6 +77,7 @@ class MENDRTrainer(BaseModelTrainer):
 		return z_k, negative_inds
 
 	def _calculate_similarity(self, z, c, negatives):
+		print(c.shape, z.shape, negatives.shape)
 		c = c.permute([0, 2, 1]).unsqueeze(-2)
 		z = z.permute([0, 2, 1]).unsqueeze(-2)
 
@@ -86,9 +87,9 @@ class MENDRTrainer(BaseModelTrainer):
 
 		logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
 
-		print(negative_in_target.shape, logits.shape)
+		print(c.shape, z.shape, negatives.shape, negative_in_target.shape, logits.shape)
 		if negative_in_target.any():
-			logits[..., :-1][negative_in_target] = float("-inf")
+			logits[1:][negative_in_target] = float("-inf")
 
 		return logits.view(-1, logits.shape[-1])
 
@@ -121,9 +122,9 @@ class MENDRTrainer(BaseModelTrainer):
 		'''
 		self.contextualizer.freeze_features(unfreeze=False)
 		self.r2e.freeze_features(unfreeze=False)
+
 		spd_z, shape = self.contextualizer(unmasked_z)
 		spd_z = self.r2e(spd_z, shape)
-
 
 		spd_negatives, shape = self.contextualizer(negatives[:, :, 0, :].permute([0, 2, 1]))
 		spd_negatives = self.r2e(spd_negatives, shape)

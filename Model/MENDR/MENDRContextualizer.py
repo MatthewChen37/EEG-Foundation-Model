@@ -18,7 +18,6 @@ class mATTContextualizer(nn.Module):
 				- in_features: number of input features
 				- dropout: dropout rate
 				- epochs: number of epochs
-				- start_token: start token (Typically -5 as in BENDR)
 				- position_encoder: position encoder (Typically 25 as in BENDR)
 		'''
 		super(mATTContextualizer, self).__init__()
@@ -26,7 +25,6 @@ class mATTContextualizer(nn.Module):
 		self.in_features = config.in_features
 		self._transformer_dim = config.in_features * 3
 		self.dropout = config.dropout
-		self.start_token = config.start_token
 		self.position_encoder = config.position_encoder > 0
 		if self.position_encoder:
 			self.relative_position = self._initializePositionEncoder(config)
@@ -48,6 +46,7 @@ class mATTContextualizer(nn.Module):
 		self.att = AttentionManifold(768, 12)
 		self.ract2 = SPDRectified() 
 
+
 	def forward(self, x, mask_t=None, mask_c=None):
 		'''
 		Args:
@@ -67,9 +66,6 @@ class mATTContextualizer(nn.Module):
 			x = x + self.relative_position(x)
 		x = self.input_conditioning(x)
 
-		if self.start_token is not None:
-			in_token = self.start_token * torch.ones((1, 1, 1), requires_grad=True).to(x.device).expand([-1, *x.shape[1:]])
-			x = torch.cat([in_token, x], dim=0)
 		x = x.permute([1, 2, 0])
 		x = self.ract1(x)
 		x, shape = self.att(x)
