@@ -12,9 +12,10 @@ class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, encoder, contextualizer, r2e, config, **kwargs):
+	def __init__(self, stembedder, encoder, contextualizer, r2e, config, **kwargs):
 		'''
 		Args:
+			stembedder: a nn.Module
 			encoder: a nn.Module
 			contextualizer: a nn.Module
 			r2e: a nn.Module
@@ -34,6 +35,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.predict_length = config.mask_span
 		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
+			stembedder = nn.DataParallel(stembedder)
 			encoder = nn.DataParallel(encoder)
 			contextualizer = nn.DataParallel(contextualizer)
 			r2e = nn.DataParallel(r2e)
@@ -43,7 +45,7 @@ class MENDRTrainer(BaseModelTrainer):
                                            tuple(config.encoder_grad_frac * ig 
 												 if ig is not None else None for ig in in_grad))
 			
-		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e,
+		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), **kwargs)
 		
@@ -96,7 +98,8 @@ class MENDRTrainer(BaseModelTrainer):
 
 			
 	def forward(self, *inputs):
-		z = self.encoder(inputs[0])
+		z = self.embedder(inputs[0])
+		z = self.encoder(z)
 
 		unmasked_z = z.clone()
 
