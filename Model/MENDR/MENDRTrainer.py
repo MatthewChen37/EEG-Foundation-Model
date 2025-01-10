@@ -35,12 +35,13 @@ class MENDRTrainer(BaseModelTrainer):
 		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
 			encoder = nn.DataParallel(encoder)
-			contextextualizer = nn.DataParallel(contextualizer)
+			contextualizer = nn.DataParallel(contextualizer)
 			r2e = nn.DataParallel(r2e)
 		if config.encoder_grad_frac < 1:
             # TODO: I hope this works...
 			encoder.register_full_backward_hook(lambda module, in_grad, out_grad:
-                                           tuple(config.encoder_grad_frac * ig if ig is not None else None for ig in in_grad))
+                                           tuple(config.encoder_grad_frac * ig 
+												 if ig is not None else None for ig in in_grad))
 			
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,

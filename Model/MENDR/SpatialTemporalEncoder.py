@@ -29,8 +29,10 @@ class SpatialTemporalEncoder(nn.Module):
 		# for why this is done
 		# x: [B, N, 2T]
 		x = self.predict_linear(x)
+		x = nn.functional.gelu(x) # Include some non-linearity
 		# x: [B, T, N] # N here is the number of channels
 		x = self.times_block(x.permute(0, 2, 1))
 		# x: [B, N, T]
 		x = self.project_back(x.permute(0, 2, 1))
+		x = nn.functional.gelu(x)
 		return x
