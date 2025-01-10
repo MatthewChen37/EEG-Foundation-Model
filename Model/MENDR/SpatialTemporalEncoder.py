@@ -13,17 +13,24 @@ class SpatialTemporalEncoder(nn.Module):
 		self.k = configs.top_k
 		self.times_block = TimesBlock(configs)
 		self.gnn_layer = GNNLayer(configs)
-
+		self.predict_linear = nn.Linear(configs.seq_len, configs.seq_len + configs.pred_len)
+		self.project_back = nn.Linear(configs.seq_len + configs.pred_len, configs.seq_len)
 	def forward(self, data):
 		# x: PyG DataBatch Object 
 		x = torch.tensor(np.vstack(data.x)).float()
 		edge_index = data.edge_index
 		edge_dist = torch.flatten(torch.tensor(np.stack(data.edge_attr)), start_dim=0, end_dim=1).float()
 		x = self.gnn_layer(x, edge_index, edge_dist)
-		# Convert to x: [B, T, N]
+		# Convert to x: [B, N, T]
 		x = unbatch(x, data.batch)
+		# Permute to x: [B, T, N]
 		x = torch.stack(x).float()
-		print(x.shape)
-		#x = self.times_block(x)
-		# x: [B, T, N]
+		# See https://github.com/thuml/Time-Series-Library/blob/cdf8f0c3c5e79c1e8152e71dc35009ae46a6a920/models/TimesNet.py#L113
+		# for why this is done
+		# x: [B, N, 2T]
+		x = self.predict_linear(x)
+		# x: [B, T, N] # N here is the number of channels
+		x = self.times_block(x.permute(0, 2, 1))
+		# x: [B, N, T]
+		x = self.project_back(x.permute(0, 2, 1))
 		return x
