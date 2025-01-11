@@ -37,7 +37,8 @@ class Inception_Block_V1(nn.Module):
 
 def FFT_for_Period(x, k=2):
     # [B, T, C]
-    xf = torch.fft.rfft(x, dim=1)
+    # Make more precise for FFT
+    xf = torch.fft.rfft(x.float(), dim=1)
     # find period by amplitudes
     frequency_list = abs(xf).mean(0).mean(-1)
     frequency_list[0] = 0

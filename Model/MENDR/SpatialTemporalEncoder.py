@@ -19,14 +19,14 @@ class SpatialTemporalEncoder(nn.Module):
 
 	def forward(self, data):
 		# x: PyG DataBatch Object 
-		x = torch.tensor(np.vstack(data.x)).float().to(self.device)
+		x = torch.tensor(np.vstack(data.x)).to(torch.float16).to(self.device)
 		edge_index = data.edge_index
-		edge_dist = data.edge_attr.float()
+		edge_dist = data.edge_attr
 		x = self.gnn_layer(x, edge_index, edge_dist)
 		# Convert to x: [B, N, T]
 		x = unbatch(x, data.batch)
 		# Permute to x: [B, T, N]
-		x = torch.stack(x).float()
+		x = torch.stack(x)
 		# See https://github.com/thuml/Time-Series-Library/blob/cdf8f0c3c5e79c1e8152e71dc35009ae46a6a920/models/TimesNet.py#L113
 		# for why this is done
 		# x: [B, N, 2T]

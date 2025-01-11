@@ -20,6 +20,7 @@ from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
+import torch.amp as amp
 
 from dataset import EEGDataset
 
@@ -47,20 +48,23 @@ def main(args):
 	torch.backends.cudnn.benchmark = False
 	torch.backends.cudnn.deterministic = True
 
-	### Model ###
-	stEncoder = SpatialTemporalEncoder(args)
-	encoder = ConvEncoder(in_features=args.d_model, encoder_h=args.encoder_h, 
-					   enc_width=args.enc_width, dropout=args.enc_dropout, enc_downsample=args.enc_downsample)
-	contextualizer = mATTContextualizer(args)
-	r2e = R2E(args)
+	with amp.autocast("cuda", enabled=True):
+		### Model ###
+		stEncoder = SpatialTemporalEncoder(args)
+		encoder = ConvEncoder(in_features=args.d_model, encoder_h=args.encoder_h, 
+						enc_width=args.enc_width, dropout=args.enc_dropout, enc_downsample=args.enc_downsample)
+		contextualizer = mATTContextualizer(args)
+		r2e = R2E(args)
 
-	print("Starting training.")
-	### Training ###
-	trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, args)
-	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
-	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
+		print("Starting training.")
+		### Training ###
+		trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, args)
+		print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 
-	trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
+		trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
+
+		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 
 	print("*" * 50)
 	print("Cleaning up resources...")
