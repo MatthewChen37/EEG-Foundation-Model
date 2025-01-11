@@ -53,16 +53,16 @@ def main(args):
 	### Training ###
 	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args)
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
-	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=0.05))
+	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
 
-
-	# trainer.fit(training_dataset=datasetList, epochs=5, batch_size=8)
+	# trainer.fit(training_dataset=datasetList, epochs=5, batch_size=args.batch_size)
 
 
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()
 
+	# Training Parameters
 	parser.add_argument(
 		'--input_dir', type=str, help='Path to training data', required=True
 	)
@@ -70,6 +70,12 @@ def parse_args():
 	parser.add_argument(
 		"--random_state", type=int, help="Random state for reproducibility", default=42
 	)
+	parser.add_argument(
+        "-b", "--batch_size", default=512, type=int, help="mini-batch size (default: 512)"
+    )
+
+	parser.add_argument("-e", "--epochs", default=100, type=int, help="number of total epochs (default: 100)",
+    )
 
 	# Spatial Temporal Embedding Encoder Configs
 	parser.add_argument(
@@ -106,85 +112,89 @@ def parse_args():
 
 	# Encoder Configs
 	parser.add_argument(
-		"encoder_h", type=int, help="Hidden Dimension of Encoder", required=True, default=256
+		"--encoder_h", type=int, help="Hidden Dimension of Encoder", required=True, default=256
 	)
 
 	parser.add_argument(
-		"enc_width", type=ast.literal_eval, help="Encoder Width", required=True, default=(3, 2, 2)
+		"--enc_width", type=ast.literal_eval, help="Encoder Width", required=True, default=(3, 2, 2)
 	)
 
 	parser.add_argument(
-		"enc_downsample", type=ast.literal_eval, help="Encoder Downsample", required=True, default=(3, 2, 2)
+		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", required=True, default=(3, 2, 2)
 	)
 
 	parser.add_argument(
-		"enc_dropout", type=float, help="Dropout Rate for Encoder", required=True, default=0.1
+		"--enc_dropout", type=float, help="Dropout Rate for Encoder", required=True, default=0.1
 	)
 
 	# MENDR Contextualizer Configs
 	parser.add_argument(
-		"in_features", type=int, help="Input Features for Contextualizer", required=True, default=256
+		"--in_features", type=int, help="Input Features for Contextualizer", required=True, default=256
 	)
 
 	parser.add_argument(
-		"dropout", type=float, help="Dropout Rate for Contextualizer", required=True, default=0.1
+		"--dropout", type=float, help="Dropout Rate for Contextualizer", required=True, default=0.1
 	)
 
 	parser.add_argument(
-		"position_encoder", type=int, help="Position Encoder", required=True, default=25
+		"--position_encoder", type=int, help="Position Encoder", required=True, default=25
 	)
 
 	parser.add_argument(
-		"epochs", type=int, help="Number of Epochs for mATT", required=True, default=4
+		"--epochs", type=int, help="Number of Epochs for mATT", required=True, default=4
 	)
 
 	# Trainer Configs
 	parser.add_argument(
-		"mask_span", type=int, help="Mask Span", required=True, default=6
+		"--mask_span", type=int, help="Mask Span", required=True, default=6
 	)
 
 	parser.add_argument(
-		"multi_gpu", type=bool, help="Multi GPU Training", required=True, default=False
+		"--multi_gpu", type=bool, help="Multi GPU Training", required=True, default=False
 	)
 
 	parser.add_argument(
-		"encoder_grad_frac", type=float, help="Encoder Gradient Fraction", required=True, default=1
+		"--encoder_grad_frac", type=float, help="Encoder Gradient Fraction", required=True, default=1
 	)
 
 	parser.add_argument(
-		"learning_rate", type=float, help="Learning Rate", required=True, default=1e-3
+		"--learning_rate", type=float, help="Learning Rate", required=True, default=1e-3
 	)
 
 	parser.add_argument(
-		"l2_weight_decay", type=float, help="L2 Weight Decay", required=True, default=1e-5
+		"--l2_weight_decay", type=float, help="L2 Weight Decay", required=True, default=1e-5
 	)
 
 	parser.add_argument(
-		"mask_rate", type=float, help="Mask Rate", required=True, default=0.1
+		"--mask_rate", type=float, help="Mask Rate", required=True, default=0.1
 	)
 
 	parser.add_argument(
-		"temp", type=float, help="Temperature", required=True, default=0.1
+		"--temp", type=float, help="Temperature", required=True, default=0.1
 	)
 
 	parser.add_argument(
-		"permuted_encodings", type=bool, help="Permuted Encodings", required=True, default=False
+		"--permuted_encodings", type=bool, help="Permuted Encodings", required=True, default=False
 	)
 
 	parser.add_argument(
-		"permuted_contexts", type=bool, help="Permuted Contexts", required=True, default=False
+		"--permuted_contexts", type=bool, help="Permuted Contexts", required=True, default=False
 	)
 
 	parser.add_argument(
-		"enc_feat_l2", type=float, help="Encoder Feature L2", required=True, default=1e-5
+		"--enc_feat_l2", type=float, help="Encoder Feature L2", required=True, default=1e-5
 	)
 
 	parser.add_argument(
-		"unmasked_negative_frac", type=float, help="Unmasked Negative Fraction", required=True, default=0.1
+		"--unmasked_negative_frac", type=float, help="Unmasked Negative Fraction", required=True, default=0.1
 	)
 
 	parser.add_argument(
-		"num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", required=True, default=10
+		"--num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", required=True, default=10
+	)
+
+	parser.add_argument(
+		"--max_crop_frac", type=float, help="Maximum Crop Fraction on Random Temporal Crop", required=True, default=0.05
 	)
 
 	# parse args
