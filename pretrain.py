@@ -9,7 +9,7 @@ import random
 import numpy as np
 import pandas as pd
 
-#import mlflow
+import mlflow
 
 import torch
 import torch.nn as nn
