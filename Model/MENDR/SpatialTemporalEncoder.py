@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from torch import nn
-from SpatialTemporalLayers import TimesBlock, GNNLayer
+from .SpatialTemporalLayers import TimesBlock, GNNLayer
 from torch_geometric.utils import unbatch
 
 class SpatialTemporalEncoder(nn.Module):

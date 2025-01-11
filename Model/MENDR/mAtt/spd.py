@@ -4,8 +4,8 @@ from torch.optim.optimizer import Optimizer
 from torch.autograd import Function
 import numpy as np
 
-from mAtt.utils import *
-from mAtt import StiefelParameter
+from .utils import *
+from . import StiefelParameter
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/spd.py

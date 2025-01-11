@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from mAtt.mAtt import AttentionManifold, SPDRectified, SPDTangentSpace
+from .mAtt.mAtt import AttentionManifold, SPDRectified, SPDTangentSpace
 
 '''
 Convert Riemannian Embeddings to Euclidean Embeddings (R2E)

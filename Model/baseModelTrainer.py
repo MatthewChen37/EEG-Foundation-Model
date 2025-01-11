@@ -4,7 +4,7 @@ import re
 #from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader
 from sys import gettrace
-from transforms import BatchTransform
+from .transforms import BatchTransform
 
 '''
 Based on:

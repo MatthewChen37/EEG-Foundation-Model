@@ -5,8 +5,8 @@ import numpy as np
 # TODO: Bad Practice fix later
 import sys
 sys.path.append("../")
-from baseModelTrainer import BaseModelTrainer
-from contextualizer import _make_mask, _make_span_from_seeds
+from ..baseModelTrainer import BaseModelTrainer
+from ..contextualizer import _make_mask, _make_span_from_seeds
 
 class MENDRTrainer(BaseModelTrainer):
 	'''

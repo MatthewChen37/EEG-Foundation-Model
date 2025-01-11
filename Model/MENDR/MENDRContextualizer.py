@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from mAtt.mAtt import E2R, AttentionManifold, SPDRectified
+from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 # TODO: Remove this import
 import sys
 sys.path.append("../")
-from layers import Permute, Flatten
+from ..layers import Permute, Flatten
 
 '''
 BENDR-style Contextualizer using mATT module 
