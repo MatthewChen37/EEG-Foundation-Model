@@ -31,6 +31,8 @@ def main(args):
 
 	# Load Dataset
 	dataset = EEGDataset(root=args.input_dir, frac=args.frac)
+	print("*" * 50)
+	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.frac)
 
 	### Seed ###
 	torch.cuda.empty_cache()
@@ -45,9 +47,8 @@ def main(args):
 	torch.backends.cudnn.benchmark = False
 	torch.backends.cudnn.deterministic = True
 
-	'''
 	### Model ###
-	SpatialTemporalEncoder = SpatialTemporalEncoder(args)
+	stEncoder = SpatialTemporalEncoder(args)
 	encoder = ConvEncoder(in_features=args.d_model, encoder_h=args.encoder_h, 
 					   enc_width=args.enc_width, dropout=args.enc_dropout, enc_downsample=args.enc_downsample)
 	contextualizer = mATTContextualizer(args)
@@ -55,13 +56,13 @@ def main(args):
 
 	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args)
+	trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, args)
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
 	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
 
-	# trainer.fit(training_dataset=datasetList, epochs=args.training_epochs, batch_size=args.batch_size)
-	'''
+	trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 
+	print("*" * 50)
 	print("Cleaning up resources...")
 	# Clear the PyTorch cache (for GPU)
 	torch.cuda.empty_cache()

@@ -15,11 +15,13 @@ class SpatialTemporalEncoder(nn.Module):
 		self.gnn_layer = GNNLayer(configs)
 		self.predict_linear = nn.Linear(configs.seq_len, configs.seq_len + configs.pred_len)
 		self.project_back = nn.Linear(configs.seq_len + configs.pred_len, configs.seq_len)
+		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 	def forward(self, data):
 		# x: PyG DataBatch Object 
-		x = torch.tensor(np.vstack(data.x)).float()
+		x = torch.tensor(np.vstack(data.x)).float().to(self.device)
 		edge_index = data.edge_index
-		edge_dist = torch.flatten(torch.tensor(np.stack(data.edge_attr)), start_dim=0, end_dim=1).float()
+		edge_dist = data.edge_attr.float()
 		x = self.gnn_layer(x, edge_index, edge_dist)
 		# Convert to x: [B, N, T]
 		x = unbatch(x, data.batch)

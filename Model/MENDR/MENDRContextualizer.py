@@ -39,6 +39,8 @@ class mATTContextualizer(nn.Module):
 		# Initialize replacement vector with 0's
 		self.mask_replacement = torch.nn.Parameter(torch.normal(0, self.in_features**(-0.5), size=(self.in_features,)),
                                                    requires_grad=True)
+		
+		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 		#E2R
 		self.ract1 = E2R(config.epochs)
@@ -68,6 +70,7 @@ class mATTContextualizer(nn.Module):
 
 		x = x.permute([1, 2, 0])
 		x = self.ract1(x)
+		x = x.to(self.device) # SPD brings it back to CPU
 		x, shape = self.att(x)
 		x = self.ract2(x)
 		return x, shape

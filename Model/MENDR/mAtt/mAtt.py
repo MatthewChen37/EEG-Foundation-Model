@@ -59,6 +59,7 @@ class AttentionManifold(nn.Module):
         
         self.d_in = in_embed_size
         self.d_out = out_embed_size
+        # TODO: Why are these on the CPU?
         self.q_trans = SPDTransform(self.d_in, self.d_out).cpu()
         self.k_trans = SPDTransform(self.d_in, self.d_out).cpu()
         self.v_trans = SPDTransform(self.d_in, self.d_out).cpu()

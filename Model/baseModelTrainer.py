@@ -374,8 +374,8 @@ class BaseModelTrainer(object):
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} samples".format(len(training_dataloader)))
 
-        mlflow.start_run()
-        mlflow.autolog()
+        #mlflow.start_run()
+        #mlflow.autolog()
 
         for epoch in range(epochs):
             self.epoch = epoch
@@ -393,4 +393,4 @@ class BaseModelTrainer(object):
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
-        mlflow.end_run()
+        #mlflow.end_run()
