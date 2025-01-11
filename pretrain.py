@@ -27,6 +27,12 @@ from Model.transforms import RandomTemporalCrop
 from dataset import EEGDataset
 
 def main(args):
+	# Start Run
+	mlflow.start_run()
+	mlflow.autolog()
+	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
+	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
+
 	# Load Dataset
 	#dataset = EEGDataset(root=args.input_dir)
 
@@ -50,13 +56,30 @@ def main(args):
 	contextualizer = mATTContextualizer(args)
 	r2e = R2E(args)
 
+	### Use best Device (CUDA vs CPU) ###
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	## Print Device Properties ##
+	if device == torch.device('cuda'):
+		print(f"Device Properties: {torch.cuda.get_device_properties( device )}")
+
 	### Training ###
-	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args)
+	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args, device=device)
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
 	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
 
 	# trainer.fit(training_dataset=datasetList, epochs=5, batch_size=args.batch_size)
 
+	mlflow.end_run()
+
+	print("Cleaning up resources...")
+	# Clear the PyTorch cache (for GPU)
+	torch.cuda.empty_cache()
+	# Force garbage collection (for CPU and GPU tensors)
+	gc.collect()
+	# If using multiple GPUs, synchronize them (optional but recommended)
+	if torch.cuda.is_available():
+		torch.cuda.synchronize()
+	print("Cleanup complete.")
 
 def parse_args():
 	# setup arg parser
