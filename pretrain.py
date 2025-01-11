@@ -9,13 +9,10 @@ import random
 import numpy as np
 import pandas as pd
 
-import mlflow
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
-
 
 from Model.MENDR.SpatialTemporalEncoder import SpatialTemporalEncoder
 from Model.MENDR.MENDRContextualizer import mATTContextualizer
@@ -28,8 +25,7 @@ from dataset import EEGDataset
 
 def main(args):
 	# Start Run
-	mlflow.start_run()
-	mlflow.autolog()
+	print("Job Started. Parameters:")
 	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
 
@@ -56,20 +52,13 @@ def main(args):
 	contextualizer = mATTContextualizer(args)
 	r2e = R2E(args)
 
-	### Use best Device (CUDA vs CPU) ###
-	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-	## Print Device Properties ##
-	if device == torch.device('cuda'):
-		print(f"Device Properties: {torch.cuda.get_device_properties( device )}")
-
+	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args, device=device)
+	trainer = MENDRTrainer(SpatialTemporalEncoder, encoder, contextualizer, r2e, args)
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
 	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
 
 	# trainer.fit(training_dataset=datasetList, epochs=5, batch_size=args.batch_size)
-
-	mlflow.end_run()
 
 	print("Cleaning up resources...")
 	# Clear the PyTorch cache (for GPU)

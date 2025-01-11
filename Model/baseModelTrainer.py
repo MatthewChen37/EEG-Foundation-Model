@@ -1,6 +1,7 @@
 import torch
 import tqdm
 import re
+import mlflow
 #from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader
 from sys import gettrace
@@ -38,7 +39,12 @@ class BaseModelTrainer(object):
             else:
                 tqdm.tqdm.write("No GPU detected: training and model execution will be performed on CPU.")
         if isinstance(cuda, bool):
-            cuda = "cuda" if cuda else "cpu"
+            if cuda:
+                cuda = "cuda"
+                print(f"Device Properties: {torch.cuda.get_device_properties(cuda)}")
+            else:
+                cuda = "cpu"
+
         self.cuda = cuda
         self.device = torch.device(cuda)
         
@@ -367,6 +373,10 @@ class BaseModelTrainer(object):
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} samples".format(len(training_dataloader)))
+
+        mlflow.start_run()
+        mlflow.autolog()
+
         for epoch in range(epochs):
             self.epoch = epoch
             pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=200)
@@ -376,10 +386,11 @@ class BaseModelTrainer(object):
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 pbar.set_postfix(train_metrics)
-
+                mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
+        mlflow.end_run()
