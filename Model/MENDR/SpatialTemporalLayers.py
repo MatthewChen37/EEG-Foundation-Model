@@ -101,7 +101,7 @@ Simple GNN Layer for Geometric Learning
 class GNNLayer(nn.Module):
     def __init__(self, configs):
         super(GNNLayer, self).__init__()
-        self.conv = GATConv(configs.seq_len, configs.seq_len, heads=configs.heads, dropout=configs.dropout)
+        self.conv = GATConv(configs.seq_len, configs.seq_len, heads=configs.heads, dropout=configs.ste_dropout)
         self.projection = nn.Linear(configs.seq_len * configs.heads, configs.seq_len)
 
     def forward(self, x, edge_index, edge_attr):
