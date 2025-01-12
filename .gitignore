@@ -7,3 +7,4 @@ nedc_pyprint_edf/*
 *.pyc
 */__pycache__/*
 /data
+/mlruns
