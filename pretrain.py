@@ -165,7 +165,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--epochs", type=int, help="Number of Epochs for mATT", default=4
+		"--epochs", type=int, help="Number of Epochs for mATT", default=1
 	)
 
 	# Trainer Configs
