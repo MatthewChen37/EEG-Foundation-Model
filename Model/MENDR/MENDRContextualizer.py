@@ -45,9 +45,8 @@ class mATTContextualizer(nn.Module):
 		#E2R
 		self.ract1 = E2R(config.epochs)
 		#Riemannian Manifold Attention Module
-		self.att = AttentionManifold(768, 12)
+		self.att = AttentionManifold(self._transformer_dim, self.in_features)
 		self.ract2 = SPDRectified() 
-
 
 	def forward(self, x, mask_t=None, mask_c=None):
 		'''
@@ -67,7 +66,6 @@ class mATTContextualizer(nn.Module):
 		if self.position_encoder:
 			x = x + self.relative_position(x)
 		x = self.input_conditioning(x)
-
 		x = x.permute([1, 2, 0])
 		x = self.ract1(x)
 		x = x.to(self.device) # SPD brings it back to CPU

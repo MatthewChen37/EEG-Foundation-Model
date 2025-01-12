@@ -140,11 +140,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(3, 2, 2)
+		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(2)
 	)
 
 	parser.add_argument(
-		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(3, 2, 2)
+		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(2)
 	)
 
 	parser.add_argument(
