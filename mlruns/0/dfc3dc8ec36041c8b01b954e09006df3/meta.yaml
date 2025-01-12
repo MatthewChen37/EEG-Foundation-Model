@@ -1,0 +1,15 @@
+artifact_uri: file:///storage/ice1/1/9/mchen439/EEG-Foundation-Model/mlruns/0/dfc3dc8ec36041c8b01b954e09006df3/artifacts
+end_time: 1736723450430
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: dfc3dc8ec36041c8b01b954e09006df3
+run_name: capable-auk-759
+run_uuid: dfc3dc8ec36041c8b01b954e09006df3
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1736723187302
+status: 3
+tags: []
+user_id: mchen439

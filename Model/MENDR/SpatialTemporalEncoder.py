@@ -19,7 +19,7 @@ class SpatialTemporalEncoder(nn.Module):
 
 	def forward(self, data):
 		# x: PyG DataBatch Object 
-		x = torch.tensor(np.vstack(data.x)).to(torch.float16).to(self.device)
+		x = torch.tensor(np.vstack(data.x)).float().to(self.device)
 		edge_index = data.edge_index
 		edge_dist = data.edge_attr
 		x = self.gnn_layer(x, edge_index, edge_dist)
