@@ -20,7 +20,7 @@ from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
-import torch.amp as amp
+#import torch.amp as amp
 
 from dataset import EEGDataset
 
