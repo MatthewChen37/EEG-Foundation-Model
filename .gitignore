@@ -6,3 +6,4 @@ nedc_pyprint_edf/*
 /External
 *.pyc
 */__pycache__/*
+/data
