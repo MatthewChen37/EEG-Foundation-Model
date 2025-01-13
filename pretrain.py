@@ -174,6 +174,10 @@ def parse_args():
 	)
 
 	parser.add_argument(
+		"--mask_rate", type=float, help="Mask Rate", default=0.1
+	)
+
+	parser.add_argument(
 		"--multi_gpu", type=bool, help="Multi GPU Training", default=False
 	)
 
@@ -187,10 +191,6 @@ def parse_args():
 
 	parser.add_argument(
 		"--l2_weight_decay", type=float, help="L2 Weight Decay", default=1e-5
-	)
-
-	parser.add_argument(
-		"--mask_rate", type=float, help="Mask Rate", default=0.1
 	)
 
 	parser.add_argument(
