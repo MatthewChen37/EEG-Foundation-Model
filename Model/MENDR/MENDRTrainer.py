@@ -29,7 +29,6 @@ class MENDRTrainer(BaseModelTrainer):
 				- temp: a float
 				- permuted_contexts: a boolean
 				- enc_feat_l2: a float
-				- unmasked_negative_frac: a float
 				- num_negatives: an integer
 		'''
 		self._enc_downsample = encoder.downsampling_factor
@@ -54,7 +53,6 @@ class MENDRTrainer(BaseModelTrainer):
 		self.permuted_contexts = config.permuted_contexts
 		self.beta = config.enc_feat_l2
 		self.start_token = getattr(contextualizer, 'start_token', None)
-		self.unmasked_negative_frac = config.unmasked_negative_frac
 		self.num_negatives = config.num_negatives
 
 	def description(self, sequence_len):

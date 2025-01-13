@@ -210,10 +210,6 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--unmasked_negative_frac", type=float, help="Unmasked Negative Fraction", default=0.1
-	)
-
-	parser.add_argument(
 		"--num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", default=10
 	)
 
