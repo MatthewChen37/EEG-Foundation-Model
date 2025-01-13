@@ -32,7 +32,6 @@ class MENDRTrainer(BaseModelTrainer):
 				- unmasked_negative_frac: a float
 				- num_negatives: an integer
 		'''
-		self.predict_length = config.mask_span
 		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
 			stembedder = nn.DataParallel(stembedder)
