@@ -121,6 +121,7 @@ class _Hax(nn.Module):
 def _make_mask(shape, p, total, span, allow_no_inds=False):
     # Note that shape is (batch_size, seq_len) and total = seq_len.
     # We do not care about the features because all features are masked, we only care about the time points.
+    # TODO: This could probably be optimized
     mask = torch.zeros(shape, requires_grad=False, dtype=torch.bool)
 
     # Iterate through each item in the batch.
@@ -137,6 +138,7 @@ def _make_mask(shape, p, total, span, allow_no_inds=False):
     return mask
 
 def _make_span_from_seeds(seeds, span, total=None):
+    # TODO: This could probably be optimized
     inds = list()
     for seed in seeds:
         for i in range(seed, seed + span):

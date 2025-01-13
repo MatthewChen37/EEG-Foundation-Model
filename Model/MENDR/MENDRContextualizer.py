@@ -51,14 +51,16 @@ class mATTContextualizer(nn.Module):
 	def forward(self, x, mask_t=None, mask_c=None):
 		'''
 		Args:
-			x: a tensor of shape (batch_size, 1, channel, sample)
-			mask_t: a tensor of shape (batch_size, 1, sample)
-			mask_c: a tensor of shape (batch_size, 1, channel)
+			x: a tensor of shape (batch_size, channel, time_points)
+			mask_t: a tensor of shape (batch_size, time_points), represents a mask of time points
+			mask_c: a tensor of shape (batch_size, channel), represents a mask of channels
 		Returns:
-			x: a tensor of shape (batch_size, ???)
+			x: a tensor of shape (batch_size, features), note that features are generated 
+			from converting embeddings back from SPD manifold to Euclidean space.
 		'''
 		if mask_t is not None:
 			x = x.clone()
+			# Note that self.mask_replacement is a learnable parameter
 			x.transpose(2, 1)[mask_t] = self.mask_replacement
 		if mask_c is not None:
 			x = x.clone()
