@@ -24,5 +24,11 @@
 		- Training Parameters:
 			1. `mask_span`: The number of time points masked in a mask. If random start time point + mask_span >= total # of time points, the number of time points in the mask is truncated to a length of the total - start time point.
 			2. `mask_rate`: For each time point, there is a `mask_rate` probability that the time point is the start of the masked sequence. Note that mask overlaps are allowed.
+   			3. `multi_gpu`: Use multiple GPUs for training.
+      			4. `temp`: Temperature factor in self-supervised loss function (denoted as Kappa in BENDR paper).
+			5. `encoder_grad_frac`: Scale gradient by this fraction during the learning step. 
+			6. `num_negatives`: Number of distractors/negatives in contrastive task.
+   			7. `enc_feat_l2`:  Similar to wav2vec, see equation 2 in wav2vec paper alpha parameter, want to encourage diversity in features in “BENDR codebook” and prevent a single feature’s value from becoming too big.
+			8. `max_crop_frac`: Maximum fraction to crop data in RandomTemporalCrop transform.
 2. Downstream tasks
 	- TBD
