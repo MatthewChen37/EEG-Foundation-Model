@@ -1,5 +1,15 @@
 # Training Plan 
 
+Current state-of-the-art self supervised learning for learning deep signal representations, specifically [wav2vec 2.0](https://arxiv.org/abs/2006.11477) employ a self supervised loss:
+
+$$L = L_{m} + \alpha L_{d}$$
+
+where $L_{m}$ represents the loss from the contrastive task where some of the input features are masked and $L_{d}$ represents the codebook diversity loss. This loss is similarly employed in [BENDR](https://www.frontiersin.org/journals/human-neuroscience/articles/10.3389/fnhum.2021.653659/full#B5). We want to argue that adding a decoder that decodes the embedded features back to reconstruct the original signal, essentially demonstrating that signal information is preserved in the embedding, helps improve explainability and will improve loss. In other words:
+
+$$L_{MENDR} = L_{m} + \alpha L_{d} + \beta L_{recon}$$
+
+$L_{recon}$ represents the reconstruction loss of the reconstructed signal from the decoder. We will first try MSE; however, other techniques do exist for comparing the original vs reconstructed biosignal. $\beta$ represents a tuneable hyperparameter similar to $\alpha$ that is adjusted to determine how much we want to penalize reconstruction loss.
+
 1. Pretraining
 	- Pretraining Parameter Documentation: 
 		- Spatial-Temporal Embedder:
@@ -30,5 +40,7 @@
 			6. `num_negatives`: Number of distractors/negatives in contrastive task.
    			7. `enc_feat_l2`:  Similar to wav2vec, see equation 2 in wav2vec paper alpha parameter, want to encourage diversity in features in “BENDR codebook” and prevent a single feature’s value from becoming too big.
 			8. `max_crop_frac`: Maximum fraction to crop data in RandomTemporalCrop transform.
+
+	To find the optimal pretraining parameters, we will first try training on 10% of the HBN dataset. The HBN dataset has ~100,000 graphs/data points so we will train on around 10,000 data points. We perform this initial pre-pretraining as a hyperparameter search and it will hopefully inform us about which hyperparameters are optimal. We will perform a simple grid search of various parameters in order to determine which hyperparameters are best and evaluate how well the hyperparameters are based on the training loss over 3 epochs.
 2. Downstream tasks
 	- TBD

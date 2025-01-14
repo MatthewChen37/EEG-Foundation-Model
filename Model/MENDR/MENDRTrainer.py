@@ -198,15 +198,15 @@ if __name__ == "__main__":
 		mask_span=6,
 		multi_gpu=False,
 		encoder_grad_frac=1,
-		learning_rate=1e-3,
-		l2_weight_decay=1e-5,
 		mask_rate=0.1,
 		temp=0.1,
 		permuted_encodings=False,
 		permuted_contexts=False,
 		enc_feat_l2=1e-5,
-		unmasked_negative_frac=0.1,
-		num_negatives=10
+		num_negatives=10,
+		learning_rate=1e-3,
+		l2_weight_decay=1e-5,
+
 	)
 
 	trainer = MENDRTrainer(encoder, contextualizer, r2e, trainer_config)
