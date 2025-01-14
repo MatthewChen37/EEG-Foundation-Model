@@ -40,6 +40,9 @@ $L_{recon}$ represents the reconstruction loss of the reconstructed signal from 
 			6. `num_negatives`: Number of distractors/negatives in contrastive task.
    			7. `enc_feat_l2`:  Similar to wav2vec, see equation 2 in wav2vec paper alpha parameter, want to encourage diversity in features in “BENDR codebook” and prevent a single feature’s value from becoming too big.
 			8. `max_crop_frac`: Maximum fraction to crop data in RandomTemporalCrop transform.
+			9. `permuted_encodings`: Randomly permute encodings during training.
+			10. `permuted_contexts`: Randomly permute contexts during training.
+			
 
 	To find the optimal pretraining parameters, we will first try training on 10% of the HBN dataset. The HBN dataset has ~100,000 graphs/data points so we will train on around 10,000 data points. We perform this initial pre-pretraining as a hyperparameter search and it will hopefully inform us about which hyperparameters are optimal. We will perform a simple grid search of various parameters in order to determine which hyperparameters are best and evaluate how well the hyperparameters are based on the training loss over 3 epochs.
 2. Downstream tasks

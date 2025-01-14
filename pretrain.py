@@ -198,14 +198,6 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--permuted_encodings", type=bool, help="Permuted Encodings", default=False
-	)
-
-	parser.add_argument(
-		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
-	)
-
-	parser.add_argument(
 		"--enc_feat_l2", type=float, help="Encoder Feature L2", default=1e-5
 	)
 
@@ -215,6 +207,14 @@ def parse_args():
 
 	parser.add_argument(
 		"--max_crop_frac", type=float, help="Maximum Crop Fraction on Random Temporal Crop", default=0.05
+	)
+
+	parser.add_argument(
+		"--permuted_encodings", type=bool, help="Permuted Encodings", default=False
+	)
+
+	parser.add_argument(
+		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
 	)
 
 	# parse args
