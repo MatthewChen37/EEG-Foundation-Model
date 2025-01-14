@@ -91,8 +91,6 @@ class TimesBlock(nn.Module):
         period_weight = period_weight.unsqueeze(
             1).unsqueeze(1).repeat(1, T, N, 1)
         res = torch.sum(res * period_weight, -1)
-        # residual connection
-        res = res + x
         return res
     
 
