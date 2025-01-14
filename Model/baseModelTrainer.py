@@ -71,6 +71,9 @@ class BaseModelTrainer(object):
         self._batch_transforms = list()
         self._eval_transforms = list()
 
+        # TODO: Modify
+        self.best_metric = None
+
     def set_optimizer(self, optimizer):
         assert isinstance(optimizer, torch.optim.Optimizer)
         del self.optimizer
@@ -272,7 +275,7 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('batch_size', 1)
         dataset = self._make_dataloader(dataset, **loader_kwargs)
 
-        pbar = tqdm.trange(len(dataset), desc="Predicting")
+        pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=200)
         data_iterator = iter(dataset)
 
         inputs = list()
@@ -281,9 +284,9 @@ class BaseModelTrainer(object):
         with torch.no_grad():
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
-                output_batch = self.forward(*input_batch)
+                output_batch = self.forward(input_batch)
 
-                inputs.append([tensor.cpu() for tensor in input_batch])
+                inputs.append([torch.tensor(tensor).float().cpu() for tensor in input_batch.x])
                 if isinstance(output_batch, torch.Tensor):
                     outputs.append(output_batch.cpu())
                 else:
@@ -308,7 +311,7 @@ class BaseModelTrainer(object):
                 start_message += " {}: {:.3e} |".format(m, metrics[m])
             else:
                 start_message += " {}: {:.3f} |".format(m, metrics[m])
-        tqdm.write(start_message)
+        tqdm.tqdm.write(start_message)
 
     def save_best(self):
         """
@@ -385,7 +388,7 @@ class BaseModelTrainer(object):
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=iteration)
+                #mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 self.standard_logging(val_metrics, "End of Epoch")
