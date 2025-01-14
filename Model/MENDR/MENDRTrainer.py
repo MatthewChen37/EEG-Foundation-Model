@@ -7,12 +7,13 @@ import sys
 sys.path.append("../")
 from ..baseModelTrainer import BaseModelTrainer
 from ..contextualizer import _make_mask, _make_span_from_seeds
+from ..TrainingDecoder.trainingDecoder import ConvDecoder
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, stembedder, encoder, contextualizer, r2e, config, **kwargs):
+	def __init__(self, stembedder, encoder, contextualizer, r2e, decoder, config, **kwargs):
 		'''
 		Args:
 			stembedder: a nn.Module
@@ -43,7 +44,7 @@ class MENDRTrainer(BaseModelTrainer):
                                            tuple(config.encoder_grad_frac * ig 
 												 if ig is not None else None for ig in in_grad))
 			
-		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e,
+		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), **kwargs)
 		
@@ -51,7 +52,8 @@ class MENDRTrainer(BaseModelTrainer):
 		self.mask_span = config.mask_span
 		self.temp = config.temp
 		self.permuted_contexts = config.permuted_contexts
-		self.beta = config.enc_feat_l2
+		self.alpha = config.enc_feat_l2
+		self.beta = 0.5
 		self.start_token = getattr(contextualizer, 'start_token', None)
 		self.num_negatives = config.num_negatives
 
@@ -98,6 +100,8 @@ class MENDRTrainer(BaseModelTrainer):
 		z = self.embedder(inputs[0])
 		z = self.encoder(z)
 
+		decoded_signal = self.decoder(z)
+
 		unmasked_z = z.clone()
 
 		batch_size, feat, samples = z.shape
@@ -135,13 +139,17 @@ class MENDRTrainer(BaseModelTrainer):
 
 		# Prediction -> batch_size x predict_length x predict_length
 		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
-		return logits, z, mask
+		return logits, z, mask, decoded_signal
 	
 	def calculate_loss(self, inputs, outputs):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
         # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
-		return self.loss_fn(logits, labels) + self.beta * outputs[1].pow(2).mean()
+		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + self.beta * self._reconstruction_loss(inputs, outputs[3])
+	
+	def _reconstruction_loss(self, original, reconstruction):
+		# Mean Squared Error
+		return F.mse_loss(original, reconstruction)
     
 	def _contrastive_accuracy(self, inputs, outputs):
 		logits = outputs[0]
@@ -211,10 +219,13 @@ if __name__ == "__main__":
 
 	)
 
-	trainer = MENDRTrainer(encoder, contextualizer, r2e, trainer_config)
+	decoder = ConvDecoder(encoder_h=256, out_features=19, dec_width=(2, 2, 3),
+						  dropout=0., dec_upsample=(2, 2, 3), original_time_len=100,
+						  top_k=3, num_kernels=3)
+
+	trainer = MENDRTrainer(encoder, contextualizer, r2e, decoder, trainer_config)
 	print(trainer.description(27000))
 
 	input = torch.ones(3, 19, 1000)
 	output = trainer.forward(input)
 	print("Input shape:", input.shape, "Output shape:", output[0].shape)
-
