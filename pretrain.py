@@ -30,11 +30,6 @@ def main(args):
 	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
 
-	# Load Dataset
-	dataset = EEGDataset(root=args.input_dir, frac=args.frac)
-	print("*" * 50)
-	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.frac)
-
 	### Seed ###
 	torch.cuda.empty_cache()
 	random.seed(args.random_state)
@@ -48,7 +43,15 @@ def main(args):
 	torch.backends.cudnn.benchmark = False
 	torch.backends.cudnn.deterministic = True
 
+	if args.train_frac + args.val_frac > 1:
+		raise ValueError("Train and Val Fraction should not exceed 1.")
 
+	# Load Dataset
+	dataset = EEGDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
+	print("*" * 50)
+	print("Dataset Loaded. Length of Dataset: ", len(dataset), 
+	   " given frac: ", args.train_frac + args.val_frac)
+	
 	### Model ###
 	stEncoder = SpatialTemporalEncoder(args)
 	encoder = ConvEncoder(in_features=args.d_model, encoder_h=args.encoder_h, 
@@ -64,7 +67,20 @@ def main(args):
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
 	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
 
-	trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+	# Split Dataset
+	if args.val_frac > 0: # Pre-Pretraining Phase
+		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
+		num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
+		num_val = len(dataset) - num_train
+		train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
+		print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
+
+		trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+	else:
+		print("No Validation Set. Training on Whole Dataset.")
+		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+
+
 
 	print("*" * 50)
 	print("Cleaning up resources...")
@@ -98,7 +114,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--frac", type=float, help="Fraction of dataset to use", default=1.0
+		"--train_frac", type=float, help="Fraction of dataset to use for training", default=1.0
+	)
+
+	parser.add_argument(
+		"--val_frac", type=float, help="Fraction of dataset to use for validation", default=0.0
 	)
 
 	# Spatial Temporal Embedding Encoder Configs

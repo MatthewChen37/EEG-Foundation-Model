@@ -42,8 +42,10 @@ $L_{recon}$ represents the reconstruction loss of the reconstructed signal from 
 			8. `max_crop_frac`: Maximum fraction to crop data in RandomTemporalCrop transform.
 			9. `permuted_encodings`: Randomly permute encodings during training.
 			10. `permuted_contexts`: Randomly permute contexts during training.
-			
+			11. `train_frac`: Percentage of dataset to use for training (<1).
+			12. `val_frac`: Percentage of dataset to use for validation (<1>). Note that `train_frac` + `val_frac` <= 1. 
 
-	To find the optimal pretraining parameters, we will first try training on 10% of the HBN dataset. The HBN dataset has ~100,000 graphs/data points so we will train on around 10,000 data points. We perform this initial pre-pretraining as a hyperparameter search and it will hopefully inform us about which hyperparameters are optimal. We will perform a simple grid search of various parameters in order to determine which hyperparameters are best and evaluate how well the hyperparameters are based on the training loss over 3 epochs.
+
+	To find the optimal pretraining parameters, we will first try training on 10% of the HBN dataset. The HBN dataset has ~100,000 graphs/data points so we will train on around 10,000 data points. We perform this initial pre-pretraining as a hyperparameter search and it will hopefully inform us about which hyperparameters are optimal. We will perform a simple grid search of various parameters in order to determine which hyperparameters are best and evaluate how well the hyperparameters are based on the training loss over 3 epochs as well as a validation of unseen data that represents 1% of the HBN dataset (approx 1000) validation graphs/datapoints. 
 2. Downstream tasks
 	- TBD
