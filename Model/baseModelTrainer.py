@@ -248,6 +248,12 @@ class BaseModelTrainer(object):
         """
         self.train(False)
         inputs, outputs = self.predict(dataset, **loader_kwargs)
+
+        '''
+        NOTE: Currently inputs will be the original signals of each electrode extracted from the graph object
+        and the output is the output of the encoder in SPD form. The logits of the outputs are only for the 
+        mATT attention module. We will need to improve on this implementation. 
+        '''
         metrics = self.calculate_metrics(inputs, outputs)
         metrics['loss'] = self.calculate_loss(inputs, outputs).item()
         return metrics

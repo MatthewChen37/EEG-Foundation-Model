@@ -153,9 +153,11 @@ class MENDRTrainer(BaseModelTrainer):
 		Cosine Similarity from Calculating Similarity
 		"""
 		# "Logits" from _calculate_similarity
-		similarity = outputs[0].mean().item()
+		logits = outputs[0]
+		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
 		return {
-			'Similarity': similarity
+			'Contrastive Accuracy': self._simple_accuracy([labels], logits),
+			'MASK_pct': self._mask_pct(inputs, outputs),
 		}
 
 	@staticmethod
