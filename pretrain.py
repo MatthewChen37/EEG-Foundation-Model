@@ -20,6 +20,7 @@ from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
+from Model.TrainingDecoder.trainingDecoder import ConvDecoder
 #import torch.amp as amp
 
 from dataset import EEGDataset
@@ -59,9 +60,18 @@ def main(args):
 	contextualizer = mATTContextualizer(args)
 	r2e = R2E(args)
 
+	decoder = ConvDecoder(encoder_h=args.encoder_h,
+					   out_features=args.d_model, 
+					   dec_width=args.enc_width[::-1],
+					   dropout=args.enc_dropout,
+					   dec_upsample=args.enc_downsample[::-1],
+					   original_time_len=args.seq_len,
+					   top_k=args.top_k,
+					   num_kernels=args.num_kernels)
+
 	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, args)
+	trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, decoder, args)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
@@ -160,16 +170,17 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(2)
+		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(2, 2)
 	)
 
 	parser.add_argument(
-		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(2)
+		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(2, 2)
 	)
 
 	parser.add_argument(
 		"--enc_dropout", type=float, help="Dropout Rate for Encoder", default=0.1
 	)
+
 
 	# MENDR Contextualizer Configs
 	parser.add_argument(

@@ -8,6 +8,7 @@ sys.path.append("../")
 from ..baseModelTrainer import BaseModelTrainer
 from ..contextualizer import _make_mask, _make_span_from_seeds
 from ..TrainingDecoder.trainingDecoder import ConvDecoder
+from torch_geometric.utils import unbatch
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
@@ -149,24 +150,32 @@ class MENDRTrainer(BaseModelTrainer):
 	
 	def _reconstruction_loss(self, original, reconstruction):
 		# Mean Squared Error
-		return F.mse_loss(original, reconstruction)
+		if isinstance(original, list):
+			signals_from_graphs = torch.stack(original).float().to(self.device)
+		else:
+			signals_from_graphs = torch.tensor(np.vstack(original.x)).float().to(self.device)
+			signals_from_graphs = unbatch(signals_from_graphs, original.batch)
+			signals_from_graphs = torch.stack(signals_from_graphs)
+		assert signals_from_graphs.shape == reconstruction.shape
+		return F.mse_loss(signals_from_graphs, reconstruction)
     
 	def _contrastive_accuracy(self, inputs, outputs):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
 		return self._simple_accuracy([labels], logits)
     
-	def calculate_metrics(self, inputs, outputs):
+	def calculate_metrics(self, *inputs, outputs):
 		"""
 		Cosine Similarity from Calculating Similarity
 		"""
 		# "Logits" from _calculate_similarity
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
+
 		return {
 			'Contrastive Accuracy': self._simple_accuracy([labels], logits),
 			'MASK_pct': self._mask_pct(inputs, outputs),
-			'BENDR Reconstruction Loss': self._reconstruction_loss(inputs[0], outputs[3])
+			'BENDR Reconstruction MSE': self._reconstruction_loss(inputs[0], outputs[3]).item()
 		}
 
 	@staticmethod

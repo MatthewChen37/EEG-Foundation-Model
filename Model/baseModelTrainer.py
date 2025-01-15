@@ -224,7 +224,7 @@ class BaseModelTrainer(object):
         if self.scheduler is not None and self.scheduler_after_batch:
             self.scheduler.step()
 
-        train_metrics = self.calculate_metrics(inputs, outputs)
+        train_metrics = self.calculate_metrics(inputs, outputs=outputs)
         train_metrics.setdefault('loss', loss.item())
 
         return train_metrics
@@ -254,7 +254,7 @@ class BaseModelTrainer(object):
         and the output is the output of the encoder in SPD form. The logits of the outputs are only for the 
         mATT attention module. We will need to improve on this implementation. 
         '''
-        metrics = self.calculate_metrics(inputs, outputs)
+        metrics = self.calculate_metrics(inputs, outputs=outputs)
         metrics['loss'] = self.calculate_loss(inputs, outputs).item()
         return metrics
 

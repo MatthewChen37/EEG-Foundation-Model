@@ -33,7 +33,8 @@ class SpatialTemporalEncoder(nn.Module):
 		x = self.predict_linear(x)
 		x = nn.functional.gelu(x) # Include some non-linearity
 		# x: [B, T, N] # N here is the number of channels
-		res = self.times_block(x.permute(0, 2, 1))
+		x = x.permute(0, 2, 1)
+		res = self.times_block(x)
 		x = x + res # residual connection
 		# x: [B, N, T]
 		x = self.project_back(x.permute(0, 2, 1))

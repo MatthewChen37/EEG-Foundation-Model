@@ -9,7 +9,7 @@ from torch import nn
 from math import ceil
 
 from types import SimpleNamespace
-from MENDR.SpatialTemporalLayers import TimesBlock
+from ..MENDR.SpatialTemporalLayers import TimesBlock
 
 
 '''
