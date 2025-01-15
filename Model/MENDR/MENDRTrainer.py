@@ -166,6 +166,7 @@ class MENDRTrainer(BaseModelTrainer):
 		return {
 			'Contrastive Accuracy': self._simple_accuracy([labels], logits),
 			'MASK_pct': self._mask_pct(inputs, outputs),
+			'BENDR Reconstruction Loss': self._reconstruction_loss(inputs[0], outputs[3])
 		}
 
 	@staticmethod
