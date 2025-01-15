@@ -387,7 +387,7 @@ class BaseModelTrainer(object):
         #mlflow.autolog()
         for epoch in range(epochs):
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=250)
+            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=500)
             data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in pbar:

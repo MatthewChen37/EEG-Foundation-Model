@@ -149,6 +149,7 @@ class MENDRTrainer(BaseModelTrainer):
 		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + self.beta * self._reconstruction_loss(inputs, outputs[3])
 	
 	def _reconstruction_loss(self, original, reconstruction):
+		# TODO: We really don't need this if statment...
 		# Mean Squared Error
 		if isinstance(original, list):
 			signals_from_graphs = torch.stack(original).float().to(self.device)
