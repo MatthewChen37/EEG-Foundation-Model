@@ -2,7 +2,6 @@ import torch
 import tqdm
 import re
 import mlflow
-#from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader
 from sys import gettrace
 from .transforms import BatchTransform
@@ -73,12 +72,6 @@ class BaseModelTrainer(object):
 
         # TODO: Modify
         self.best_metric = None
-
-    def set_optimizer(self, optimizer):
-        assert isinstance(optimizer, torch.optim.Optimizer)
-        del self.optimizer
-        self.optimizer = optimizer
-        self.lr = float(self.optimizer.param_groups[0]['lr'])
 
     def set_scheduler(self, scheduler, step_every_batch=False):
         """
