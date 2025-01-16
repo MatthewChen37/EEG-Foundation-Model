@@ -261,7 +261,7 @@ class BaseModelTrainer(object):
 
     def predict(self, dataset, **loader_kwargs):
         """
-        Determine the outputs for all loaded data from the dataset
+        Determine the outputs for all loaded data from the dataset. This is right now only used in validation (when pretraining is implemented only)
 
         Parameters
         ----------

@@ -154,10 +154,14 @@ class MENDRTrainer(BaseModelTrainer):
 		if isinstance(original, list):
 			'''
 			Original is a list of tensors where each index is a 
-			batch 
+			batch. This case is used during validation.
 			'''
 			signals_from_graphs = torch.cat(original)
 		else:
+			'''
+			This case is used during training when the data is batched 
+			as hypergraphs. 	
+			'''
 			signals_from_graphs = torch.tensor(np.vstack(original.x)).float().to(self.device)
 			signals_from_graphs = unbatch(signals_from_graphs, original.batch)
 			signals_from_graphs = torch.stack(signals_from_graphs)
