@@ -39,6 +39,7 @@ class MENDRTrainer(BaseModelTrainer):
 			encoder = nn.DataParallel(encoder)
 			contextualizer = nn.DataParallel(contextualizer)
 			r2e = nn.DataParallel(r2e)
+			decoder = nn.DataParallel(decoder)
 		if config.encoder_grad_frac < 1:
             # TODO: I hope this works...
 			encoder.register_full_backward_hook(lambda module, in_grad, out_grad:
@@ -47,7 +48,7 @@ class MENDRTrainer(BaseModelTrainer):
 			
 		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
-			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), **kwargs)
+			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), save_model=config.save_model, **kwargs)
 		
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span
@@ -100,7 +101,6 @@ class MENDRTrainer(BaseModelTrainer):
 	def forward(self, *inputs):
 		z = self.embedder(inputs[0])
 		z = self.encoder(z)
-
 		decoded_signal = self.decoder(z)
 
 		unmasked_z = z.clone()
@@ -152,12 +152,16 @@ class MENDRTrainer(BaseModelTrainer):
 		# TODO: We really don't need this if statment...
 		# Mean Squared Error
 		if isinstance(original, list):
-			signals_from_graphs = torch.stack(original).float().to(self.device)
+			'''
+			Original is a list of tensors where each index is a 
+			batch 
+			'''
+			signals_from_graphs = torch.cat(original)
 		else:
 			signals_from_graphs = torch.tensor(np.vstack(original.x)).float().to(self.device)
 			signals_from_graphs = unbatch(signals_from_graphs, original.batch)
 			signals_from_graphs = torch.stack(signals_from_graphs)
-		assert signals_from_graphs.shape == reconstruction.shape
+		assert signals_from_graphs.shape == reconstruction.shape, f"Reconstruction Loss failed: {signals_from_graphs.shape} != {reconstruction.shape}, Type of original: {type(original)}"
 		return F.mse_loss(signals_from_graphs, reconstruction)
     
 	def _contrastive_accuracy(self, inputs, outputs):

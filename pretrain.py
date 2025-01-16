@@ -67,7 +67,8 @@ def main(args):
 					   dec_upsample=args.enc_downsample[::-1],
 					   original_time_len=args.seq_len,
 					   top_k=args.top_k,
-					   num_kernels=args.num_kernels)
+					   num_kernels=args.num_kernels,
+					   device='cuda' if torch.cuda.is_available() else 'cpu')
 
 	print("Starting training.")
 	### Training ###
@@ -89,7 +90,6 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-
 
 
 	print("*" * 50)
@@ -181,7 +181,6 @@ def parse_args():
 		"--enc_dropout", type=float, help="Dropout Rate for Encoder", default=0.1
 	)
 
-
 	# MENDR Contextualizer Configs
 	parser.add_argument(
 		"--in_features", type=int, help="Input Features for Contextualizer", default=256
@@ -248,11 +247,17 @@ def parse_args():
 		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
 	)
 
+	# TODO: Currently it automatically saves
+	# to the base repo directory
+	parser.add_argument(
+		"--save_model", type=bool,
+		help="Whether to save model.", default=False
+	)
+
 	# parse args
 	args = parser.parse_args()
 	return args
 	
-
 if __name__ == "__main__":
 	args = parse_args()
 	main(args)
