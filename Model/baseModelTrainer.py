@@ -13,7 +13,7 @@ Based on:
 '''
 class BaseModelTrainer(object):
 
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, **kwargs):
+    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model=False, **kwargs):
         """
         By default uses the SGD with momentum optimization.
 
@@ -60,7 +60,6 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
-
         self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True,
                                          momentum=0.9)
         self.scheduler = None
@@ -70,6 +69,7 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self._batch_transforms = list()
         self._eval_transforms = list()
+        self.save_model = save_model 
 
         # TODO: Modify
         self.best_metric = None
@@ -254,6 +254,7 @@ class BaseModelTrainer(object):
         and the output is the output of the encoder in SPD form. The logits of the outputs are only for the 
         mATT attention module. We will need to improve on this implementation. 
         '''
+
         metrics = self.calculate_metrics(inputs, outputs=outputs)
         metrics['loss'] = self.calculate_loss(inputs, outputs).item()
         return metrics
@@ -298,13 +299,22 @@ class BaseModelTrainer(object):
                 else:
                     outputs.append([tensor.cpu() for tensor in output_batch])
 
-        def package_multiple_tensors(batches: list):
-            if isinstance(batches[0], torch.Tensor):
-                return torch.cat(batches)
-            elif isinstance(batches[0], (tuple, list)):
-                return [torch.cat(b) for b in zip(*batches)]
+        ''' 
+        TODO: This is very messy code.
+        I removed package_multiple_tensors().
+        Figure out way to make nicer.  
+        ''' 
+        
+        def package_input(batches):
+            result = []
+            for b in batches:
+                result.append(torch.stack(b, dim=0))
+            return result
 
-        return package_multiple_tensors(inputs), package_multiple_tensors(outputs)
+        def package_output(batches):
+            return [torch.cat(b) for b in zip(*batches)]
+
+        return package_input(inputs), package_output(outputs)
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
@@ -321,18 +331,18 @@ class BaseModelTrainer(object):
 
     def save_best(self):
         """
-        Create a snapshot of what is being currently trained for re-laoding with the :py:meth:`load_best()` method.
+        Create a snapshot of what is being currently trained for re-loading with the load_best() method.
 
         Returns
         -------
         best : Any
-               Whatever format is needed for :py:meth:`load_best()`, will be the argument provided to it.
+               Whatever format is needed for load_best(), will be the argument provided to it.
         """
         return [{k: v.cpu() for k, v in self.__dict__[m].state_dict().items()} for m in self._trainables]
 
     def load_best(self, best):
         """
-        Load the parameters as saved by :py:meth:`save_best()`.
+        Load the parameters as saved by save_best().
 
         Parameters
         ----------
@@ -401,4 +411,10 @@ class BaseModelTrainer(object):
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
+
+        if self.save_model:
+            import pickle as pkl
+            best = self.save_best()
+            with open('./model.pkl', 'wb+') as f:
+                pkl.dump(best, f)
         #mlflow.end_run()

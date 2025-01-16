@@ -4,8 +4,8 @@ import warnings
 from torch_geometric.data import Dataset
 
 class EEGDataset(Dataset):
-	def __init__(self, root, frac=1.0, transform=None, pre_transform=None):
-		super(EEGDataset, self).__init__(root, transform, pre_transform)
+	def __init__(self, root, frac=1.0, transform=None):
+		super(EEGDataset, self).__init__(root, transform)
 		self.frac = frac
 
 		# Prevents the FutureWarning: from loading without setting weights_only to True

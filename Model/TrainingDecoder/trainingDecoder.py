@@ -20,10 +20,11 @@ Note that dec_width and dec_upsample should be
 in the reverse order of the encoder's width and downsample.
 '''
 class ConvDecoder(nn.Module):
-	def __init__(self, encoder_h, out_features, dec_width, dropout, dec_upsample, original_time_len, top_k, num_kernels):
+	def __init__(self, encoder_h, out_features, dec_width, dropout, dec_upsample, original_time_len, top_k, num_kernels, device="cpu"):
 		super().__init__()
 		self.encoder_h = encoder_h
 		self.out_features = out_features
+		self.device = device
 
 		# For times block
 		self.original_time_len = original_time_len
@@ -72,10 +73,9 @@ class ConvDecoder(nn.Module):
 		x = self.projection(x)
 
 		if self.times_project is None and self.times_block is None:
-			self.times_project = nn.Linear(x.shape[2], self.original_time_len)
+			self.times_project = nn.Linear(x.shape[2], self.original_time_len).to(self.device)
 			self.times_block = TimesBlock(SimpleNamespace(seq_len=x.shape[2], pred_len=self.original_time_len - x.shape[2],
-												  top_k=self.top_k, d_model=19, d_ff=self.encoder_h, num_kernels=self.num_kernels))
-
+												  top_k=self.top_k, d_model=19, d_ff=self.encoder_h, num_kernels=self.num_kernels)).to(self.device)
 		x = self.times_project(x)
 		x = self.times_block(x.permute(0, 2, 1))
 		x = x.permute(0, 2, 1)
