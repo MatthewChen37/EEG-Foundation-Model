@@ -31,6 +31,10 @@ def main(args):
 	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
 
+
+	if args.save_model and args.save_model_directory is None:
+		raise ValueError("Save model is set to true but no save directory was specified.")
+
 	### Seed ###
 	torch.cuda.empty_cache()
 	random.seed(args.random_state)
@@ -131,6 +135,7 @@ def parse_args():
 		"--val_frac", type=float, help="Fraction of dataset to use for validation", default=0.0
 	)
 
+
 	# Spatial Temporal Embedding Encoder Configs
 	parser.add_argument(
 		"--seq_len", type=int, help="Sequence Length of Recordings", default=15360
@@ -220,7 +225,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--l2_weight_decay", type=float, help="L2 Weight Decay", default=1e-5
+		"--l2_weight_decay", type=float, help="L2 Weight Decay. Helps with generalization", default=1e-5
 	)
 
 	parser.add_argument(
@@ -247,11 +252,13 @@ def parse_args():
 		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
 	)
 
-	# TODO: Currently it automatically saves
-	# to the base repo directory
 	parser.add_argument(
 		"--save_model", type=bool,
 		help="Whether to save model.", default=False
+	)
+
+	parser.add_argument(
+		"--save_model_directory", type=str, help="If save model is true, specifies where to save it", required=False
 	)
 
 	# parse args
