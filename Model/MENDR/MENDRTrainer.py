@@ -48,7 +48,7 @@ class MENDRTrainer(BaseModelTrainer):
 			
 		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
-			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), save_model=config.save_model, **kwargs)
+			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), save_model=config.save_model, save_model_directory=config.save_model_directory, **kwargs)
 		
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span

@@ -12,7 +12,7 @@ Based on:
 '''
 class BaseModelTrainer(object):
 
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model=False, **kwargs):
+    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model=False, save_model_directory=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
 
@@ -68,10 +68,17 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self._batch_transforms = list()
         self._eval_transforms = list()
-        self.save_model = save_model 
+        self.save_model = save_model
+        self.save_model_dir = save_model_directory
 
         # TODO: Modify
         self.best_metric = None
+
+    def set_optimizer(self, optimizer):
+        assert isinstance(optimizer, torch.optim.Optimizer)
+        del self.optimizer
+        self.optimizer = optimizer
+        self.lr = float(self.optimizer.param_groups[0]['lr'])
 
     def set_scheduler(self, scheduler, step_every_batch=False):
         """
@@ -386,18 +393,18 @@ class BaseModelTrainer(object):
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} samples".format(len(training_dataloader)))
 
-        #mlflow.start_run()
-        #mlflow.autolog()
+        mlflow.start_run()
+        mlflow.autolog()
         for epoch in range(epochs):
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=500)
+            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=500, position=0, leave=True)
             data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 pbar.set_postfix(train_metrics)
-                #mlflow.log_metrics(train_metrics, step=iteration)
+                mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 self.standard_logging(val_metrics, "End of Epoch")
@@ -408,6 +415,6 @@ class BaseModelTrainer(object):
         if self.save_model:
             import pickle as pkl
             best = self.save_best()
-            with open('./model.pkl', 'wb+') as f:
+            with open(f'{self.save_model_dir}/model_{mlflow.active_run().info.run_id}.pkl', 'wb+') as f:
                 pkl.dump(best, f)
-        #mlflow.end_run()
+        mlflow.end_run()
