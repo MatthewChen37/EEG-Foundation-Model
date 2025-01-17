@@ -391,13 +391,15 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('batch_size', batch_size)
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
-        print("Training on {} samples".format(len(training_dataloader)))
+        print("Training on {} sample batches.".format(len(training_dataloader)))
+
+
 
         mlflow.start_run()
         mlflow.autolog()
         for epoch in range(epochs):
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=500, position=0, leave=True)
+            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in pbar:

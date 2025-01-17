@@ -3,7 +3,7 @@ import gc
 import ast
 import copy
 import time
-import pathlib
+from pathlib import Path
 import argparse
 import random
 import numpy as np
@@ -34,6 +34,9 @@ def main(args):
 
 	if args.save_model and args.save_model_directory is None:
 		raise ValueError("Save model is set to true but no save directory was specified.")
+
+	# Create input directory if it doesn't exist
+	Path(args.save_model_directory).mkdir(parents=True, exist_ok=True)
 
 	### Seed ###
 	torch.cuda.empty_cache()

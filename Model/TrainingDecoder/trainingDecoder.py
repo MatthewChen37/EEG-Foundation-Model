@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from torch import nn
-from math import ceil
+from math import ceil, floor
 
 from types import SimpleNamespace
 from ..MENDR.SpatialTemporalLayers import TimesBlock
@@ -66,16 +66,30 @@ class ConvDecoder(nn.Module):
 		'''
 		self.projection = nn.Conv1d(out_features, self.original_out_features, 1)
 
-		self.times_project = None
-		self.times_block = None
+		# Calculate L_out from encoder
+		enc_width = dec_width[::-1]
+		enc_downsample = dec_upsample[::-1]
+		L_out = original_time_len
+
+		# Pass shape through encoder
+		for w, s in zip(enc_width, enc_downsample):
+			L_out = floor((L_out + 2 * (w // 2) - 1 * (width - 1) - 1) / s + 1)
+
+		# Pass shape through projection
+		L_out = floor((L_out + 2 * 0 - 1 * (1 - 1) - 1) / 1 + 1)
+
+		# Pass through decoder
+		for w, s in zip(dec_width, dec_upsample):
+			L_out = (L_out - 1) * s - 2 * (w // 2) + 1 * (w - 1) + 0 + 1
+
+		self.times_project = nn.Linear(L_out, self.original_time_len)
+		self.times_block = TimesBlock(SimpleNamespace(seq_len=L_out, pred_len=self.original_time_len - L_out,
+												  top_k=self.top_k, d_model=19, 
+												  d_ff=self.encoder_h, num_kernels=self.num_kernels))
+
 	def forward(self, x):
 		x = self.decoder(x)
 		x = self.projection(x)
-
-		if self.times_project is None and self.times_block is None:
-			self.times_project = nn.Linear(x.shape[2], self.original_time_len).to(self.device)
-			self.times_block = TimesBlock(SimpleNamespace(seq_len=x.shape[2], pred_len=self.original_time_len - x.shape[2],
-												  top_k=self.top_k, d_model=19, d_ff=self.encoder_h, num_kernels=self.num_kernels)).to(self.device)
 		x = self.times_project(x)
 		x = self.times_block(x.permute(0, 2, 1))
 		x = x.permute(0, 2, 1)
@@ -96,7 +110,7 @@ class ConvDecoder(nn.Module):
 if __name__ == "__main__":
 	from encoder import ConvEncoder
 	
-	x = torch.randn(3, 19, 100)
+	x = torch.randn(4, 19, 15360)
 
 	encoder = ConvEncoder(in_features=19, encoder_h=256, enc_width=(3, 2, 2),
 						  dropout=0., enc_downsample=(3, 2, 2))
@@ -106,7 +120,7 @@ if __name__ == "__main__":
 	print("Encoded shape:", encoded_x.shape)
 
 	decoder = ConvDecoder(encoder_h=256, out_features=19, dec_width=(2, 2, 3),
-						  dropout=0., dec_upsample=(2, 2, 3), original_time_len=100,
+						  dropout=0., dec_upsample=(2, 2, 3), original_time_len=15360,
 						  top_k=3, num_kernels=3)
 
 	decoded_x = decoder(encoded_x)
