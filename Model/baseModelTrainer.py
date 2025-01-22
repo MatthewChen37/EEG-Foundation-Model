@@ -217,14 +217,14 @@ class BaseModelTrainer(object):
     def train_step(self, inputs):
         self.train(True)
         outputs = self.forward(inputs)
-        loss = self.calculate_loss(inputs, outputs)
+        loss, recon_loss = self.calculate_loss(inputs, outputs)
         self.backward(loss)
 
         self.optimizer.step()
         if self.scheduler is not None and self.scheduler_after_batch:
             self.scheduler.step()
 
-        train_metrics = self.calculate_metrics(inputs, outputs=outputs)
+        train_metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
         train_metrics.setdefault('loss', loss.item())
 
         return train_metrics
@@ -248,6 +248,8 @@ class BaseModelTrainer(object):
         """
         self.train(False)
         inputs, outputs = self.predict(dataset, **loader_kwargs)
+        _, recon_loss = self.calculate_loss(inputs, outputs)
+
 
         '''
         NOTE: Currently inputs will be the original signals of each electrode extracted from the graph object
@@ -255,8 +257,8 @@ class BaseModelTrainer(object):
         mATT attention module. We will need to improve on this implementation. 
         '''
 
-        metrics = self.calculate_metrics(inputs, outputs=outputs)
-        metrics['loss'] = self.calculate_loss(inputs, outputs).item()
+        metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
+        metrics['loss'] = recon_loss
         return metrics
 
     def predict(self, dataset, **loader_kwargs):
@@ -297,7 +299,14 @@ class BaseModelTrainer(object):
                 if isinstance(output_batch, torch.Tensor):
                     outputs.append(output_batch.cpu())
                 else:
-                    outputs.append([tensor.cpu() for tensor in output_batch])
+                    batch = []
+                    for item in output_batch:
+                        if isinstance(item, dict):
+                            for k, v in item.items():
+                                batch.append(v.cpu())
+                        else:
+                            batch.append(item.cpu())
+                    outputs.append(batch)
 
         ''' 
         TODO: This is very messy code.
@@ -313,6 +322,7 @@ class BaseModelTrainer(object):
 
         def package_output(batches):
             return [torch.cat(b) for b in zip(*batches)]
+
 
         return package_input(inputs), package_output(outputs)
 

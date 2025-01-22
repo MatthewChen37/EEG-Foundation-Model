@@ -2,6 +2,7 @@ import torch
 import os
 import warnings
 from torch_geometric.data import Dataset
+from tqdm import tqdm
 
 class EEGDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
@@ -16,11 +17,15 @@ class EEGDataset(Dataset):
 		self.file_names = []
 		subjects = [f.path.split("/")[-1] for f in os.scandir(self.root) if f.is_dir()]
 		subjects = subjects[:int(len(subjects) * self.frac)]
-		for subject in subjects:
+		print(f"Loading {len(subjects)} subjects")
+		for subject in tqdm(subjects):
 			subject_path = os.path.join(self.root, subject, "graphs")
 			subject_file_names = os.listdir(subject_path)
-			subject_file_names = [os.path.join(subject_path, file_name) for file_name in subject_file_names]
-			self.file_names.extend(subject_file_names)
+			valid_files = []
+			for file_name in subject_file_names:
+				if not file_name.endswith("_0.pt"):
+					valid_files.append(os.path.join(subject_path, file_name))
+			self.file_names.extend(valid_files)
 		self.length = len(self.file_names)
 	
 	def len(self):
@@ -28,11 +33,12 @@ class EEGDataset(Dataset):
 	
 	def get(self, idx):
 		data = torch.load(os.path.join(self.file_names[idx]))
+		data.x = data.x * 1000
 		return data
 	
 if __name__ == "__main__":
 
-	dataset = EEGDataset(root="/home/azureuser/mycontainer/HBN-Processed", frac=0.1)
+	dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
 
 	print("Length of dataset: ", len(dataset))
 

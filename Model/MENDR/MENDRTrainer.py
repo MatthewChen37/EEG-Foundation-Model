@@ -4,11 +4,12 @@ import torch.nn.functional as F
 import numpy as np
 # TODO: Bad Practice fix later
 import sys
+import ptwt
 sys.path.append("../")
 from ..baseModelTrainer import BaseModelTrainer
 from ..contextualizer import _make_mask, _make_span_from_seeds
-from ..TrainingDecoder.trainingDecoder import ConvDecoder
 from torch_geometric.utils import unbatch
+from ..TrainingDecoder.WaveletLoss import WaveletLoss
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
@@ -54,9 +55,17 @@ class MENDRTrainer(BaseModelTrainer):
 		self.mask_span = config.mask_span
 		self.temp = config.temp
 		self.permuted_contexts = config.permuted_contexts
+		# TODO: Fix these later...
 		self.alpha = config.enc_feat_l2
-		self.beta = 0.5
-		self.start_token = getattr(contextualizer, 'start_token', None)
+		self.band_coeffs = {
+			'delta': 0,
+			'theta': 1,
+			'alpha': 1,
+			'beta': 0,
+			'gamma': 0,
+			'other': 0,
+			'high': 0,
+		}
 		self.num_negatives = config.num_negatives
 
 	def description(self, sequence_len):
@@ -101,7 +110,7 @@ class MENDRTrainer(BaseModelTrainer):
 	def forward(self, *inputs):
 		z = self.embedder(inputs[0])
 		z = self.encoder(z)
-		decoded_signal = self.decoder(z)
+		decoded_coefficients = self.decoder(z)
 
 		unmasked_z = z.clone()
 
@@ -140,15 +149,30 @@ class MENDRTrainer(BaseModelTrainer):
 
 		# Prediction -> batch_size x predict_length x predict_length
 		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
-		return logits, z, mask, decoded_signal
+		return logits, z, mask, decoded_coefficients
 	
 	def calculate_loss(self, inputs, outputs):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
         # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
-		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + self.beta * self._reconstruction_loss(inputs, outputs[3])
+
+		# TODO: Clean
+		if len(outputs) > 4:
+			wavelet_recons = {
+				'delta': outputs[3],
+				'theta': outputs[4],
+				'alpha': outputs[5],
+				'beta': outputs[6],
+				'gamma': outputs[7],
+				'other': outputs[8],
+				'high': outputs[9]
+			}
+			recon_loss = self._reconstruction_loss(inputs, wavelet_recons)
+		else:
+			recon_loss = self._reconstruction_loss(inputs, outputs[3])
+		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + recon_loss, recon_loss
 	
-	def _reconstruction_loss(self, original, reconstruction):
+	def _reconstruction_loss(self, original, wavelet_reconstructions):
 		# TODO: We really don't need this if statment...
 		# Mean Squared Error
 		if isinstance(original, list):
@@ -165,28 +189,31 @@ class MENDRTrainer(BaseModelTrainer):
 			signals_from_graphs = torch.tensor(np.vstack(original.x)).float().to(self.device)
 			signals_from_graphs = unbatch(signals_from_graphs, original.batch)
 			signals_from_graphs = torch.stack(signals_from_graphs)
-		assert signals_from_graphs.shape == reconstruction.shape, f"Reconstruction Loss failed: {signals_from_graphs.shape} != {reconstruction.shape}, Type of original: {type(original)}"
-		return F.mse_loss(signals_from_graphs, reconstruction)
-    
+		return WaveletLoss(signals_from_graphs, wavelet_reconstructions, self.band_coeffs)
+		    
 	def _contrastive_accuracy(self, inputs, outputs):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
 		return self._simple_accuracy([labels], logits)
     
-	def calculate_metrics(self, *inputs, outputs):
+	def calculate_metrics(self, *inputs, outputs, recon_loss):
 		"""
 		Cosine Similarity from Calculating Similarity
 		"""
 		# "Logits" from _calculate_similarity
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-
+		
+		means = logits.mean(dim=0)
 		return {
+			'Negative Similarity': means[0].item(),
+			'Positive Similarity': means[1].item(),
 			'Contrastive Accuracy': self._simple_accuracy([labels], logits),
 			'MASK_pct': self._mask_pct(inputs, outputs),
-			'BENDR Reconstruction MSE': self._reconstruction_loss(inputs[0], outputs[3]).item()
+			'BENDR Reconstruction MSE': recon_loss.item()
 		}
 
+	
 	@staticmethod
 	def _mask_pct(inputs, outputs):
 		return outputs[2].float().mean().item()
