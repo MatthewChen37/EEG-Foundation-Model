@@ -7,11 +7,10 @@ from pathlib import Path
 from mne_bids import BIDSPath, read_raw_bids, get_bids_path_from_fname
 from tqdm import tqdm
 from preprocessingPipeline import simplePipeline
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import warnings
 import traceback
 import pickle as pkl
-#from dask.distributed import Client
 from collections import OrderedDict
 
 INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
@@ -26,74 +25,42 @@ def main(args):
 	# Define the columns for the empty DataFrame
 	columns = ['bids_path', 'error', 'traceback'] 
 
-	means = pd.DataFrame(index=INDICES)
-	stds = pd.DataFrame(index=INDICES)
-
 	failed_files = []
 	with ThreadPoolExecutor() as executor:
-		futures = [executor.submit(_process_subject, args, subject, failed_files) for subject in subjects]
+		futures = [executor.submit(_process_subject, args, subject) for subject in subjects]
 		for future in tqdm(futures):
 			result = future.result()
-			if result:
-				subject, mean, std = result
-				means[subject] = mean
-				stds[subject] = std
-
-	'''
-	for subject in tqdm(subjects):
-		result = _process_subject(args, subject, failed_files)
-		if result:
-			subject, mean, std = result
-			means[subject] = mean
-			stds[subject] = std
-	'''
+			if result is not None:
+				failed_files.append(result)
+			
 	failed_files_df = pd.DataFrame(failed_files, columns=columns)
-	means.to_csv(os.path.join(args.output_dir, "TUH_means.csv"))
-	stds.to_csv(os.path.join(args.output_dir, "TUH_stds.csv"))
-	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"))
+	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files_preprocessingv2.csv"), index=False)
 
-def _process_subject(args, subject, failed_files):
+def _process_subject(args, subject):
 	Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
-	Path(os.path.join(args.output_dir, subject, "epochs")).mkdir(parents=True, exist_ok=True)
+	Path(os.path.join(args.output_dir, subject, "epochs_v2")).mkdir(parents=True, exist_ok=True)
+
 
 	bids_path = BIDSPath(root=os.path.join(args.input_directory + f"/sub-{subject}"),
 					   datatype="eeg", suffix="eeg", extension=".edf")
 	
-	subject_all_data = []
-
 	for bp in bids_path.match():
 		bp = _correct_path(bp)
-		'''
-		file_path = os.path.join(args.output_dir, subject, "epochs",
-						    f"{bp.session}-{bp.processing}-{bp.recording}_epo.fif")
+		file_path = os.path.join(args.output_dir, subject, "epochs_v2", f"{bp.session}-{bp.processing}-{bp.recording}_epo.fif")
 		if not os.path.exists(file_path):
-		'''
-		try:
-			raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
-			ch_names = raw.ch_names
-			if 'A1' and 'A2' in ch_names:
-				raw = raw.drop_channels(['A1', 'A2'])
-
-			assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
-			subject_all_data.append(raw.get_data())
-			
-			#epochs = simplePipeline(raw)
-			#epochs.save(file_path, overwrite=False)
-		except Exception as e:
-			print(f"Failed to process {bp}, error: {e}")
-			failed_files.append((bp, e, traceback.format_exc()))
-				
-	if len(subject_all_data) > 0:
-		subject_all_data = np.concatenate(subject_all_data, axis=1)
-		# Z-score Transform By Channel
-		mean = np.mean(subject_all_data, axis=1)
-		std = np.std(subject_all_data, axis=1)
-
-		return subject, mean, std
-	else:
-		print(f"No data found for subject: {subject}")
-		return None
-
+			try:
+				raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False).copy()
+				ch_names = raw.ch_names
+				if 'A1' and 'A2' in ch_names:
+					raw = raw.drop_channels(['A1', 'A2'])
+				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
+				epochs = simplePipeline(raw)
+				epochs.save(file_path, overwrite=False)
+				return None
+			except Exception as e:
+				print(f"Failed to process {bp}, error: {e}")
+				return (bp, e, traceback.format_exc())
+					
 def _correct_path(bp):
 	path_str = str(bp.fpath)
 
@@ -113,12 +80,6 @@ def parse_args():
 	return args
 
 if __name__ == '__main__':
-
-	'''
-	# Initialize Dask over MPI
-	dask_mpi.initialize()
-	c = Client()
-	'''
 
 	# Ignore warnings
 	warnings.filterwarnings("ignore")
