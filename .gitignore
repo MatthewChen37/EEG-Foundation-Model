@@ -8,3 +8,5 @@ nedc_pyprint_edf/*
 */__pycache__/*
 /data
 /mlruns
+*.pkl
+model.pkl

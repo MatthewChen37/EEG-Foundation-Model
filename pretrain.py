@@ -3,11 +3,10 @@ import gc
 import ast
 import copy
 import time
-import pathlib
+from pathlib import Path
 import argparse
 import random
 import numpy as np
-import pandas as pd
 
 import torch
 import torch.nn as nn
@@ -20,7 +19,7 @@ from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
-from Model.TrainingDecoder.trainingDecoder import ConvDecoder
+from Model.TrainingDecoder.WaveletDecoder import WaveletDecoder
 #import torch.amp as amp
 
 from dataset import EEGDataset
@@ -30,6 +29,14 @@ def main(args):
 	print("Job Started. Parameters:")
 	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
+
+
+	if args.save_model and args.save_model_directory is None:
+		raise ValueError("Save model is set to true but no save directory was specified.")
+
+	# Create input directory if it doesn't exist
+	if args.save_model_directory is not None:
+		Path(args.save_model_directory).mkdir(parents=True, exist_ok=True)
 
 	### Seed ###
 	torch.cuda.empty_cache()
@@ -60,14 +67,11 @@ def main(args):
 	contextualizer = mATTContextualizer(args)
 	r2e = R2E(args)
 
-	decoder = ConvDecoder(encoder_h=args.encoder_h,
+	decoder = WaveletDecoder(encoder_h=args.encoder_h,
 					   out_features=args.d_model, 
-					   dec_width=args.enc_width[::-1],
-					   dropout=args.enc_dropout,
-					   dec_upsample=args.enc_downsample[::-1],
-					   original_time_len=args.seq_len,
-					   top_k=args.top_k,
-					   num_kernels=args.num_kernels)
+					   enc_width=args.enc_width,
+					   enc_downsample=args.enc_downsample,
+					   original_time_len=args.seq_len)
 
 	print("Starting training.")
 	### Training ###
@@ -89,7 +93,6 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-
 
 
 	print("*" * 50)
@@ -116,11 +119,11 @@ def parse_args():
 		"--random_state", type=int, help="Random state for reproducibility", default=42
 	)
 	parser.add_argument(
-        "-b", "--batch_size", default=512, type=int, help="mini-batch size (default: 512)"
+        "-b", "--batch_size", default=32, type=int, help="mini-batch size (default: 32)"
     )
 
 	parser.add_argument(
-		"-e", "--training_epochs", default=100, type=int, help="number of total training epochs (default: 100)"
+		"-e", "--training_epochs", default=1, type=int, help="number of total training epochs (default: 1)"
 	)
 
 	parser.add_argument(
@@ -141,7 +144,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--top_k", type=int, help="Top K frequencies to select in TimesBlock", default=5
+		"--top_k", type=int, help="Top K frequencies to select in TimesBlock", default=3
 	)
 
 	parser.add_argument(
@@ -149,15 +152,15 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--d_ff", type=int, help="Feed Forward Dimension in TimesBlock", default=9
+		"--d_ff", type=int, help="Feed Forward Dimension in TimesBlock", default=5
 	)
 
 	parser.add_argument(
-		"--num_kernels", type=int, help="Number of Kernels in Convolutional Layer of Inception Block in TimesBlock", default=3
+		"--num_kernels", type=int, help="Number of Kernels in Convolutional Layer of Inception Block in TimesBlock", default=1
 	)
 
 	parser.add_argument(
-		"--num_heads", type=int, help="Number of Heads in Multihead Attention Layer of GAT",  default=4
+		"--num_heads", type=int, help="Number of Heads in Multihead Attention Layer of GAT",  default=2
 	)
 
 	parser.add_argument(
@@ -166,25 +169,24 @@ def parse_args():
 
 	# Encoder Configs
 	parser.add_argument(
-		"--encoder_h", type=int, help="Hidden Dimension of Encoder", default=256
+		"--encoder_h", type=int, help="Hidden Dimension of Encoder", default=32
 	)
 
 	parser.add_argument(
-		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(2, 2)
+		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(3, 2, 2, 2)
 	)
 
 	parser.add_argument(
-		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(2, 2)
+		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(3, 2, 2, 2)
 	)
 
 	parser.add_argument(
 		"--enc_dropout", type=float, help="Dropout Rate for Encoder", default=0.1
 	)
 
-
 	# MENDR Contextualizer Configs
 	parser.add_argument(
-		"--in_features", type=int, help="Input Features for Contextualizer", default=256
+		"--in_features", type=int, help="Input Features for Contextualizer", default=32
 	)
 
 	parser.add_argument(
@@ -196,16 +198,16 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--epochs", type=int, help="Number of Epochs for mATT", default=1
+		"--epochs", type=int, help="Number of Epochs for mATT", default=4
 	)
 
 	# Trainer Configs
 	parser.add_argument(
-		"--mask_span", type=int, help="Mask Span", default=6
+		"--mask_span", type=int, help="Mask Span", default=10
 	)
 
 	parser.add_argument(
-		"--mask_rate", type=float, help="Mask Rate", default=0.1
+		"--mask_rate", type=float, help="Mask Rate", default=0.065
 	)
 
 	parser.add_argument(
@@ -217,11 +219,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--learning_rate", type=float, help="Learning Rate", default=1e-3
+		"--learning_rate", type=float, help="Learning Rate", default=0.1
 	)
 
 	parser.add_argument(
-		"--l2_weight_decay", type=float, help="L2 Weight Decay", default=1e-5
+		"--l2_weight_decay", type=float, help="L2 Weight Decay. Helps with generalization", default=1e-5
 	)
 
 	parser.add_argument(
@@ -233,7 +235,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", default=10
+		"--num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", default=20
 	)
 
 	parser.add_argument(
@@ -248,11 +250,19 @@ def parse_args():
 		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
 	)
 
+	parser.add_argument(
+		"--save_model", type=bool,
+		help="Whether to save model.", default=False
+	)
+
+	parser.add_argument(
+		"--save_model_directory", type=str, help="If save model is true, specifies where to save it", required=False
+	)
+
 	# parse args
 	args = parser.parse_args()
 	return args
 	
-
 if __name__ == "__main__":
 	args = parse_args()
 	main(args)

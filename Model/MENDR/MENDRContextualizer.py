@@ -46,7 +46,9 @@ class mATTContextualizer(nn.Module):
 		self.ract1 = E2R(config.epochs)
 		#Riemannian Manifold Attention Module
 		self.att = AttentionManifold(self._transformer_dim, self.in_features)
-		self.ract2 = SPDRectified() 
+		self.ract2 = SPDRectified()
+
+		self.apply(self.init_bert_params)
 
 	def forward(self, x, mask_t=None, mask_c=None):
 		'''
@@ -87,6 +89,15 @@ class mATTContextualizer(nn.Module):
 			param.requires_grad = unfreeze
 		if finetuning:
 			self.mask_replacement.requires_grad = False
+
+	def init_bert_params(self, module):
+		if isinstance(module, nn.Linear):
+			nn.init.xavier_uniform_(module.weight.data)
+			if module.bias is not None:
+				module.bias.data.zero_()
+			# Tfixup
+			module.weight.data = 0.67 * len(self.transformer_layers) ** (-0.25) * module.weight.data
+
 
 	
 if __name__ == "__main__":

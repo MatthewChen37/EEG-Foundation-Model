@@ -11,11 +11,13 @@ class SpatialTemporalEncoder(nn.Module):
 		self.seq_len = configs.seq_len
 		self.pred_len = configs.pred_len
 		self.k = configs.top_k
-		self.times_block = TimesBlock(configs)
+		#self.times_block = TimesBlock(configs)
 		self.gnn_layer = GNNLayer(configs)
-		self.predict_linear = nn.Linear(configs.seq_len, configs.seq_len + configs.pred_len)
-		self.project_back = nn.Linear(configs.seq_len + configs.pred_len, configs.seq_len)
+		#self.predict_linear = nn.Linear(configs.seq_len, configs.seq_len + configs.pred_len)
+		#self.project_back = nn.Linear(configs.seq_len + configs.pred_len, configs.seq_len)
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+		self.bn1 = nn.BatchNorm1d(configs.d_model)
+		self.gelu = nn.GELU()
 
 	def forward(self, data):
 		# x: PyG DataBatch Object 
@@ -25,8 +27,10 @@ class SpatialTemporalEncoder(nn.Module):
 		x = self.gnn_layer(x, edge_index, edge_dist)
 		# Convert to x: [B, N, T]
 		x = unbatch(x, data.batch)
-		# Permute to x: [B, T, N]
 		x = torch.stack(x)
+		x = self.bn1(x)
+		x = self.gelu(x)
+		'''
 		# See https://github.com/thuml/Time-Series-Library/blob/cdf8f0c3c5e79c1e8152e71dc35009ae46a6a920/models/TimesNet.py#L113
 		# for why this is done
 		# x: [B, N, 2T]
@@ -39,4 +43,5 @@ class SpatialTemporalEncoder(nn.Module):
 		# x: [B, N, T]
 		x = self.project_back(x.permute(0, 2, 1))
 		x = nn.functional.gelu(x)
+		'''
 		return x

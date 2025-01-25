@@ -2,7 +2,6 @@ import torch
 import tqdm
 import re
 import mlflow
-#from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader
 from sys import gettrace
 from .transforms import BatchTransform
@@ -13,7 +12,7 @@ Based on:
 '''
 class BaseModelTrainer(object):
 
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, **kwargs):
+    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model=False, save_model_directory=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
 
@@ -60,7 +59,6 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
-
         self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True,
                                          momentum=0.9)
         self.scheduler = None
@@ -70,6 +68,8 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self._batch_transforms = list()
         self._eval_transforms = list()
+        self.save_model = save_model
+        self.save_model_dir = save_model_directory
 
         # TODO: Modify
         self.best_metric = None
@@ -217,14 +217,14 @@ class BaseModelTrainer(object):
     def train_step(self, inputs):
         self.train(True)
         outputs = self.forward(inputs)
-        loss = self.calculate_loss(inputs, outputs)
+        loss, recon_loss = self.calculate_loss(inputs, outputs)
         self.backward(loss)
 
         self.optimizer.step()
         if self.scheduler is not None and self.scheduler_after_batch:
             self.scheduler.step()
 
-        train_metrics = self.calculate_metrics(inputs, outputs=outputs)
+        train_metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
         train_metrics.setdefault('loss', loss.item())
 
         return train_metrics
@@ -248,19 +248,22 @@ class BaseModelTrainer(object):
         """
         self.train(False)
         inputs, outputs = self.predict(dataset, **loader_kwargs)
+        _, recon_loss = self.calculate_loss(inputs, outputs)
+
 
         '''
         NOTE: Currently inputs will be the original signals of each electrode extracted from the graph object
         and the output is the output of the encoder in SPD form. The logits of the outputs are only for the 
         mATT attention module. We will need to improve on this implementation. 
         '''
-        metrics = self.calculate_metrics(inputs, outputs=outputs)
-        metrics['loss'] = self.calculate_loss(inputs, outputs).item()
+
+        metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
+        metrics['loss'] = recon_loss
         return metrics
 
     def predict(self, dataset, **loader_kwargs):
         """
-        Determine the outputs for all loaded data from the dataset
+        Determine the outputs for all loaded data from the dataset. This is right now only used in validation (when pretraining is implemented only)
 
         Parameters
         ----------
@@ -296,15 +299,32 @@ class BaseModelTrainer(object):
                 if isinstance(output_batch, torch.Tensor):
                     outputs.append(output_batch.cpu())
                 else:
-                    outputs.append([tensor.cpu() for tensor in output_batch])
+                    batch = []
+                    for item in output_batch:
+                        if isinstance(item, dict):
+                            for k, v in item.items():
+                                batch.append(v.cpu())
+                        else:
+                            batch.append(item.cpu())
+                    outputs.append(batch)
 
-        def package_multiple_tensors(batches: list):
-            if isinstance(batches[0], torch.Tensor):
-                return torch.cat(batches)
-            elif isinstance(batches[0], (tuple, list)):
-                return [torch.cat(b) for b in zip(*batches)]
+        ''' 
+        TODO: This is very messy code.
+        I removed package_multiple_tensors().
+        Figure out way to make nicer.  
+        ''' 
+        
+        def package_input(batches):
+            result = []
+            for b in batches:
+                result.append(torch.stack(b, dim=0))
+            return result
 
-        return package_multiple_tensors(inputs), package_multiple_tensors(outputs)
+        def package_output(batches):
+            return [torch.cat(b) for b in zip(*batches)]
+
+
+        return package_input(inputs), package_output(outputs)
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
@@ -321,18 +341,18 @@ class BaseModelTrainer(object):
 
     def save_best(self):
         """
-        Create a snapshot of what is being currently trained for re-laoding with the :py:meth:`load_best()` method.
+        Create a snapshot of what is being currently trained for re-loading with the load_best() method.
 
         Returns
         -------
         best : Any
-               Whatever format is needed for :py:meth:`load_best()`, will be the argument provided to it.
+               Whatever format is needed for load_best(), will be the argument provided to it.
         """
         return [{k: v.cpu() for k, v in self.__dict__[m].state_dict().items()} for m in self._trainables]
 
     def load_best(self, best):
         """
-        Load the parameters as saved by :py:meth:`save_best()`.
+        Load the parameters as saved by save_best().
 
         Parameters
         ----------
@@ -381,24 +401,32 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('batch_size', batch_size)
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
-        print("Training on {} samples".format(len(training_dataloader)))
+        print("Training on {} sample batches.".format(len(training_dataloader)))
 
-        #mlflow.start_run()
-        #mlflow.autolog()
+
+
+        mlflow.start_run()
+        mlflow.autolog()
         for epoch in range(epochs):
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=500)
+            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 pbar.set_postfix(train_metrics)
-                #mlflow.log_metrics(train_metrics, step=iteration)
+                mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
-        #mlflow.end_run()
+
+        if self.save_model:
+            import pickle as pkl
+            best = self.save_best()
+            with open(f'{self.save_model_dir}/model_{mlflow.active_run().info.run_id}.pkl', 'wb+') as f:
+                pkl.dump(best, f)
+        mlflow.end_run()
