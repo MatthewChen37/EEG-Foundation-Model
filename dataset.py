@@ -24,6 +24,14 @@ class Subject:
 	
 	def getSubjectWaveletFileNames(self):
 		return self.subject_wavelet_file_names
+	
+	def __str__(self):
+		subject_string = f"Subject: {self.subject_path}, Graphs: {self.subject_graph_path}"
+
+		for band, file_name in self.subject_wavelet_file_names.items():
+			subject_string += f"\n {band}: {torch.load(file_name[0]).node_name}"
+		return subject_string
+
 
 class WaveletDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
@@ -41,21 +49,24 @@ class WaveletDataset(Dataset):
 		subjects = subjects[:int(len(subjects) * self.frac)]
 		print(f"Loading {len(subjects)} subjects")
 		for subject in tqdm(subjects):
-			subject_graph_path = os.listdir(os.path.join(self.root, subject, "graphs_v2"))[0]
-			subject_graph_path = os.path.join(self.root, subject, "graphs_v2", subject_graph_path)
-			subject_file_names = {
-				"delta": [],
-				"theta": [],
-				"alpha": [],
-				"beta": [],
-				"gamma": []
-			}
-			subject_path = os.path.join(self.root, subject)
-			wavelet_files = os.listdir(os.path.join(subject_path, "wavelet_decompositions"))
-			for file_name in wavelet_files:
-				band = file_name.split("_")[-2]
-				subject_file_names[band].append(os.path.join(subject_path, "wavelet_decompositions", file_name))
-			self.subjects.append(Subject(subject_path, subject_graph_path, subject_file_names))
+			subject_graph_path = os.path.join(self.root, subject, "graphs_v2")
+			if os.path.exists(subject_graph_path) and len(os.listdir(subject_graph_path)) > 0:
+				subject_graph_path = os.listdir(subject_graph_path)[0]
+				subject_graph_path = os.path.join(self.root, subject, "graphs_v2", subject_graph_path)
+				subject_file_names = {
+					"delta": [],
+					"theta": [],
+					"alpha": [],
+					"beta": [],
+					"gamma": []
+				}
+				subject_path = os.path.join(self.root, subject)
+				wavelet_files = os.listdir(os.path.join(subject_path, "wavelet_decompositions"))
+				for file_name in wavelet_files:
+					band = file_name.split("_")[-2]
+					if band != "freq":
+						subject_file_names[band].append(os.path.join(subject_path, "wavelet_decompositions", file_name))
+				self.subjects.append(Subject(subject_path, subject_graph_path, subject_file_names))
 		self.length = len(self.subjects)
 
 	def len(self):
@@ -63,7 +74,16 @@ class WaveletDataset(Dataset):
 	
 	def get(self, idx):
 		return self.subjects[idx]
+	
+	def CountTotalNumberOfMinutes(self):
+		print("Counting total number of minutes. This may take a while...")
+		total_minutes = 0
+		for subject in tqdm(self.subjects):
+			total_minutes += len(subject.getSubjectWaveletFileNames()['delta'])
+		print("Total number of minutes: ", total_minutes)
+		return total_minutes
 
+		
 class EEGDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
 		super(EEGDataset, self).__init__(root, transform)
@@ -96,13 +116,16 @@ class EEGDataset(Dataset):
 		data.x = data.x * 1000
 		return data
 	
+		
 if __name__ == "__main__":
 
-	dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
+	# dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
+
+	dataset = WaveletDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.001)
 
 	print("Length of dataset: ", len(dataset))
 
-	print("Length of file names: ", len(dataset.file_names))
+	print("Number of subjects: ", len(dataset.subjects))
 
 	data = dataset[0]
 
