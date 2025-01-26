@@ -73,17 +73,25 @@ class WaveletDataset(Dataset):
 		return self.length
 	
 	def get(self, idx):
-		return self.subjects[idx]
-	
+		subject = self.subjects[idx]
+		subject_wavelet_file_names = subject.getSubjectWaveletFileNames()
+		data = {
+			"graph": torch.load(subject.getSubjectGraphPath()),
+			"delta": torch.tensor(torch.load(subject_wavelet_file_names['delta'][0]).data),
+			"theta": torch.tensor(torch.load(subject_wavelet_file_names['theta'][0]).data),
+			"alpha": torch.tensor(torch.load(subject_wavelet_file_names['alpha'][0]).data),
+			"beta": torch.tensor(torch.load(subject_wavelet_file_names['beta'][0]).data),
+			"gamma": torch.tensor(torch.load(subject_wavelet_file_names['gamma'][0]).data)
+		}
+
 	def CountTotalNumberOfMinutes(self):
 		print("Counting total number of minutes. This may take a while...")
 		total_minutes = 0
 		for subject in tqdm(self.subjects):
-			total_minutes += len(subject.getSubjectWaveletFileNames()['delta'])
+			total_minutes += torch.load(subject.getSubjectWaveletFileNames()['delta'][0]).data.shape[0]
 		print("Total number of minutes: ", total_minutes)
 		return total_minutes
 
-		
 class EEGDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
 		super(EEGDataset, self).__init__(root, transform)
@@ -121,7 +129,7 @@ if __name__ == "__main__":
 
 	# dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
 
-	dataset = WaveletDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.001)
+	dataset = WaveletDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
 
 	print("Length of dataset: ", len(dataset))
 
@@ -130,3 +138,5 @@ if __name__ == "__main__":
 	data = dataset[0]
 
 	print("Data: ", data)
+
+	print("Total number of minutes: ", dataset.CountTotalNumberOfMinutes())
