@@ -43,54 +43,49 @@ class WaveletDataset(Dataset):
 		self._index_data()
 
 	def _index_data(self):
-		self.subjects = []
+		self.graphs = dict()
+		self.epochs = []
 
 		subjects = [f.path.split("/")[-1] for f in os.scandir(self.root) if f.is_dir()]
 		subjects = subjects[:int(len(subjects) * self.frac)]
 		print(f"Loading {len(subjects)} subjects")
 		for subject in tqdm(subjects):
-			subject_graph_path = os.path.join(self.root, subject, "graphs_v2")
+			subject_graph_path = os.path.join(self.root, subject, "graphs")
 			if os.path.exists(subject_graph_path) and len(os.listdir(subject_graph_path)) > 0:
 				subject_graph_path = os.listdir(subject_graph_path)[0]
-				subject_graph_path = os.path.join(self.root, subject, "graphs_v2", subject_graph_path)
-				subject_file_names = {
-					"delta": [],
-					"theta": [],
-					"alpha": [],
-					"beta": [],
-					"gamma": []
-				}
+				self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(self.root, subject, "graphs_v2", subject_graph_path))
 				subject_path = os.path.join(self.root, subject)
 				wavelet_files = os.listdir(os.path.join(subject_path, "wavelet_decompositions"))
+				subject_epochs = dict()
 				for file_name in wavelet_files:
-					band = file_name.split("_")[-2]
-					if band != "freq":
-						subject_file_names[band].append(os.path.join(subject_path, "wavelet_decompositions", file_name))
-				self.subjects.append(Subject(subject_path, subject_graph_path, subject_file_names))
-		self.length = len(self.subjects)
+					epoch_idx = int(attributes[-1][:-3])
+					band = attributes[-4]
+					if epoch_idx not in subject_epochs:
+						subject_epochs[epoch_idx] = dict()
+						subject_epochs[epoch_idx]['graph_name'] = attributes[0] + "_" + attributes[1]
+					subject_epochs[epoch_idx][band] = torch.load(file_name)
+				for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
+					epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx, epoch_wavelet_dict['delta'],
+								   epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],
+								   epoch_wavelet_dict['beta'], epoch_wavelet_dict['gamma'])
+					self.epochs.append(epoch_tuple)
+		self.length = len(self.epochs)
 
 	def len(self):
 		return self.length
 	
 	def get(self, idx):
-		subject = self.subjects[idx]
-		subject_wavelet_file_names = subject.getSubjectWaveletFileNames()
+		epoch_tuple = self.epochs[idx]
+		graph = self.graphs[epoch_tuple[0]]
 		data = {
-			"graph": torch.load(subject.getSubjectGraphPath()),
-			"delta": torch.tensor(torch.load(subject_wavelet_file_names['delta'][0]).data),
-			"theta": torch.tensor(torch.load(subject_wavelet_file_names['theta'][0]).data),
-			"alpha": torch.tensor(torch.load(subject_wavelet_file_names['alpha'][0]).data),
-			"beta": torch.tensor(torch.load(subject_wavelet_file_names['beta'][0]).data),
-			"gamma": torch.tensor(torch.load(subject_wavelet_file_names['gamma'][0]).data)
+			"graph": graph,
+			"subject_name": epoch_tuple[1],
+			"delta": epoch_tuple[3],
+			"theta": epoch_tuple[4],
+			"alpha": epoch_tuple[5],
+			"beta": epoch_tuple[6],
+			"gamma": epoch_tuple[7],
 		}
-
-	def CountTotalNumberOfMinutes(self):
-		print("Counting total number of minutes. This may take a while...")
-		total_minutes = 0
-		for subject in tqdm(self.subjects):
-			total_minutes += torch.load(subject.getSubjectWaveletFileNames()['delta'][0]).data.shape[0]
-		print("Total number of minutes: ", total_minutes)
-		return total_minutes
 
 class EEGDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
@@ -138,5 +133,3 @@ if __name__ == "__main__":
 	data = dataset[0]
 
 	print("Data: ", data)
-
-	print("Total number of minutes: ", dataset.CountTotalNumberOfMinutes())
