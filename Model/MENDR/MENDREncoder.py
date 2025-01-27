@@ -1,0 +1,83 @@
+import torch
+from torch import nn
+from torch_geometric.nn.conv import GATConv
+from torch_geometric.nn.norm import GraphNorm
+from torch_geometric.nn import Sequential
+from torch_geometric.data import Data, Batch
+from math import floor
+import matplotlib.pyplot as plt
+
+'''
+Wavelet Encoder for MENDR with a decoder (only used for training)
+Each frequency band has its own embedder, GAT, and decoder
+'''
+class MENDREncoder(nn.Module):
+    def __init__(self, num_channels, conv_kernel_size, conv_kernel_stride, seq_len, heads, encoded_h, decoder_size, decoder_stride):
+        super(MENDREncoder, self).__init__()
+        assert len(decoder_size) == len(decoder_stride)
+        self.num_channels = num_channels
+        self.conv_kernel_size = conv_kernel_size
+        self.conv_kernel_stride = conv_kernel_stride
+        self.seq_len = seq_len
+        self.heads = heads
+        self.encoded_h = encoded_h
+
+        self.patch_embedder = nn.Sequential(
+            nn.Conv1d(self.num_channels, self.num_channels, 
+            self.conv_kernel_size, stride=self.conv_kernel_stride,
+            padding=self.conv_kernel_size//2),
+            nn.Dropout1d(0.1),
+            nn.GroupNorm(1, self.num_channels), # Same as Layer Norm
+            nn.GELU()
+        )
+
+        L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
+        L_out = floor(L_out / self.conv_kernel_stride) + 1
+        self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads)
+        self.gnn_group_norm = nn.GroupNorm(1, self.encoded_h * self.heads)
+        self.gnn_dropout = nn.Dropout(p=0.1)
+        self.gnn_gelu = nn.GELU()
+        L_out = self.encoded_h * self.heads
+        self.decoders = nn.Sequential()
+        for i, (w, s) in enumerate(zip(decoder_size, decoder_stride)):
+            if i == len(decoder_size) - 1:
+                output_padding = self.seq_len - L_out
+                self.decoders.add_module("Decoder_Final".format(i),
+                nn.Sequential(
+                    nn.ConvTranspose1d(self.num_channels, self.num_channels,
+                    w, stride=s, padding=w//2, output_padding=0 if output_padding < 0 else output_padding),
+                    nn.Dropout(0.1),
+                    nn.GroupNorm(1, self.num_channels),
+                    nn.GELU()
+                    )
+                )
+                if output_padding < 0:
+                    L_out = (L_out - 1) * s - 2 * (w//2) + 1 * (w - 1) + 1
+                    self.decoders.add_module("Decoder_Final_Linear".format(i), nn.Linear(L_out, self.seq_len))
+            else:
+                self.decoders.add_module("Decoder_{}".format(i),
+                nn.Sequential(
+                    nn.ConvTranspose1d(self.num_channels, self.num_channels,
+                    w, stride=s, padding=w//2),
+                    nn.Dropout(0.1),
+                    nn.GroupNorm(1, self.num_channels),
+                    nn.GELU()
+                    )
+                )
+                L_out = (L_out - 1) * s - 2 * (w//2) + 1 * (w - 1) + 1
+    
+    def forward(self, graph, x):
+        patch_embedding = self.patch_embedder(x)
+
+        graph_x = graph.clone()
+
+        edge_index = graph_x.edge_index.to(device)
+        edge_dist = graph.edge_attr.to(device)
+
+        patch_embedding = patch_embedding.view(-1, patch_embedding.shape[-1])
+        
+        encoding = self.gnn_embedder(patch_embedding, edge_index, edge_dist)
+        encoding = encoding.view(-1, self.num_channels, self.encoded_h * self.heads)
+        decoding = self.decoders(encoding)
+
+        return encoding, decoding 
