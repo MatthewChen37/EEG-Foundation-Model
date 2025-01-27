@@ -134,67 +134,6 @@ class DenseFilter(nn.Module):
         return torch.cat((x, self.net(x)), dim=1)
 
 
-class DenseSpatialFilter(nn.Module):
-    def __init__(self, channels, growth, depth, in_ch=1, bottleneck=4, dropout_rate=0.0, activation=nn.LeakyReLU,
-                 collapse=True):
-        """
-        This extends the :any:`DenseFilter` to specifically operate in channel space and collapse this dimension
-        over the course of `depth` layers.
-
-        Parameters
-        ----------
-        channels
-        growth
-        depth
-        in_ch
-        bottleneck
-        dropout_rate
-        activation
-        collapse
-        """
-        super().__init__()
-        self.net = nn.Sequential(*[
-            DenseFilter(in_ch + growth * d, growth, bottleneck=bottleneck, do=dropout_rate,
-                        activation=activation) for d in range(depth)
-        ])
-        n_filters = in_ch + growth * depth
-        self.collapse = collapse
-        if collapse:
-            self.channel_collapse = ConvBlock2D(n_filters, n_filters, (channels, 1), do_rate=0)
-
-    def forward(self, x):
-        if len(x.shape) < 4:
-            x = x.unsqueeze(1).permute([0, 1, 3, 2])
-        x = self.net(x)
-        if self.collapse:
-            return self.channel_collapse(x).squeeze(-2)
-        return x
-
-
-class SpatialFilter(nn.Module):
-    def __init__(self, channels, filters, depth, in_ch=1, dropout_rate=0.0, activation=nn.LeakyReLU, batch_norm=True,
-                 residual=False):
-        super().__init__()
-        kernels = [(channels // depth, 1) for _ in range(depth-1)]
-        kernels += [(channels - sum(x[0] for x in kernels) + depth-1, 1)]
-        self.filter = nn.Sequential(
-            ConvBlock2D(in_ch, filters, kernels[0], do_rate=dropout_rate/depth, activation=activation,
-                        batch_norm=batch_norm),
-            *[ConvBlock2D(filters, filters, kernel, do_rate=dropout_rate/depth, activation=activation,
-                          batch_norm=batch_norm)
-              for kernel in kernels[1:]]
-        )
-        self.residual = nn.Conv1d(channels * in_ch, filters, 1) if residual else None
-
-    def forward(self, x):
-        res = x
-        if len(x.shape) < 4:
-            x = x.unsqueeze(1)
-        elif self.residual:
-            res = res.contiguous().view(res.shape[0], -1, res.shape[3])
-        x = self.filter(x).squeeze(-2)
-        return x + self.residual(res) if self.residual else x
-
 
 class TemporalFilter(nn.Module):
 
