@@ -51,9 +51,11 @@ def parse_args():
 	parser = argparse.ArgumentParser(description='Compress TUH Wavelet Decompositions')
 	parser.add_argument('--input_directory', type=str, required=True,
 					  help='Path to BIDS directory containing the preprocessed data')
-	parser.add_argument('--output_directory', type=str, required=True,
+	parser.add_argument('--output_dir', type=str, required=True,
 					  help='Processing will write to this directory.')
 	args = parser.parse_args()
+
+	Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 	return args
 
 if __name__ == "__main__":
