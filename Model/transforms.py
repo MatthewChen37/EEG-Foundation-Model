@@ -62,37 +62,3 @@ class RandomTemporalCrop(BatchTransform):
         offset = np.random.randint(0, trial_len - crop_len)
 
         return x[:, offset:offset + crop_len, ...]
-
-
-class RandomTemporalEndCrop(BatchTransform):
-
-    def __init__(self, end_crop_frac=0.25, crop_weights=None, temporal_axis=1):
-        """
-        Crops the time dimension of an entire batch.
-
-        Parameters
-        ----------
-        end_crop_frac: float
-                       If this is specified (and `crop_weights` is not), a crop end is selected uniformly from the
-                        last `max_crop_frac` indices.
-        crop_weights: list, array-like
-                      If specified, this should be a list of un-normalized weights used to weight the selection of the
-                      last `len(crop_weights)` indicies to crop to.
-        """
-        super(RandomTemporalEndCrop, self).__init__(only_trial_data=True)
-        self.end_crop_frac = end_crop_frac
-        self.crop_weights = np.array(crop_weights)
-        self.temporal_axis = temporal_axis
-
-    def __call__(self, x, training=False):
-        if not training:
-            return x
-        if self.crop_weights is None:
-            assert 0 <= self.end_crop_frac <= 1
-            self.crop_weights = np.ones(int(x.shape[self.temporal_axis] * self.end_crop_frac))
-
-        no_crop_len = x.shape[self.temporal_axis] - len(self.crop_weights)
-        assert no_crop_len >= 0
-        inds = np.arange(no_crop_len, x.shape[self.temporal_axis])
-        crop_location = np.random.choice(inds, p=self.crop_weights / self.crop_weights.sum())
-        return x[:, :crop_location, ...]  
