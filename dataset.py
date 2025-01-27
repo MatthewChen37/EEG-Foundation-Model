@@ -3,7 +3,7 @@ import os
 import warnings
 from torch_geometric.data import Dataset
 from tqdm import tqdm
-
+from concurrent.futures import ThreadPoolExecutor
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
@@ -49,27 +49,38 @@ class WaveletDataset(Dataset):
 		subjects = [f.path.split("/")[-1] for f in os.scandir(self.root) if f.is_dir()]
 		subjects = subjects[:int(len(subjects) * self.frac)]
 		print(f"Loading {len(subjects)} subjects")
-		for subject in tqdm(subjects):
-			subject_graph_path = os.path.join(self.root, subject, "graphs")
-			if os.path.exists(subject_graph_path) and len(os.listdir(subject_graph_path)) > 0:
-				subject_graph_path = os.listdir(subject_graph_path)[0]
-				self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(self.root, subject, "graphs_v2", subject_graph_path))
-				subject_path = os.path.join(self.root, subject)
-				wavelet_files = os.listdir(os.path.join(subject_path, "wavelet_decompositions"))
-				subject_epochs = dict()
-				for file_name in wavelet_files:
-					epoch_idx = int(attributes[-1][:-3])
-					band = attributes[-4]
-					if epoch_idx not in subject_epochs:
-						subject_epochs[epoch_idx] = dict()
-						subject_epochs[epoch_idx]['graph_name'] = attributes[0] + "_" + attributes[1]
-					subject_epochs[epoch_idx][band] = torch.load(file_name)
-				for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
-					epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx, epoch_wavelet_dict['delta'],
-								   epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],
-								   epoch_wavelet_dict['beta'], epoch_wavelet_dict['gamma'])
-					self.epochs.append(epoch_tuple)
+
+		with ThreadPoolExecutor() as executor:
+			futures = [executor.submit(self._process_subject, subject) for subject in subjects]
+			for future in tqdm(futures):
+				future.result()
+
 		self.length = len(self.epochs)
+			
+
+	def _process_subject(self, subject):
+		subject_graph_path = os.path.join(self.root, subject, "graphs")
+		if os.path.exists(subject_graph_path) and len(os.listdir(subject_graph_path)) > 0:
+			subject_graph_path = os.listdir(subject_graph_path)[0]
+			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(self.root, subject, "graphs", subject_graph_path))
+			subject_path = os.path.join(self.root, subject)
+			wavelet_path = os.path.join(subject_path, "wavelet_decompositions")
+			wavelet_files = os.listdir(wavelet_path)
+			subject_epochs = dict()
+
+			for file_name in wavelet_files:
+				attributes = file_name.split("_")
+				epoch_idx = int(attributes[-1][:-3])
+				band = attributes[-4]
+				if epoch_idx not in subject_epochs:
+					subject_epochs[epoch_idx] = dict()
+					subject_epochs[epoch_idx]['graph_name'] = attributes[0]
+				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name))
+			for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
+				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx, epoch_wavelet_dict['delta'],
+								epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],
+								epoch_wavelet_dict['beta'], epoch_wavelet_dict['gamma'])
+				self.epochs.append(epoch_tuple)
 
 	def len(self):
 		return self.length
@@ -86,6 +97,7 @@ class WaveletDataset(Dataset):
 			"beta": epoch_tuple[6],
 			"gamma": epoch_tuple[7],
 		}
+		return data
 
 class EEGDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
@@ -124,12 +136,10 @@ if __name__ == "__main__":
 
 	# dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
 
-	dataset = WaveletDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
+	dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=1.0)
 
 	print("Length of dataset: ", len(dataset))
 
-	print("Number of subjects: ", len(dataset.subjects))
-
 	data = dataset[0]
 
-	print("Data: ", data)
+	print("Data: ", len(data), data['graph'], data['subject_name'], data['delta'].shape, data['gamma'].shape)
