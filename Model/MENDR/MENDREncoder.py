@@ -65,17 +65,16 @@ class MENDREncoder(nn.Module):
                     )
                 )
                 L_out = (L_out - 1) * s - 2 * (w//2) + 1 * (w - 1) + 1
-    
+
+
     def forward(self, graph, x):
         patch_embedding = self.patch_embedder(x)
 
-        graph_x = graph.clone()
-
-        edge_index = graph_x.edge_index.to(device)
+        edge_index = graph.edge_index.to(device)
         edge_dist = graph.edge_attr.to(device)
 
         patch_embedding = patch_embedding.view(-1, patch_embedding.shape[-1])
-        
+
         encoding = self.gnn_embedder(patch_embedding, edge_index, edge_dist)
         encoding = encoding.view(-1, self.num_channels, self.encoded_h * self.heads)
         decoding = self.decoders(encoding)
