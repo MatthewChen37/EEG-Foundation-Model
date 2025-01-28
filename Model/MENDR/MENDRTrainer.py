@@ -5,14 +5,14 @@ import numpy as np
 import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
-from MENDRContextualizer import _make_mask, _make_span_from_seeds
+from .MENDRContextualizer import _make_mask, _make_span_from_seeds
 from torch_geometric.utils import unbatch
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, encoder, contextualizer, r2e, decoder, config, **kwargs):
+	def __init__(self, encoder, contextualizer, r2e, config, **kwargs):
 		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
 			stembedder = nn.DataParallel(stembedder)
@@ -26,9 +26,10 @@ class MENDRTrainer(BaseModelTrainer):
                                            tuple(config.encoder_grad_frac * ig 
 												 if ig is not None else None for ig in in_grad))
 			
-		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
+		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
-			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), save_model=config.save_model, save_model_directory=config.save_model_directory, **kwargs)
+			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), 
+			save_model=config.save_model, save_model_directory=config.save_model_directory, **kwargs)
 		
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span

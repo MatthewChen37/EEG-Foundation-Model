@@ -21,7 +21,7 @@ class WaveletEncoderDecoder(nn.Module):
         self.heads = heads
         self.encoded_h = encoded_h
         self.device = device
-
+        
         self.patch_embedder = nn.Sequential(
             nn.Conv1d(self.num_channels, self.num_channels, 
             self.conv_kernel_size, stride=self.conv_kernel_stride,
@@ -33,6 +33,7 @@ class WaveletEncoderDecoder(nn.Module):
 
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
+
         self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads).to(self.device)
         self.gnn_group_norm = nn.GroupNorm(1, self.encoded_h * self.heads)
         self.gnn_dropout = nn.Dropout(p=0.1)
@@ -90,6 +91,8 @@ put them into a single object.
 class MENDREncoder(nn.Module):
     def __init__(self, device):
         super(MENDREncoder, self).__init__()
+
+        self.downsampling_factor = 0
 
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(

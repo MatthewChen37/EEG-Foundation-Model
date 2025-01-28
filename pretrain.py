@@ -13,10 +13,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
 
-from Model.MENDR.MENDREncoder import MENDREncoder, MultiWaveletEncoder
-from Model.MENDR.MENDRContextualizer import mATTContextualizer
+from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
+from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
-from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
 #import torch.amp as amp
@@ -60,9 +59,9 @@ def main(args):
 	   " given frac: ", args.train_frac + args.val_frac)
 	
 	### Model ###
-	stEncoder = SpatialTemporalEncoder(args)
-	encoder = MultiWaveletEncoder()
-	contextualizer = mATTContextualizer(args)
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	encoder = MENDREncoder(device=device)
+	contextualizer = MENDRContextualizer(device=device)
 	r2e = R2E(args)
 
 	print("Starting training.")
@@ -72,7 +71,7 @@ def main(args):
 
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
 	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
-
+	'''
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -85,7 +84,7 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-
+	'''
 
 	print("*" * 50)
 	print("Cleaning up resources...")
