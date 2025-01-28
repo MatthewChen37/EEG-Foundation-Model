@@ -10,9 +10,9 @@ from math import floor
 Wavelet Encoder for MENDR with a decoder (only used for training)
 Each frequency band has its own embedder, GAT, and decoder
 '''
-class MENDREncoder(nn.Module):
-    def __init__(self, num_channels, conv_kernel_size, conv_kernel_stride, seq_len, heads, encoded_h, decoder_size, decoder_stride):
-        super(MENDREncoder, self).__init__()
+class WaveletEncoderDecoder(nn.Module):
+    def __init__(self, num_channels, conv_kernel_size, conv_kernel_stride, seq_len, heads, encoded_h, decoder_size, decoder_stride, device):
+        super(WaveletEncoderDecoder, self).__init__()
         assert len(decoder_size) == len(decoder_stride)
         self.num_channels = num_channels
         self.conv_kernel_size = conv_kernel_size
@@ -20,6 +20,7 @@ class MENDREncoder(nn.Module):
         self.seq_len = seq_len
         self.heads = heads
         self.encoded_h = encoded_h
+        self.device = device
 
         self.patch_embedder = nn.Sequential(
             nn.Conv1d(self.num_channels, self.num_channels, 
@@ -28,11 +29,11 @@ class MENDREncoder(nn.Module):
             nn.Dropout1d(0.1),
             nn.GroupNorm(1, self.num_channels), # Same as Layer Norm
             nn.GELU()
-        )
+        ).to(self.device)
 
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
-        self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads)
+        self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads).to(self.device)
         self.gnn_group_norm = nn.GroupNorm(1, self.encoded_h * self.heads)
         self.gnn_dropout = nn.Dropout(p=0.1)
         self.gnn_gelu = nn.GELU()
@@ -65,12 +66,14 @@ class MENDREncoder(nn.Module):
                 )
                 L_out = (L_out - 1) * s - 2 * (w//2) + 1 * (w - 1) + 1
 
+        self.decoders = self.decoders.to(self.device)
+
 
     def forward(self, graph, x):
         patch_embedding = self.patch_embedder(x)
 
-        edge_index = graph.edge_index.to(device)
-        edge_dist = graph.edge_attr.to(device)
+        edge_index = graph.edge_index.to(self.device)
+        edge_dist = graph.edge_attr.to(self.device)
 
         patch_embedding = patch_embedding.view(-1, patch_embedding.shape[-1])
 
@@ -84,9 +87,9 @@ class MENDREncoder(nn.Module):
 Initialize Encoders for each wavelet band and 
 put them into a single object.
 '''
-class MultiWaveletEncoder(nn.Module):
-    def __init__(self):
-        super(MultiWaveletEncoder, self).__init__()
+class MENDREncoder(nn.Module):
+    def __init__(self, device):
+        super(MENDREncoder, self).__init__()
 
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(
@@ -97,7 +100,8 @@ class MultiWaveletEncoder(nn.Module):
                     heads = 4,
                     encoded_h = 120,
                     decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1)
+                    decoder_stride = (2, 2, 1),
+                    device = device
                     ),
 
             'theta': WaveletEncoderDecoder(
@@ -108,7 +112,8 @@ class MultiWaveletEncoder(nn.Module):
                     heads = 4,
                     encoded_h = 120,
                     decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1)
+                    decoder_stride = (2, 2, 1),
+                    device = device
                     ),
 
             'alpha': WaveletEncoderDecoder(
@@ -119,7 +124,8 @@ class MultiWaveletEncoder(nn.Module):
                     heads = 4,
                     encoded_h = 240,
                     decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1)
+                    decoder_stride = (2, 2, 1),
+                    device = device
                     ),
 
             'beta': WaveletEncoderDecoder(
@@ -130,7 +136,8 @@ class MultiWaveletEncoder(nn.Module):
                     heads = 4,
                     encoded_h = 480,
                     decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1)
+                    decoder_stride = (2, 2, 1),
+                    device = device
                     ),
 
             'gamma': WaveletEncoderDecoder(
@@ -141,7 +148,8 @@ class MultiWaveletEncoder(nn.Module):
                     heads = 4,
                     encoded_h = 960,
                     decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1)
+                    decoder_stride = (2, 2, 1),
+                    device = device
                     ),
         })
 
