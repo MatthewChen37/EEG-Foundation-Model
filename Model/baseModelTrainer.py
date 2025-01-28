@@ -143,21 +143,7 @@ class BaseModelTrainer(object):
         for member in self._trainables:
             yield from self.__dict__[member].parameters()
 
-    def forward(self, *inputs):
-        """
-        Given a batch of inputs, return the outputs produced by the trainable module.
-
-        Parameters
-        ----------
-        inputs :
-               Tensors needed for underlying module.
-
-        Returns
-        -------
-        outputs :
-                Outputs of module
-
-        """
+    def forward(self, data):
         raise NotImplementedError
     
     def calculate_metrics(self, inputs, outputs):
@@ -170,24 +156,6 @@ class BaseModelTrainer(object):
                   Dictionary of metrics to be recorded.
         """
         raise NotImplementedError
-
-    def calculate_loss(self, inputs, outputs):
-        """
-        Given the inputs to and outputs from underlying modules, calculate the loss.
-
-        Returns
-        -------
-        Loss :
-             Single loss quantity to be minimized.
-        """
-        if isinstance(outputs, (tuple, list)):
-            device = outputs[0].device
-        else:
-            device = outputs.device
-        loss_fn = self.loss
-        if hasattr(self.loss, 'to'):
-            loss_fn = loss_fn.to(device)
-        return loss_fn(outputs, inputs[-1])
 
     def backward(self, loss):
         self.optimizer.zero_grad()
