@@ -6,15 +6,16 @@ import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
 from .MENDRContextualizer import _make_mask, _make_span_from_seeds
-from WaveletLoss import WaveletReconstructionLoss
+from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
+
+BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, encoder, contextualizer, r2e, config, **kwargs):
-		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
 			stembedder = nn.DataParallel(stembedder)
 			encoder = nn.DataParallel(encoder)
@@ -46,13 +47,6 @@ class MENDRTrainer(BaseModelTrainer):
 		}
 		self.num_negatives = config.num_negatives
 
-	def description(self, sequence_len):
-		encoded_samples = self._enc_downsample(sequence_len)
-		desc = "{} samples | mask span of {} at a rate of {} => E[masked] ~= {}".format(
-			encoded_samples, self.mask_span, self.mask_rate,
-			int(encoded_samples * self.mask_rate * self.mask_span))
-		return desc
-	
 	def _generate_negatives(self, z):
 		"""Generate negative samples to compare each sequence location against"""
 		batch_size, feat, full_len = z.shape
@@ -85,9 +79,12 @@ class MENDRTrainer(BaseModelTrainer):
 		return logits.view(-1, logits.shape[-1])
 
 			
-	def forward(self, *inputs):
-		encoder_output = self.encoder(z)
+	def forward(self, data):
+		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
+		inputs = dict(zip(BANDS, relevant_bands))
+		encoder_output = self.encoder(data['graph'], inputs)
 
+		'''
 		unmasked_z = z.clone()
 		batch_size, feat, samples = z.shape
 
@@ -107,9 +104,7 @@ class MENDRTrainer(BaseModelTrainer):
 		# Select negative candidates and generate labels for which are correct labels
 		negatives, negative_inds = self._generate_negatives(z)
 
-		'''
 		Convert z and negatives into SPD matrices 
-		'''
 		self.contextualizer.freeze_features(unfreeze=False)
 		self.r2e.freeze_features(unfreeze=False)
 
@@ -125,6 +120,8 @@ class MENDRTrainer(BaseModelTrainer):
 		# Prediction -> batch_size x predict_length x predict_length
 		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
 		return logits, z, mask, decoded_coefficients
+		'''
+		return
 	
 	def calculate_loss(self, inputs, outputs):
 		logits = outputs[0]
@@ -159,7 +156,6 @@ class MENDRTrainer(BaseModelTrainer):
 			'BENDR Reconstruction MSE': recon_loss.item()
 		}
 
-	
 	@staticmethod
 	def _mask_pct(inputs, outputs):
 		return outputs[2].float().mean().item()

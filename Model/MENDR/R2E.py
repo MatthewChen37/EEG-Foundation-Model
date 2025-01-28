@@ -10,14 +10,14 @@ The reason why we split into two classes is becauses it
 makes extracting the Riemannian embeddings easier.
 '''
 class R2E(nn.Module):
-	def __init__(self, config):
+	def __init__(self, epochs):
 		'''
 		Args:
 			config: a dictionary containing the following keys:
 				- epochs: number of epochs	
 		'''
 		super().__init__()
-		self.epochs = config.epochs
+		self.epochs = epochs
 		self.tangent = SPDTangentSpace(12)
 
 

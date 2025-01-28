@@ -128,23 +128,8 @@ class BaseModelTrainer(object):
         return loader_kwargs
 
     def _get_batch(self, iterator):
-        batch = next(iterator).to(self.device, non_blocking=self.cuda == 'cuda')
-        xforms = self._batch_transforms if self._training else self._eval_transforms
-        for xform in xforms:
-            if xform.only_trial_data:
-                batch[0] = xform(batch[0])
-            else:
-                batch = xform(batch)
+        batch = next(iterator)
         return batch
-
-    def add_batch_transform(self, transform: BatchTransform, training_only=True):
-        self._batch_transforms.append(transform)
-        if not training_only:
-            self._eval_transforms.append(transform)
-
-    def clear_batch_transforms(self):
-        self._batch_transforms = list()
-        self._eval_transforms = list()
 
     def parameters(self):
         """

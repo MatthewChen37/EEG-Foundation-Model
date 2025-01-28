@@ -2,6 +2,9 @@ import torch
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.R2E import R2E
+from Model.transforms import RandomTemporalCrop
+from dataset import WaveletDataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
@@ -58,8 +61,13 @@ def testContextualizer():
     assert shape == [4, 2, -1]
 
 def testMENDRTrainer():
-    # TODO: Implement
-    pass
+    encoder = MENDREncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    r2e = R2E(epochs=2)
+    trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
+    trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
+    trainer.fit(training_dataset=dataset, epochs=1, batch_size=8)
 
 if __name__ == "__main__":
     print("Testing Encoder...")
@@ -69,6 +77,6 @@ if __name__ == "__main__":
     testContextualizer()
 
     print("Testing Trainer...")
-    testTrainer()
+    testMENDRTrainer()
 
     print("All tests passed!")
