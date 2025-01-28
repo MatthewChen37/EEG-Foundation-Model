@@ -57,11 +57,18 @@ def testContextualizer():
     assert output.shape == torch.Size([8, 64, 64])
     assert shape == [4, 2, -1]
 
+def testMENDRTrainer():
+    # TODO: Implement
+    pass
+
 if __name__ == "__main__":
     print("Testing Encoder...")
     testEncoder()
 
     print("Testing Contextualizer...")
     testContextualizer()
+
+    print("Testing Trainer...")
+    testTrainer()
 
     print("All tests passed!")
