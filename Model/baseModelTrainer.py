@@ -12,7 +12,7 @@ Based on:
 '''
 class BaseModelTrainer(object):
 
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model=False, save_model_directory=None, **kwargs):
+    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model_directory=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
 
@@ -68,7 +68,6 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self._batch_transforms = list()
         self._eval_transforms = list()
-        self.save_model = save_model
         self.save_model_dir = save_model_directory
 
         # TODO: Modify
@@ -403,8 +402,6 @@ class BaseModelTrainer(object):
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
-
-
         mlflow.start_run()
         mlflow.autolog()
         for epoch in range(epochs):
@@ -424,7 +421,7 @@ class BaseModelTrainer(object):
             if self.scheduler is not None and not self.scheduler_after_batch:
                 self.scheduler.step()
 
-        if self.save_model:
+        if self.save_model_dir:
             import pickle as pkl
             best = self.save_best()
             with open(f'{self.save_model_dir}/model_{mlflow.active_run().info.run_id}.pkl', 'wb+') as f:

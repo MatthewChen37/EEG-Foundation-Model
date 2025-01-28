@@ -29,9 +29,6 @@ def main(args):
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
 
 
-	if args.save_model and args.save_model_directory is None:
-		raise ValueError("Save model is set to true but no save directory was specified.")
-
 	# Create input directory if it doesn't exist
 	if args.save_model_directory is not None:
 		Path(args.save_model_directory).mkdir(parents=True, exist_ok=True)
@@ -192,12 +189,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--save_model", type=bool,
-		help="Whether to save model.", default=False
-	)
-
-	parser.add_argument(
-		"--save_model_directory", type=str, help="If save model is true, specifies where to save it", required=False
+		"--save_model_directory", type=str, help="If not none, save somewhere.", required=False, default=None
 	)
 
 	# parse args

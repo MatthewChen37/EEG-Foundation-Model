@@ -6,6 +6,7 @@ import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
 from .MENDRContextualizer import _make_mask, _make_span_from_seeds
+from WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 
 class MENDRTrainer(BaseModelTrainer):
@@ -129,42 +130,13 @@ class MENDRTrainer(BaseModelTrainer):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
         # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
-
-		# TODO: Clean
-		if len(outputs) > 4:
-			wavelet_recons = {
-				'delta': outputs[3],
-				'theta': outputs[4],
-				'alpha': outputs[5],
-				'beta': outputs[6],
-				'gamma': outputs[7],
-				'other': outputs[8],
-				'high': outputs[9]
-			}
-			recon_loss = self._reconstruction_loss(inputs, wavelet_recons)
-		else:
-			recon_loss = self._reconstruction_loss(inputs, outputs[3])
+		recon_loss = self._reconstruction_loss(inputs, wavelet_recons)
 		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + recon_loss, recon_loss
-	
-	def _reconstruction_loss(self, original, wavelet_reconstructions):
-		# TODO: We really don't need this if statment...
-		# Mean Squared Error
-		if isinstance(original, list):
-			'''
-			Original is a list of tensors where each index is a 
-			batch. This case is used during validation.
-			'''
-			signals_from_graphs = torch.cat(original)
-		else:
-			'''
-			This case is used during training when the data is batched 
-			as hypergraphs. 	
-			'''
-			signals_from_graphs = torch.tensor(np.vstack(original.x)).float().to(self.device)
-			signals_from_graphs = unbatch(signals_from_graphs, original.batch)
-			signals_from_graphs = torch.stack(signals_from_graphs)
-		return WaveletLoss(signals_from_graphs, wavelet_reconstructions, self.band_coeffs)
-		    
+
+	def _reconstruction_loss(self, input, outputs):
+		decodings = {band: outputs[1] for band, outputs in outputs.items()}
+		return WaveletReconstructionLoss(inputs, decodings)
+				    
 	def _contrastive_accuracy(self, inputs, outputs):
 		logits = outputs[0]
 		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
