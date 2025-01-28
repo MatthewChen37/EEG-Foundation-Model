@@ -3,8 +3,10 @@ from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.R2E import R2E
+from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.transforms import RandomTemporalCrop
 from dataset import WaveletDataset
+from types import SimpleNamespace
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
@@ -61,6 +63,19 @@ def testContextualizer():
     assert shape == [4, 2, -1]
 
 def testMENDRTrainer():
+    args = SimpleNamespace(
+       encoder_grad_frac = 0.5,
+       learning_rate = 0.001,
+       l2_weight_decay = 0.001,
+       save_model_directory = None,
+       mask_rate = 0.01,
+       mask_span = 5,
+       temp = 0.01,
+       num_negatives=10,
+       enc_feat_l2 = 0.001,
+       multi_gpu = False
+    )
+
     encoder = MENDREncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     r2e = R2E(epochs=2)

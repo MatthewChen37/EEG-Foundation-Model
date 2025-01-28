@@ -31,7 +31,7 @@ class MENDRTrainer(BaseModelTrainer):
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), 
-			save_model=config.save_model, save_model_directory=config.save_model_directory, **kwargs)
+			save_model_directory=config.save_model_directory, **kwargs)
 		
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span
@@ -83,7 +83,7 @@ class MENDRTrainer(BaseModelTrainer):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
-
+		contextualizer_output = self.contextualizer(encoder_output)
 		'''
 		unmasked_z = z.clone()
 		batch_size, feat, samples = z.shape
