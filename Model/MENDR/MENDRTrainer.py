@@ -2,38 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-# TODO: Bad Practice fix later
 import sys
 import ptwt
-sys.path.append("../")
 from ..baseModelTrainer import BaseModelTrainer
-from ..contextualizer import _make_mask, _make_span_from_seeds
+from MENDRContextualizer import _make_mask, _make_span_from_seeds
 from torch_geometric.utils import unbatch
-from ..TrainingDecoder.WaveletLoss import WaveletLoss
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, stembedder, encoder, contextualizer, r2e, decoder, config, **kwargs):
-		'''
-		Args:
-			stembedder: a nn.Module
-			encoder: a nn.Module
-			contextualizer: a nn.Module
-			r2e: a nn.Module
-			config: a dictionary containing the following keys:
-				- mask_span: an integer
-				- multi_gpu: a boolean
-				- encoder_grad_frac: a float
-				- learning_rate: a float
-				- l2_weight_decay: a float	
-				- mask_rate: a float
-				- temp: a float
-				- permuted_contexts: a boolean
-				- enc_feat_l2: a float
-				- num_negatives: an integer
-		'''
+	def __init__(self, encoder, contextualizer, r2e, decoder, config, **kwargs):
 		self._enc_downsample = encoder.downsampling_factor
 		if config.multi_gpu:
 			stembedder = nn.DataParallel(stembedder)
@@ -47,14 +26,13 @@ class MENDRTrainer(BaseModelTrainer):
                                            tuple(config.encoder_grad_frac * ig 
 												 if ig is not None else None for ig in in_grad))
 			
-		super(MENDRTrainer, self).__init__(embedder=stembedder, encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
+		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, decoder=decoder,
 			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), save_model=config.save_model, save_model_directory=config.save_model_directory, **kwargs)
 		
 		self.mask_rate = config.mask_rate
 		self.mask_span = config.mask_span
 		self.temp = config.temp
-		self.permuted_contexts = config.permuted_contexts
 		# TODO: Fix these later...
 		self.alpha = config.enc_feat_l2
 		self.band_coeffs = {
@@ -63,8 +41,6 @@ class MENDRTrainer(BaseModelTrainer):
 			'alpha': 1,
 			'beta': 0,
 			'gamma': 0,
-			'other': 0,
-			'high': 0,
 		}
 		self.num_negatives = config.num_negatives
 
@@ -108,12 +84,9 @@ class MENDRTrainer(BaseModelTrainer):
 
 			
 	def forward(self, *inputs):
-		z = self.embedder(inputs[0])
-		z = self.encoder(z)
-		decoded_coefficients = self.decoder(z)
+		encoder_output = self.encoder(z)
 
 		unmasked_z = z.clone()
-
 		batch_size, feat, samples = z.shape
 
 		if self._training:

@@ -13,16 +13,15 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
 
-from Model.MENDR.SpatialTemporalEncoder import SpatialTemporalEncoder
+from Model.MENDR.MENDREncoder import MENDREncoder, MultiWaveletEncoder
 from Model.MENDR.MENDRContextualizer import mATTContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.encoder import ConvEncoder
 from Model.MENDR.R2E import R2E
 from Model.transforms import RandomTemporalCrop
-from Model.TrainingDecoder.WaveletDecoder import WaveletDecoder
 #import torch.amp as amp
 
-from dataset import EEGDataset
+from dataset import WaveletDataset
 
 def main(args):
 	# Start Run
@@ -55,27 +54,20 @@ def main(args):
 		raise ValueError("Train and Val Fraction should not exceed 1.")
 
 	# Load Dataset
-	dataset = EEGDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
+	dataset = WaveletDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), 
 	   " given frac: ", args.train_frac + args.val_frac)
 	
 	### Model ###
 	stEncoder = SpatialTemporalEncoder(args)
-	encoder = ConvEncoder(in_features=args.d_model, encoder_h=args.encoder_h, 
-						enc_width=args.enc_width, dropout=args.enc_dropout, enc_downsample=args.enc_downsample)
+	encoder = MultiWaveletEncoder()
 	contextualizer = mATTContextualizer(args)
 	r2e = R2E(args)
 
-	decoder = WaveletDecoder(encoder_h=args.encoder_h,
-					   out_features=args.d_model, 
-					   enc_width=args.enc_width,
-					   enc_downsample=args.enc_downsample,
-					   original_time_len=args.seq_len)
-
 	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(stEncoder, encoder, contextualizer, r2e, decoder, args)
+	trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 
 	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
@@ -132,56 +124,6 @@ def parse_args():
 
 	parser.add_argument(
 		"--val_frac", type=float, help="Fraction of dataset to use for validation", default=0.0
-	)
-
-	# Spatial Temporal Embedding Encoder Configs
-	parser.add_argument(
-		"--seq_len", type=int, help="Sequence Length of Recordings", default=15360
-	)
-
-	parser.add_argument(
-		"--pred_len", type=int, help="Prediction Length of Recordings, should be equal to sequence length",  default=15360
-	)
-
-	parser.add_argument(
-		"--top_k", type=int, help="Top K frequencies to select in TimesBlock", default=3
-	)
-
-	parser.add_argument(
-		"--d_model", type=int, help="Number of EEG Channels", default=19
-	)
-
-	parser.add_argument(
-		"--d_ff", type=int, help="Feed Forward Dimension in TimesBlock", default=5
-	)
-
-	parser.add_argument(
-		"--num_kernels", type=int, help="Number of Kernels in Convolutional Layer of Inception Block in TimesBlock", default=1
-	)
-
-	parser.add_argument(
-		"--num_heads", type=int, help="Number of Heads in Multihead Attention Layer of GAT",  default=2
-	)
-
-	parser.add_argument(
-		"--ste_dropout", type=float, help="Dropout Rate for GAT", default=0.1
-	)
-
-	# Encoder Configs
-	parser.add_argument(
-		"--encoder_h", type=int, help="Hidden Dimension of Encoder", default=32
-	)
-
-	parser.add_argument(
-		"--enc_width", type=ast.literal_eval, help="Encoder Width", default=(3, 2, 2, 2)
-	)
-
-	parser.add_argument(
-		"--enc_downsample", type=ast.literal_eval, help="Encoder Downsample", default=(3, 2, 2, 2)
-	)
-
-	parser.add_argument(
-		"--enc_dropout", type=float, help="Dropout Rate for Encoder", default=0.1
 	)
 
 	# MENDR Contextualizer Configs

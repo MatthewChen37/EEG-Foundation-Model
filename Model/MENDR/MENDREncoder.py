@@ -5,7 +5,6 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
-import matplotlib.pyplot as plt
 
 '''
 Wavelet Encoder for MENDR with a decoder (only used for training)
@@ -79,4 +78,76 @@ class MENDREncoder(nn.Module):
         encoding = encoding.view(-1, self.num_channels, self.encoded_h * self.heads)
         decoding = self.decoders(encoding)
 
-        return encoding, decoding 
+        return encoding, decoding
+
+'''
+Initialize Encoders for each wavelet band and 
+put them into a single object.
+'''
+class MultiWaveletEncoder(nn.Module):
+    def __init__(self):
+        super(MultiWaveletEncoder, self).__init__()
+
+        self.encoder_decoders = nn.ParameterDict({
+            'delta': WaveletEncoderDecoder(
+                    num_channels = 19,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
+                    seq_len = 246,
+                    heads = 4,
+                    encoded_h = 120,
+                    decoder_size = (2, 2, 1),
+                    decoder_stride = (2, 2, 1)
+                    ),
+
+            'theta': WaveletEncoderDecoder(
+                    num_channels = 19,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
+                    seq_len = 246,
+                    heads = 4,
+                    encoded_h = 120,
+                    decoder_size = (2, 2, 1),
+                    decoder_stride = (2, 2, 1)
+                    ),
+
+            'alpha': WaveletEncoderDecoder(
+                    num_channels = 19,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
+                    seq_len = 486,
+                    heads = 4,
+                    encoded_h = 240,
+                    decoder_size = (2, 2, 1),
+                    decoder_stride = (2, 2, 1)
+                    ),
+
+            'beta': WaveletEncoderDecoder(
+                    num_channels = 19,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
+                    seq_len = 966,
+                    heads = 4,
+                    encoded_h = 480,
+                    decoder_size = (2, 2, 1),
+                    decoder_stride = (2, 2, 1)
+                    ),
+
+            'gamma': WaveletEncoderDecoder(
+                    num_channels = 19,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
+                    seq_len = 1925,
+                    heads = 4,
+                    encoded_h = 960,
+                    decoder_size = (2, 2, 1),
+                    decoder_stride = (2, 2, 1)
+                    ),
+        })
+
+    def forward(self, graph, data):
+        assert data.keys() == self.encoder_decoders.keys()
+        output = {}
+        for band, band_decomposition in data.items():
+            output[band] = self.encoder_decoders[band](graph, band_decomposition)
+        return output

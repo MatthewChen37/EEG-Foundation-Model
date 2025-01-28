@@ -12,21 +12,9 @@ $L_{recon}$ represents the reconstruction loss of the reconstructed signal from 
 
 1. Pretraining
 	- Pretraining Parameter Documentation: 
-		- Spatial-Temporal Embedder:
-			1. `seq_len`: Input sequence length of TimesNet Block Module (Total # of time points).
-			2. `pred_len` is the output sequence length of the TimesNet Block Module. Currently, it is equal to the sequence length, so the Block module can “learn” a temporal signal embedding technique similar to positional embedding techniques.
-			3.  `top_k`: Top K frequencies will be selected in the Block Module.
-			4. `d_model`: Number of EEG channels in original data. Used in TimesNet Block Module.
-			5. `d_ff`: Feedforward dimension of Inception Block in TimesNet.
-			6. `num_kernels`: Number of kernels in the convolution of Inception Block in TimesNet Block Module.
-			7. `num_heads`: Number of heads in multi-head attention layer in GAT.
-			8. `ste_dropout`: Dropout rate for GAT.
-		- BENDR Encoder:
-			1. `encoder_h`: The encoder’s hidden dimension is designed to create “BENDR” features.
-			2. `enc_width`: Encoder width, i.e. the kernel size of convolution layers.
-			3. `enc_downsample` is the encoder downsample, which is the kernel’s stride in the convolution layers. In BENDR, `enc_width` = `enc_downsample`.
-			4. `enc_dropout`: Encoder dropout rate.
-   		- MENDR Contextualizer:
+		- MENDR Encoder:
+			1. Currently all preset in MENDREncoder.py MultiWaveletEncoder
+		- MENDR Contextualizer:
    			1. `in_features`: The contextualizer’s input features. Currently, they are equal to `encoder_h.` Implicitly, the transformers’ input layers are `in_features` * 3, as per BENDR.
    			2. `dropout`: Dropout rate for contextualizer.
    			3. `position_encoder`: A seed for setting parameters of position encoder in contextualizer.
@@ -40,8 +28,6 @@ $L_{recon}$ represents the reconstruction loss of the reconstructed signal from 
 			6. `num_negatives`: Number of distractors/negatives in contrastive task.
    			7. `enc_feat_l2`:  Similar to wav2vec, see equation 2 in wav2vec paper alpha parameter, want to encourage diversity in features in “BENDR codebook” and prevent a single feature’s value from becoming too big.
 			8. `max_crop_frac`: Maximum fraction to crop data in RandomTemporalCrop transform.
-			9. `permuted_encodings`: Randomly permute encodings during training.
-			10. `permuted_contexts`: Randomly permute contexts during training.
 			11. `train_frac`: Percentage of dataset to use for training (<1).
 			12. `val_frac`: Percentage of dataset to use for validation (<1>). Note that `train_frac` + `val_frac` <= 1. 
 
