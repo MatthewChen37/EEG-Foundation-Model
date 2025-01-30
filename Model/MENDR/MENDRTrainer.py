@@ -10,6 +10,7 @@ from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
+PRECISION = 7 # Number of decimal places to consider equal
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
@@ -45,12 +46,11 @@ class MENDRTrainer(BaseModelTrainer):
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
 			contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
-			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), 
+			metrics=dict(Accuracy=self._contrastive_accuracy), 
 			save_model_directory=config.save_model_directory, **kwargs)
 		
-		self.mask_rate = config.mask_rate
-		self.mask_span = config.mask_span
-		self.temp = config.temp
+		# Initialize temperature as a trainable parameter
+		self.temp = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		# TODO: Fix these later...
 		self.alpha = config.enc_feat_l2
 		self.band_coeffs = {
@@ -60,41 +60,10 @@ class MENDRTrainer(BaseModelTrainer):
 			'beta': 0,
 			'gamma': 0,
 		}
+
 		self.num_negatives = config.num_negatives
 
-	'''
-	def _generate_negatives(self, z):
-		"""Generate negative samples to compare each sequence location against"""
-		batch_size, feat, full_len = z.shape
-		z_k = z.permute([0, 2, 1]).reshape(-1, feat)
-		with torch.no_grad():
-			negative_inds = torch.randint(0, full_len-1, size=(batch_size, full_len * self.num_negatives))
-            # From wav2vec 2.0 implementation, I don't understand
-            # negative_inds[negative_inds >= candidates] += 1
-
-			for i in range(1, batch_size):
-				negative_inds[i] += i * full_len
-
-		z_k = z_k[negative_inds.view(-1)].view(batch_size, full_len, self.num_negatives, feat)
-		return z_k, negative_inds
-
-	def _calculate_similarity(self, z, c, negatives):
-		c = c.permute([0, 2, 1]).unsqueeze(-2)
-		z = z.permute([0, 2, 1]).unsqueeze(-2)
-
-		# In case the contextualizer matches exactly, need to avoid divide by zero errors
-		negative_in_target = (c == negatives).all(-1)
-		targets = torch.cat([c, negatives], dim=-2)
-
-		logits = F.cosine_similarity(z, targets, dim=-1) / self.temp
-
-		if negative_in_target.any():
-			# BENDR implementation is actually wrong...
-			logits[..., 1:][negative_in_target] = float("-inf")
-
-		return logits.view(-1, logits.shape[-1])
-	'''
-
+	
 	def forward(self, data):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
@@ -169,21 +138,26 @@ class MENDRTrainer(BaseModelTrainer):
 			correct (int): Number of correct predictions.
 			pairs (int): Number of prediction pairs.
 		"""
-		modalities = list(embeddings.keys())
-		num_targets = len(modalities)
+		frequency_bands = list(embeddings.keys())
+		num_targets = len(frequency_bands)
 		loss = 0.0
 		correct = 0
 		pairs = 0
 
 		for i in range(num_targets):
 			# Average embeddings of all other modalities
-			other_emb = torch.stack(
-				[embeddings[modalities[j]] for j in list(range(i)) + list(range(i + 1, num_targets))]
-			).sum(0) / (num_targets - 1)
+			other_embeddings = []
+			for j in list(range(i)) + list(range(i + 1, num_targets)):
+				embedding_tensor = embeddings[frequency_bands[j]][0]
+				original_batch_shape = embeddings[frequency_bands[j]][1] #TODO: Is this never used?
+				other_embeddings.append(embedding_tensor)
+			other_embeddings = torch.stack(other_embeddings).sum(0) / (num_targets - 1)
 
+			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 			# Compute logits
-			logits = torch.matmul(embeddings[modalities[i]], other_emb.T) * torch.exp(self.temp)
+			logits = self._batchWiseMatrixSimilarity(embeddings[frequency_bands[i]][0], other_embeddings) * torch.exp(self.temp)
 			labels = torch.arange(logits.shape[0], device=self.device)
+			#labels = self._gen_labels(original_batch_shape)
 
 			# Forward loss
 			l = criterion(logits, labels)
@@ -198,58 +172,40 @@ class MENDRTrainer(BaseModelTrainer):
 			pairs += logits.size(0)
 
 		return loss, correct, pairs
-	
-	def sample_wise_contrastive(self, wavelet_spd_embeddings, criterion):
-		"""
-		Compute Sample Wise Contrastive Loss for wavelet spd embeddings. 
 
-		Args:
-			wavelet_spd_embeddings (dict): Dictionary of wavelet embeddings as SPD matrices.
-			criterion: Loss function (e.g., CrossEntropyLoss).
-			temperature (torch.nn.Parameter): Temperature parameter for scaling logits.
+	def _gen_labels(self, batch_shape):
+		output = []
+		for i in range(batch_shape[0]):
+			for j in range(batch_shape[1]):
+				output.append(i)
+		output = torch.tensor(output).to(self.device)
+		return output
 
-		Returns:
-			loss (torch.Tensor): Total leave-one-out loss.
-			correct (int): Number of correct predictions.
-			pairs (int): Number of prediction pairs.
-		"""
+	def _matrixCosineSimilarity(self, A, B):
+		# Ensure matrices are symmetric
+		assert torch.allclose(A, A.T, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {A}"
+		assert torch.allclose(B, B.T, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {B}"
 
-		modalities = list(embeddings.keys())
-		num_targets = len(modalities)
-		loss = 0.0
-		correct = 0
-		pairs = 0
+		_, a_eigenvec = torch.linalg.eigh(A, UPLO='L')
+		_, b_eigenvec = torch.linalg.eigh(B, UPLO='L')
 
-		for i in range(num_targets):
-			for j in range(i + 1, num_targets):
-				emb_i = embeddings[modalities[i]]
-				emb_j = embeddings[modalities[j]]
+		sim = 0
+		assert a_eigenvec.shape == b_eigenvec.shape
+		for i in range(a_eigenvec.shape[1]):
+			sim += torch.dot(a_eigenvec[:, i], b_eigenvec[:, i])
+		return sim
 
-				# Compute logits
-				logits = torch.matmul(emb_i, emb_j.T) * torch.exp(temperature)
-				labels = torch.arange(logits.shape[0], device=device)
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B):
+		assert batch_A.shape == batch_B.shape
+		B, N, N = batch_A.shape
+		''' This could be accelerated '''
+		output = torch.zeros(B, B).to(self.device)
 
-				# Forward loss
-				l = criterion(logits, labels)
-				loss += l
-				correct += (torch.argmax(logits, axis=0) == labels).sum().item()
-				pairs += logits.size(0)
+		for i in range(B):
+			for j in range(B):
+				output[i, j] = self._matrixCosineSimilarity(batch_A[i], batch_B[i])
+		return output
 
-				# Reverse loss
-				l = criterion(logits.T, labels)
-				loss += l
-				correct += (torch.argmax(logits, axis=1) == labels).sum().item()
-				pairs += logits.size(0)
-
-		return loss, correct, pairs
-
-
-
-
-
-	@staticmethod
-	def _mask_pct(inputs, outputs):
-		return outputs[2].float().mean().item()
 
 	@staticmethod
 	def _simple_accuracy(inputs, outputs):
