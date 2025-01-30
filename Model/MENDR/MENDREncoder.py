@@ -80,6 +80,9 @@ class WaveletEncoderDecoder(nn.Module):
 
         encoding = self.gnn_embedder(patch_embedding, edge_index, edge_dist)
         encoding = encoding.view(-1, self.num_channels, self.encoded_h * self.heads)
+        encoding = self.gnn_dropout(self.gnn_group_norm(encoding))
+        encoding = self.gnn_gelu(encoding)
+
         decoding = self.decoders(encoding)
 
         return encoding, decoding

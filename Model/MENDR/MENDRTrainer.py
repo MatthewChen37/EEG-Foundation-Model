@@ -98,33 +98,10 @@ class MENDRTrainer(BaseModelTrainer):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
-
-
-
-
-
-		contextualizer_output = self.contextualizer(encoder_output)
+		loss, correct, pairs = self.leave_one_out(encoder_output, self.contrastive_loss_fn)
+		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
 
 		'''
-		unmasked_z = z.clone()
-		batch_size, feat, samples = z.shape
-
-		if self._training:
-			mask = _make_mask((batch_size, samples), self.mask_rate, samples, self.mask_span)
-		else:
-			mask = torch.zeros((batch_size, samples), requires_grad=False, dtype=torch.bool)
-			half_avg_num_seeds = max(1, int(samples * self.mask_rate * 0.5))
-			if samples <= self.mask_span * half_avg_num_seeds:
-				raise ValueError("Masking the entire span, pointless.")
-			mask[:, _make_span_from_seeds((samples // half_avg_num_seeds) * np.arange(half_avg_num_seeds).astype(int),
-												self.mask_span)] = True
-
-		c, shape = self.contextualizer(z, mask_t=mask)
-		c = self.r2e(c, shape)
-
-		# Select negative candidates and generate labels for which are correct labels
-		negatives, negative_inds = self._generate_negatives(z)
-
 		Convert z and negatives into SPD matrices 
 		self.contextualizer.freeze_features(unfreeze=False)
 		self.r2e.freeze_features(unfreeze=False)
@@ -191,7 +168,7 @@ class MENDRTrainer(BaseModelTrainer):
 			correct (int): Number of correct predictions.
 			pairs (int): Number of prediction pairs.
 		"""
-		embeddings = {band: outputs[0] for band, outputs in encoder_output.items()}
+		embeddings = {band: outputs[0].clone() for band, outputs in encoder_output.items()}
 		modalities = list(embeddings.keys())
 		num_targets = len(modalities)
 		loss = 0.0
@@ -221,6 +198,54 @@ class MENDRTrainer(BaseModelTrainer):
 			pairs += logits.size(0)
 
 		return loss, correct, pairs
+	
+	def sample_wise_contrastive(self, wavelet_spd_embeddings, criterion):
+		"""
+		Compute Sample Wise Contrastive Loss for wavelet spd embeddings. 
+
+		Args:
+			wavelet_spd_embeddings (dict): Dictionary of wavelet embeddings as SPD matrices.
+			criterion: Loss function (e.g., CrossEntropyLoss).
+			temperature (torch.nn.Parameter): Temperature parameter for scaling logits.
+
+		Returns:
+			loss (torch.Tensor): Total leave-one-out loss.
+			correct (int): Number of correct predictions.
+			pairs (int): Number of prediction pairs.
+		"""
+
+		modalities = list(embeddings.keys())
+		num_targets = len(modalities)
+		loss = 0.0
+		correct = 0
+		pairs = 0
+
+		for i in range(num_targets):
+			for j in range(i + 1, num_targets):
+				emb_i = embeddings[modalities[i]]
+				emb_j = embeddings[modalities[j]]
+
+				# Compute logits
+				logits = torch.matmul(emb_i, emb_j.T) * torch.exp(temperature)
+				labels = torch.arange(logits.shape[0], device=device)
+
+				# Forward loss
+				l = criterion(logits, labels)
+				loss += l
+				correct += (torch.argmax(logits, axis=0) == labels).sum().item()
+				pairs += logits.size(0)
+
+				# Reverse loss
+				l = criterion(logits.T, labels)
+				loss += l
+				correct += (torch.argmax(logits, axis=1) == labels).sum().item()
+				pairs += logits.size(0)
+
+		return loss, correct, pairs
+
+
+
+
 
 	@staticmethod
 	def _mask_pct(inputs, outputs):

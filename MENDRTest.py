@@ -62,7 +62,7 @@ def testContextualizer():
     assert output.shape == torch.Size([8, 64, 64])
     assert shape == [4, 2, -1]
 
-def testMENDRTrainer():
+def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
        encoder_grad_frac = 0.5,
        learning_rate = 0.001,
@@ -91,7 +91,10 @@ if __name__ == "__main__":
     print("Testing Contextualizer...")
     testContextualizer()
 
-    print("Testing Trainer...")
-    testMENDRTrainer()
+    print("Testing trainer fit without validation...")
+    testMENDRTrainerNoValidation()
+
+    print("Testing trainer fit with validation...")
+    #testMENDRTrainerNoValidation()
 
     print("All tests passed!")

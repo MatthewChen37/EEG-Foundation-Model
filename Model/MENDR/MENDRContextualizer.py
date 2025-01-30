@@ -72,15 +72,7 @@ class MENDRContextualizer(nn.Module):
 		x = x.to(self.device)
 		output = self.ract2(x)
 
-		if mask_t is not None:
-			x = x.clone()
-			# Note that self.mask_replacement is a learnable parameter
-			x.transpose(2, 1)[mask_t] = self.mask_replacement
-		if mask_c is not None:
-			x = x.clone()
-			x[mask_c] = 0
-		
-		return output, shape
+		return output, shape, wavelet_output
 	
 	def freeze_features(self, unfreeze=False, finetuning=False):
 		for param in self.parameters():
