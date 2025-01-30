@@ -62,6 +62,7 @@ class MENDRTrainer(BaseModelTrainer):
 		}
 		self.num_negatives = config.num_negatives
 
+	'''
 	def _generate_negatives(self, z):
 		"""Generate negative samples to compare each sequence location against"""
 		batch_size, feat, full_len = z.shape
@@ -92,8 +93,8 @@ class MENDRTrainer(BaseModelTrainer):
 			logits[..., 1:][negative_in_target] = float("-inf")
 
 		return logits.view(-1, logits.shape[-1])
+	'''
 
-			
 	def forward(self, data):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
