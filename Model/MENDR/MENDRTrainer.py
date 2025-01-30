@@ -99,8 +99,8 @@ class MENDRTrainer(BaseModelTrainer):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
-		loss, correct, pairs = self.leave_one_out(encoder_output, self.contrastive_loss_fn)
 		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
+		loss, correct, pairs = self.leave_one_out(wavelet_embeddings, self.contrastive_loss_fn)
 
 		'''
 		Convert z and negatives into SPD matrices 
@@ -155,12 +155,12 @@ class MENDRTrainer(BaseModelTrainer):
 			'BENDR Reconstruction MSE': recon_loss.item()
 		}
 	
-	def leave_one_out(self, encoder_output, criterion):
+	def leave_one_out(self, embeddings, criterion):
 		"""
 		Compute leave-one-out loss for wavelet embeddings.
 
 		Args:
-			encoder_output (dict): Dictionary of wavelet embeddings and decodings.
+			embeddings (dict): Dictionary of SPD wavelet embeddings.
 			criterion: Loss function (e.g., CrossEntropyLoss).
 			temperature (torch.nn.Parameter): Temperature parameter for scaling logits.
 
@@ -169,7 +169,6 @@ class MENDRTrainer(BaseModelTrainer):
 			correct (int): Number of correct predictions.
 			pairs (int): Number of prediction pairs.
 		"""
-		embeddings = {band: outputs[0].clone() for band, outputs in encoder_output.items()}
 		modalities = list(embeddings.keys())
 		num_targets = len(modalities)
 		loss = 0.0

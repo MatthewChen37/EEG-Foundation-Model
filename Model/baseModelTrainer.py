@@ -129,6 +129,9 @@ class BaseModelTrainer(object):
 
     def _get_batch(self, iterator):
         batch = next(iterator)
+        for key, value in batch.items():
+            if isinstance(value, torch.Tensor):
+                batch[key] = value.to(self.device)
         return batch
 
     def parameters(self):

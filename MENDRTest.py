@@ -57,7 +57,7 @@ def testContextualizer():
             'gamma': (torch.randn(4, 19, 3840).to(device), None)
         }
     contextualizer = MENDRContextualizer(device)
-    output, shape = contextualizer(example_input)
+    output, shape, wavelet_output = contextualizer(example_input)
 
     assert output.shape == torch.Size([8, 64, 64])
     assert shape == [4, 2, -1]

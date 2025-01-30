@@ -14,28 +14,28 @@ class MENDRContextualizer(nn.Module):
 		
 		self.wavelet_attention_manifolds = nn.ParameterDict({
 			'delta': nn.Sequential(
-				E2R(epochs=2),
-				AttentionManifold(19, 64)
+				E2R(epochs=2, device=self.device),
+				AttentionManifold(19, 64, self.device)
 			),
 			'theta': nn.Sequential(
-				E2R(epochs=2),
-				AttentionManifold(19, 64)
+				E2R(epochs=2, device=self.device),
+				AttentionManifold(19, 64, self.device)
 			),
 			'alpha': nn.Sequential(
-				E2R(epochs=2),
-				AttentionManifold(19, 64)
+				E2R(epochs=2, device=self.device),
+				AttentionManifold(19, 64, self.device)
 			),
 			'beta': nn.Sequential(
-				E2R(epochs=2),
-				AttentionManifold(19, 64)
+				E2R(epochs=2, device=self.device),
+				AttentionManifold(19, 64, self.device)
 			),
 			'gamma': nn.Sequential(
-				E2R(epochs=2),
-				AttentionManifold(19, 64)
+				E2R(epochs=2, device=self.device),
+				AttentionManifold(19, 64, self.device)
 			)
 		})
 
-		self.combined_attention = AttentionManifold(64, 64)
+		self.combined_attention = AttentionManifold(64, 64, self.device)
 		self.ract2 = SPDRectified()
 	
 		
@@ -59,7 +59,7 @@ class MENDRContextualizer(nn.Module):
 			wavelet_output[band] = self.wavelet_attention_manifolds[band](band_encodings_decodings[0])
 
 
-		combined_wavelet_spd = torch.zeros(embedding_shapes['delta'][0], 2, 64, 64)
+		combined_wavelet_spd = torch.zeros(embedding_shapes['delta'][0], 2, 64, 64).to(self.device)
 		for band in wavelet_output.keys():
 			output = wavelet_output[band][0]
 			shape  = wavelet_output[band][1]

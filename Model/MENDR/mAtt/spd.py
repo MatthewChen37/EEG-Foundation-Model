@@ -12,12 +12,12 @@ Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/spd.py
 '''
 class SPDTransform(nn.Module):
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, device):
         super(SPDTransform, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         self.increase_dim = None
         if output_size > input_size:
-            self.increase_dim = SPDIncreaseDim(input_size, output_size)
+            self.increase_dim = SPDIncreaseDim(input_size, output_size, self.device)
             input_size = output_size
         self.weight = StiefelParameter(torch.FloatTensor(input_size, output_size).to(self.device), requires_grad=True)
         nn.init.orthogonal_(self.weight)
@@ -35,9 +35,9 @@ class SPDTransform(nn.Module):
 
 class SPDIncreaseDim(nn.Module):
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, device):
         super(SPDIncreaseDim, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         self.register_buffer('eye', torch.eye(output_size, input_size).to(self.device))
         add = torch.as_tensor([0] * input_size + [1] * (output_size-input_size), dtype=torch.float32)
         add = add.to(self.device)
