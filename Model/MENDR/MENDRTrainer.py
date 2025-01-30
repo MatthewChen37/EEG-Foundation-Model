@@ -24,12 +24,27 @@ class MENDRTrainer(BaseModelTrainer):
 			decoder = nn.DataParallel(decoder)
 		if config.encoder_grad_frac < 1:
             # TODO: I hope this works...
+			for band, encoder_decoder in encoder.encoder_decoders.items():
+				encoder_decoder.patch_embedder.register_full_backward_hook(lambda module, in_grad, out_grad:
+					tuple(config.encoder_grad_frac * ig 
+						  if ig is not None else None for ig in in_grad))
+				
+				encoder_decoder.gnn_embedder.register_full_backward_hook(lambda module, in_grad, out_grad:
+					tuple(config.encoder_grad_frac * ig 
+						  if ig is not None else None for ig in in_grad))
+				
+				encoder_decoder.decoders.register_full_backward_hook(lambda module, in_grad, out_grad:
+					tuple(config.encoder_grad_frac * ig
+						  if ig is not None else None for ig in in_grad))
+
+			'''
 			encoder.register_full_backward_hook(lambda module, in_grad, out_grad:
                                            tuple(config.encoder_grad_frac * ig 
 												 if ig is not None else None for ig in in_grad))
-			
+			'''
+
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
-			loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
+			contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy, Mask_pct=self._mask_pct), 
 			save_model_directory=config.save_model_directory, **kwargs)
 		
@@ -83,7 +98,13 @@ class MENDRTrainer(BaseModelTrainer):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
+
+
+
+
+
 		contextualizer_output = self.contextualizer(encoder_output)
+
 		'''
 		unmasked_z = z.clone()
 		batch_size, feat, samples = z.shape
@@ -155,6 +176,51 @@ class MENDRTrainer(BaseModelTrainer):
 			'MASK_pct': self._mask_pct(inputs, outputs),
 			'BENDR Reconstruction MSE': recon_loss.item()
 		}
+	
+	def leave_one_out(self, encoder_output, criterion):
+		"""
+		Compute leave-one-out loss for wavelet embeddings.
+
+		Args:
+			encoder_output (dict): Dictionary of wavelet embeddings and decodings.
+			criterion: Loss function (e.g., CrossEntropyLoss).
+			temperature (torch.nn.Parameter): Temperature parameter for scaling logits.
+
+		Returns:
+			loss (torch.Tensor): Total leave-one-out loss.
+			correct (int): Number of correct predictions.
+			pairs (int): Number of prediction pairs.
+		"""
+		embeddings = {band: outputs[0] for band, outputs in encoder_output.items()}
+		modalities = list(embeddings.keys())
+		num_targets = len(modalities)
+		loss = 0.0
+		correct = 0
+		pairs = 0
+
+		for i in range(num_targets):
+			# Average embeddings of all other modalities
+			other_emb = torch.stack(
+				[embeddings[modalities[j]] for j in list(range(i)) + list(range(i + 1, num_targets))]
+			).sum(0) / (num_targets - 1)
+
+			# Compute logits
+			logits = torch.matmul(embeddings[modalities[i]], other_emb.T) * torch.exp(self.temp)
+			labels = torch.arange(logits.shape[0], device=self.device)
+
+			# Forward loss
+			l = criterion(logits, labels)
+			loss += l
+			correct += (torch.argmax(logits, axis=0) == labels).sum().item()
+			pairs += logits.size(0)
+
+			# Reverse loss
+			l = criterion(logits.T, labels)
+			loss += l
+			correct += (torch.argmax(logits, axis=1) == labels).sum().item()
+			pairs += logits.size(0)
+
+		return loss, correct, pairs
 
 	@staticmethod
 	def _mask_pct(inputs, outputs):
