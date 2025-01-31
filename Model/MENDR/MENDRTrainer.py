@@ -124,23 +124,18 @@ class MENDRTrainer(BaseModelTrainer):
 			other_embeddings = torch.stack(other_embeddings).sum(0) / (num_targets - 1)
 
 			# trace normalization
-			curr_target = embeddings[frequency_bands[i]][0]
-			trace = curr_target.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
-			trace = trace.view(-1, 1, 1)
-			curr_target /= 0.5 * trace
-			identity = torch.eye(curr_target.shape[-1], curr_target.shape[-1], device=self.device).to(self.device).repeat(curr_target.shape[0], 1, 1)
-			curr_target = curr_target + (1e-5 * identity)
-
+			curr_target = embeddings[frequency_bands[i]][0] # curr_target already trace normalized
+			
 			trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 			trace = trace.view(-1, 1, 1)
-			other_embeddings /= 0.5 * trace
+			other_embeddings /= * trace
 			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
 			other_embeddings = other_embeddings + (1e-5 * other_embeddings)
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
+
 			# Compute logits
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings, original_batch_shape) 
 			labels = torch.arange(logits.shape[0], device=self.device)
-			#labels = self._gen_labels(original_batch_shape).long()
 
 			# Forward loss
 			l = criterion(logits, labels)
@@ -155,16 +150,6 @@ class MENDRTrainer(BaseModelTrainer):
 			pairs += logits.size(0)
 		return loss, correct, pairs
 
-	def _gen_labels(self, batch_shape):
-		output = torch.zeros((batch_shape[0], batch_shape[1])).to(self.device)
-		idx = 0
-		for i in range(batch_shape[0]):
-			for j in range(batch_shape[1]):
-				output[i, j] = idx
-				idx += 1
-		return output
-
-		
 	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, original_batch_shape):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
