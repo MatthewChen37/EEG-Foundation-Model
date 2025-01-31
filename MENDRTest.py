@@ -116,15 +116,15 @@ def testMENDRTrainerWithValidation():
 
 if __name__ == "__main__":
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    #testContextualizer()
+    testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
-    #testMENDRTrainerNoValidation()
+    testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
