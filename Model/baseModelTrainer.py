@@ -150,6 +150,8 @@ class BaseModelTrainer(object):
         self._training = mode
         for member in self._trainables:
             self.__dict__[member].train(mode=mode)
+            if hasattr(member, 'freeze_features'):
+                member.freeze_features(unfreeze=mode)
 
     def train_step(self, inputs):
         self.train(True)
@@ -160,6 +162,7 @@ class BaseModelTrainer(object):
         encoder_decoder_output = outputs[3]
         correct = outputs[4]
         pairs = outputs[5]
+        euclidean_embeddings = outputs[6]
         loss, recon_loss = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
         self.backward(loss)
         self.optimizer.step()
@@ -188,18 +191,9 @@ class BaseModelTrainer(object):
                 Metric scores for the entire
         """
         self.train(False)
-        inputs, outputs = self.predict(dataset, **loader_kwargs)
-        _, recon_loss = self.calculate_loss(inputs, outputs)
-
-
-        '''
-        NOTE: Currently inputs will be the original signals of each electrode extracted from the graph object
-        and the output is the output of the encoder in SPD form. The logits of the outputs are only for the 
-        mATT attention module. We will need to improve on this implementation. 
-        '''
-
-        metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
-        metrics['loss'] = recon_loss
+        correct, pairs, contrastive_loss, recon_loss = self.predict(dataset, **loader_kwargs)
+        metrics = self.calculate_metrics(correct=correct, pairs=pairs, contrastive_loss=contrastive_loss, recon_loss=recon_loss)
+        metrics['loss'] = contrastive_loss + recon_loss
         return metrics
 
     def predict(self, dataset, **loader_kwargs):
@@ -228,44 +222,26 @@ class BaseModelTrainer(object):
         pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
         data_iterator = iter(dataset)
 
-        inputs = list()
-        outputs = list()
+        correct = 0
+        pairs = 0
+        contrastive_loss = 0
+        recon_loss_agg = 0
 
         with torch.no_grad():
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
-                output_batch = self.forward(input_batch)
+                outputs = self.forward(input_batch)
+                contextualizer_embeddings = outputs[0]
+                original_batch_shape = outputs[1]
+                contrastive_loss += outputs[2]
+                encoder_decoder_output = outputs[3]
+                correct += outputs[4]
+                pairs += outputs[5]
+                euclidean_embeddings = outputs[6]
+                loss, recon_loss = self.calculate_loss(input_batch, encoder_decoder_output, contrastive_loss)
+                recon_loss_agg += recon_loss
 
-                inputs.append([torch.tensor(tensor).float().cpu() for tensor in input_batch.x])
-                if isinstance(output_batch, torch.Tensor):
-                    outputs.append(output_batch.cpu())
-                else:
-                    batch = []
-                    for item in output_batch:
-                        if isinstance(item, dict):
-                            for k, v in item.items():
-                                batch.append(v.cpu())
-                        else:
-                            batch.append(item.cpu())
-                    outputs.append(batch)
-
-        ''' 
-        TODO: This is very messy code.
-        I removed package_multiple_tensors().
-        Figure out way to make nicer.  
-        ''' 
-        
-        def package_input(batches):
-            result = []
-            for b in batches:
-                result.append(torch.stack(b, dim=0))
-            return result
-
-        def package_output(batches):
-            return [torch.cat(b) for b in zip(*batches)]
-
-
-        return package_input(inputs), package_output(outputs)
+        return correct, pairs, contrastive_loss, recon_loss_agg
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):

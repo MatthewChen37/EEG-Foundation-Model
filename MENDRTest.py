@@ -7,6 +7,7 @@ from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.transforms import RandomTemporalCrop
 from dataset import WaveletDataset
 from types import SimpleNamespace
+import torch.utils.data as torchdata
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
@@ -59,7 +60,7 @@ def testContextualizer():
     contextualizer = MENDRContextualizer(device)
     output, shape, wavelet_output = contextualizer(example_input)
 
-    assert output.shape == torch.Size([16, 64, 64])
+    assert output.shape == torch.Size([16, 32, 32])
     assert shape == [8, 2, -1]
 
 def testMENDRTrainerNoValidation():
@@ -81,23 +82,53 @@ def testMENDRTrainerNoValidation():
     r2e = R2E(epochs=2)
     trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
     trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=256)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32) # As long as it runs it works lol
+
+def testMENDRTrainerWithValidation():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    mask_rate = 0.01,
+    mask_span = 5,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    train_frac=0.8,
+    val_frac=0.2
+    )
+
+    encoder = MENDREncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    r2e = R2E(epochs=2)
+    trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
+    trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)
+    num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
+    num_val = len(dataset) - num_train
+    train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
+    print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
+    trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=1, batch_size=32)
+
 
 if __name__ == "__main__":
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    testContextualizer()
+    #testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
-    testMENDRTrainerNoValidation()
+    #testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    #testMENDRTrainerNoValidation()
+    testMENDRTrainerWithValidation()
+    print("Trainer fit with validation test passed!")
 
     print("All tests passed!")

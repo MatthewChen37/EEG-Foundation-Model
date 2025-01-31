@@ -5,7 +5,6 @@ import numpy as np
 import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
-from .MENDRContextualizer import _make_mask, _make_span_from_seeds
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 from .safeSVD import SVD
@@ -27,7 +26,7 @@ class MENDRTrainer(BaseModelTrainer):
 		
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
 			contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
-			metrics=dict(Accuracy=self._contrastive_accuracy), 
+			metrics=dict(), 
 			save_model_directory=config.save_model_directory, **kwargs)
 		
 		# Initialize temperature as a trainable parameter
@@ -50,7 +49,8 @@ class MENDRTrainer(BaseModelTrainer):
 		encoder_output = self.encoder(data['graph'], inputs)
 		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
 		loss, correct, pairs = self.leave_one_out(wavelet_embeddings, self.contrastive_loss_fn)
-		return contextualizer_output, shape, loss, encoder_output, correct, pairs
+		euclidean_embeddings = self.r2e(contextualizer_output, shape)
+		return contextualizer_output, shape, loss, encoder_output, correct, pairs, euclidean_embeddings
 	
 	def calculate_loss(self, inputs, encoder_decoder_output, contrastive_loss):
 		recon_loss = self._reconstruction_loss(inputs, encoder_decoder_output)
@@ -128,6 +128,7 @@ class MENDRTrainer(BaseModelTrainer):
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		for i in range(batch_A.shape[0]):
 			for j in range(batch_B.shape[0]):
+				# Based on the Log-Euclidean metric 
 				a_u, a_s, a_v = self.svd(batch_A[i, :, :])
 				b_u, b_s, b_v = self.svd(batch_B[j, :, :])
 				tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(1, 0)
