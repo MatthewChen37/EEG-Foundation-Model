@@ -15,21 +15,6 @@ class BaseModelTrainer(object):
     def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model_directory=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
-
-        Parameters
-        ----------
-        cuda : bool, string, None
-            If boolean, sets whether to enable training on the GPU, if a string, specifies can be used to specify
-            which device to use. If None (default) figures it out automatically.
-        lr : float
-            The learning rate to use, this will probably something that should be tuned for each application.
-            Start with multiplying or dividing by values of 2, 5 or 10 to seek out a good number.
-        l2_weight_decay : float
-            One of the simplest and most common regularizing techniques. If you find a model rapidly
-            reaching high training accuracy (and not validation) increase this. If having trouble fitting
-            the training data, decrease this.
-        kwargs : dict
-            Additional arguments.
         """
         if cuda is None:
             cuda = torch.cuda.is_available()
@@ -59,15 +44,12 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
-        self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True,
-                                         momentum=0.9)
+        self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9)
         self.scheduler = None
         self.scheduler_after_batch = False
         self.epoch = None
         self.lr = lr
         self.weight_decay = l2_weight_decay
-        self._batch_transforms = list()
-        self._eval_transforms = list()
         self.save_model_dir = save_model_directory
 
         # TODO: Modify
@@ -178,10 +160,6 @@ class BaseModelTrainer(object):
         encoder_decoder_output = outputs[3]
         loss, recon_loss = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
         self.backward(loss)
-
-        import sys
-        sys.exit(1)
-
         self.optimizer.step()
         if self.scheduler is not None and self.scheduler_after_batch:
             self.scheduler.step()
