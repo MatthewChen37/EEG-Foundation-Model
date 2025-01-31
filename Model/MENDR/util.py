@@ -3,6 +3,7 @@ import torch
 
 
 # Bless this https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/trg.py#L3-L4
+# From https://github.com/jax-ml/jax/issues/2311
 def safe_inverse(x, epsilon=1E-12):
 	return x/(x**2 + epsilon)
 
