@@ -8,7 +8,7 @@ from ..baseModelTrainer import BaseModelTrainer
 from .MENDRContextualizer import _make_mask, _make_span_from_seeds
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
-from .util import SVD
+from .safeSVD import SVD
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 PRECISION = 7 # Number of decimal places to consider equal

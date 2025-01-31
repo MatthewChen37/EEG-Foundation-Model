@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .spd import SPDTransform, SPDTangentSpace, SPDRectified
-from ..util import SVD
+from ..safeSVD import SVD
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/mAtt.py

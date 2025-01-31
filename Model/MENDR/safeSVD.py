@@ -4,6 +4,11 @@ import torch
 
 # Bless this https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/trg.py#L3-L4
 # From https://github.com/jax-ml/jax/issues/2311
+# Sometimes the singular values of the covariance matrix could be degenerate
+# which causes the gradient during backpropagation to explode. There is nothing 
+# that can be done about it because it is a characteristic of the data:
+# https://discuss.pytorch.org/t/function-linalgsvdbackward0-returned-nan-values-in-its-0th-output/190410
+# To handle this case, we do a safe inverse which adds a small epsilon
 def safe_inverse(x, epsilon=1E-12):
 	return x/(x**2 + epsilon)
 
