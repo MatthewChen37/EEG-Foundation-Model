@@ -53,25 +53,6 @@ class MENDRTrainer(BaseModelTrainer):
 		encoder_output = self.encoder(data['graph'], inputs)
 		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
 		loss, correct, pairs = self.leave_one_out(wavelet_embeddings, self.contrastive_loss_fn)
-
-		'''
-		Convert z and negatives into SPD matrices 
-		self.contextualizer.freeze_features(unfreeze=False)
-		self.r2e.freeze_features(unfreeze=False)
-
-		spd_z, shape = self.contextualizer(unmasked_z)
-		spd_z = self.r2e(spd_z, shape)
-
-		spd_negatives, shape = self.contextualizer(negatives[:, :, 0, :].permute([0, 2, 1]))
-		spd_negatives = self.r2e(spd_negatives, shape)
-
-		self.contextualizer.freeze_features(unfreeze=True)
-		self.r2e.freeze_features(unfreeze=True)
-
-		# Prediction -> batch_size x predict_length x predict_length
-		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
-		return logits, z, mask, decoded_coefficients
-		'''
 		return contextualizer_output, shape, loss, encoder_output
 	
 	def calculate_loss(self, inputs, encoder_decoder_output, contrastive_loss):
