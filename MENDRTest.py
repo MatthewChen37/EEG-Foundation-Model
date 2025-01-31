@@ -50,30 +50,30 @@ def testEncoder():
 
 def testContextualizer():
     example_input = {
-            'delta': (torch.randn(4, 19, 480).to(device), None),
-            'theta': (torch.randn(4, 19, 480).to(device), None),
-            'alpha': (torch.randn(4, 19, 960).to(device), None),
-            'beta': (torch.randn(4, 19, 1920).to(device), None),
-            'gamma': (torch.randn(4, 19, 3840).to(device), None)
+            'delta': (torch.randn(8, 19, 480).to(device), None),
+            'theta': (torch.randn(8, 19, 480).to(device), None),
+            'alpha': (torch.randn(8, 19, 960).to(device), None),
+            'beta': (torch.randn(8, 19, 1920).to(device), None),
+            'gamma': (torch.randn(8, 19, 3840).to(device), None)
         }
     contextualizer = MENDRContextualizer(device)
     output, shape, wavelet_output = contextualizer(example_input)
 
-    assert output.shape == torch.Size([8, 64, 64])
-    assert shape == [4, 2, -1]
+    assert output.shape == torch.Size([16, 64, 64])
+    assert shape == [8, 2, -1]
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
-       encoder_grad_frac = 0.5,
-       learning_rate = 0.001,
-       l2_weight_decay = 0.001,
-       save_model_directory = None,
-       mask_rate = 0.01,
-       mask_span = 5,
-       temp = 0.01,
-       num_negatives=10,
-       enc_feat_l2 = 0.001,
-       multi_gpu = False
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    mask_rate = 0.01,
+    mask_span = 5,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False
     )
 
     encoder = MENDREncoder(device=device)
@@ -82,7 +82,8 @@ def testMENDRTrainerNoValidation():
     trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
     trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=8)
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=dataset, epochs=1, batch_size=8)
 
 if __name__ == "__main__":
     print("Testing Encoder...")

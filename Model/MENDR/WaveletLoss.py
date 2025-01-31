@@ -4,12 +4,20 @@ loss_fn = torch.nn.MSELoss()
 
 
 def WaveletReconstructionLoss(inputs, outputs):
+    for band, input_data in inputs.items():
+        if isinstance(input_data, torch.Tensor):
+            inputs[band] = input_data.float()
+    for band, output_data in outputs.items():
+        if isinstance(output_data, torch.Tensor):
+            outputs[band] = output_data.float()
+
     delta_loss = loss_fn(inputs['delta'], outputs['delta']) + fft_loss(inputs['delta'], outputs['delta']) 
     theta_loss = loss_fn(inputs['theta'], outputs['theta'])  + fft_loss(inputs['theta'], outputs['theta'])
     alpha_loss = loss_fn(inputs['alpha'], outputs['alpha'])  + fft_loss(inputs['alpha'], outputs['alpha'])
     beta_loss =  loss_fn(inputs['beta'],  outputs['beta'])  + fft_loss(inputs['beta'], outputs['beta'])
     gamma_loss = loss_fn(inputs['gamma'], outputs['gamma'])  + fft_loss(inputs['gamma'], outputs['gamma'])
     loss = delta_loss + theta_loss + alpha_loss + beta_loss + gamma_loss
+    loss = loss.to(torch.float32)
     return loss
 
 def fft_loss(output, target):

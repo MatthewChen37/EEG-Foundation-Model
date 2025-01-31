@@ -172,8 +172,15 @@ class BaseModelTrainer(object):
     def train_step(self, inputs):
         self.train(True)
         outputs = self.forward(inputs)
-        loss, recon_loss = self.calculate_loss(inputs, outputs)
+        contextualizer_embeddings = outputs[0]
+        original_batch_shape = outputs[1]
+        contrastive_loss = outputs[2]
+        encoder_decoder_output = outputs[3]
+        loss, recon_loss = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
         self.backward(loss)
+
+        import sys
+        sys.exit(1)
 
         self.optimizer.step()
         if self.scheduler is not None and self.scheduler_after_batch:

@@ -8,6 +8,7 @@ from ..baseModelTrainer import BaseModelTrainer
 from .MENDRContextualizer import _make_mask, _make_span_from_seeds
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
+from .util import SVD
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 PRECISION = 7 # Number of decimal places to consider equal
@@ -23,27 +24,7 @@ class MENDRTrainer(BaseModelTrainer):
 			contextualizer = nn.DataParallel(contextualizer)
 			r2e = nn.DataParallel(r2e)
 			decoder = nn.DataParallel(decoder)
-		if config.encoder_grad_frac < 1:
-            # TODO: I hope this works...
-			for band, encoder_decoder in encoder.encoder_decoders.items():
-				encoder_decoder.patch_embedder.register_full_backward_hook(lambda module, in_grad, out_grad:
-					tuple(config.encoder_grad_frac * ig 
-						  if ig is not None else None for ig in in_grad))
-				
-				encoder_decoder.gnn_embedder.register_full_backward_hook(lambda module, in_grad, out_grad:
-					tuple(config.encoder_grad_frac * ig 
-						  if ig is not None else None for ig in in_grad))
-				
-				encoder_decoder.decoders.register_full_backward_hook(lambda module, in_grad, out_grad:
-					tuple(config.encoder_grad_frac * ig
-						  if ig is not None else None for ig in in_grad))
-
-			'''
-			encoder.register_full_backward_hook(lambda module, in_grad, out_grad:
-                                           tuple(config.encoder_grad_frac * ig 
-												 if ig is not None else None for ig in in_grad))
-			'''
-
+		
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, r2e=r2e, 
 			contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate, l2_weight_decay=config.l2_weight_decay,
 			metrics=dict(Accuracy=self._contrastive_accuracy), 
@@ -62,6 +43,8 @@ class MENDRTrainer(BaseModelTrainer):
 		}
 
 		self.num_negatives = config.num_negatives
+
+		self.svd = SVD.apply
 
 	
 	def forward(self, data):
@@ -89,16 +72,13 @@ class MENDRTrainer(BaseModelTrainer):
 		logits = self._calculate_similarity(z=spd_z, c=c, negatives=spd_negatives.permute([0, 2, 1])[:, :, None, :])
 		return logits, z, mask, decoded_coefficients
 		'''
-		return
+		return contextualizer_output, shape, loss, encoder_output
 	
-	def calculate_loss(self, inputs, outputs):
-		logits = outputs[0]
-		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-        # Note the loss_fn here integrates the softmax as per the normal classification pipeline (leveraging logsumexp)
-		recon_loss = self._reconstruction_loss(inputs, wavelet_recons)
-		return self.loss_fn(logits, labels) + self.alpha * outputs[1].pow(2).mean() + recon_loss, recon_loss
+	def calculate_loss(self, inputs, encoder_decoder_output, contrastive_loss):
+		recon_loss = self._reconstruction_loss(inputs, encoder_decoder_output)
+		return contrastive_loss + recon_loss, recon_loss
 
-	def _reconstruction_loss(self, input, outputs):
+	def _reconstruction_loss(self, inputs, outputs):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
 		return WaveletReconstructionLoss(inputs, decodings)
 				    
@@ -123,6 +103,15 @@ class MENDRTrainer(BaseModelTrainer):
 			'MASK_pct': self._mask_pct(inputs, outputs),
 			'BENDR Reconstruction MSE': recon_loss.item()
 		}
+	
+	@staticmethod
+	def _simple_accuracy(inputs, outputs):
+		if isinstance(outputs, (list, tuple)):
+			outputs = outputs[0]
+        # average over last dimensions
+		while len(outputs.shape) >= 3:
+			outputs = outputs.mean(dim=-1)
+		return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
 	
 	def leave_one_out(self, embeddings, criterion):
 		"""
@@ -153,11 +142,24 @@ class MENDRTrainer(BaseModelTrainer):
 				other_embeddings.append(embedding_tensor)
 			other_embeddings = torch.stack(other_embeddings).sum(0) / (num_targets - 1)
 
+			# trace normalization
+			curr_target = embeddings[frequency_bands[i]][0]
+			trace = curr_target.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+			trace = trace.view(-1, 1, 1)
+			curr_target /= 0.5 * trace
+			identity = torch.eye(curr_target.shape[-1], curr_target.shape[-1], device=self.device).to(self.device).repeat(curr_target.shape[0], 1, 1)
+			curr_target = curr_target + (1e-5 * identity)
+
+			trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+			trace = trace.view(-1, 1, 1)
+			other_embeddings /= 0.5 * trace
+			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
+			other_embeddings = other_embeddings + (1e-5 * other_embeddings)
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 			# Compute logits
-			logits = self._batchWiseMatrixSimilarity(embeddings[frequency_bands[i]][0], other_embeddings) * torch.exp(self.temp)
+			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings, original_batch_shape) 
 			labels = torch.arange(logits.shape[0], device=self.device)
-			#labels = self._gen_labels(original_batch_shape)
+			#labels = self._gen_labels(original_batch_shape).long()
 
 			# Forward loss
 			l = criterion(logits, labels)
@@ -170,49 +172,47 @@ class MENDRTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(logits, axis=1) == labels).sum().item()
 			pairs += logits.size(0)
-
 		return loss, correct, pairs
 
 	def _gen_labels(self, batch_shape):
-		output = []
+		output = torch.zeros((batch_shape[0], batch_shape[1])).to(self.device)
+		idx = 0
 		for i in range(batch_shape[0]):
 			for j in range(batch_shape[1]):
-				output.append(i)
-		output = torch.tensor(output).to(self.device)
+				output[i, j] = idx
+				idx += 1
 		return output
 
-	def _matrixCosineSimilarity(self, A, B):
-		# Ensure matrices are symmetric
-		assert torch.allclose(A, A.T, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {A}"
-		assert torch.allclose(B, B.T, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {B}"
+		
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, original_batch_shape):
+		#a_u, a_s, a_v = torch.svd(batch_A)
+		#b_u, b_s, b_v = torch.svd(batch_B)
 
-		_, a_eigenvec = torch.linalg.eigh(A, UPLO='L')
-		_, b_eigenvec = torch.linalg.eigh(B, UPLO='L')
+		#print(a_s)
 
-		sim = 0
-		assert a_eigenvec.shape == b_eigenvec.shape
-		for i in range(a_eigenvec.shape[1]):
-			sim += torch.dot(a_eigenvec[:, i], b_eigenvec[:, i])
-		return sim
+		#tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
+		#tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
 
-	def _batchWiseMatrixSimilarity(self, batch_A, batch_B):
-		assert batch_A.shape == batch_B.shape
-		B, N, N = batch_A.shape
-		''' This could be accelerated '''
-		output = torch.zeros(B, B).to(self.device)
+		#tensor_log_A = self.contextualizer.combined_attention.tensor_log(batch_A.view(original_batch_shape[0], original_batch_shape[1], batch_A.shape[1], batch_A.shape[2]))
+		#tensor_log_B = self.contextualizer.combined_attention.tensor_log(batch_B.view(original_batch_shape[0], original_batch_shape[1], batch_B.shape[1], batch_B.shape[2]))
 
-		for i in range(B):
-			for j in range(B):
-				output[i, j] = self._matrixCosineSimilarity(batch_A[i], batch_B[i])
+		#tensor_log_A = tensor_log_A.view(batch_A.shape)
+		#tensor_log_B = tensor_log_B.view(batch_B.shape)
+
+		#print(tensor_log_A.shape, tensor_log_B.shape)
+
+		# This can be sped up
+		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
+		for i in range(batch_A.shape[0]):
+			for j in range(batch_B.shape[0]):
+				a_u, a_s, a_v = self.svd(batch_A[i, :, :])
+				b_u, b_s, b_v = self.svd(batch_B[j, :, :])
+				tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(1, 0)
+				tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(1, 0)
+
+				inner_term = tensor_log_A - tensor_log_B
+				output[i, j] = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.temp)
+
 		return output
 
 
-	@staticmethod
-	def _simple_accuracy(inputs, outputs):
-		if isinstance(outputs, (list, tuple)):
-			outputs = outputs[0]
-        # average over last dimensions
-		while len(outputs.shape) >= 3:
-			outputs = outputs.mean(dim=-1)
-		return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
-	
