@@ -158,13 +158,14 @@ class BaseModelTrainer(object):
         original_batch_shape = outputs[1]
         contrastive_loss = outputs[2]
         encoder_decoder_output = outputs[3]
+        correct = outputs[4]
+        pairs = outputs[5]
         loss, recon_loss = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
         self.backward(loss)
         self.optimizer.step()
         if self.scheduler is not None and self.scheduler_after_batch:
             self.scheduler.step()
-
-        train_metrics = self.calculate_metrics(inputs, outputs=outputs, recon_loss=recon_loss)
+        train_metrics = self.calculate_metrics(correct=correct, pairs=pairs, contrastive_loss=contrastive_loss, recon_loss=recon_loss)
         train_metrics.setdefault('loss', loss.item())
 
         return train_metrics

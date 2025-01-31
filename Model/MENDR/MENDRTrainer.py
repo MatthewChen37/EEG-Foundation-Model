@@ -41,19 +41,16 @@ class MENDRTrainer(BaseModelTrainer):
 			'beta': 0,
 			'gamma': 0,
 		}
-
 		self.num_negatives = config.num_negatives
-
 		self.svd = SVD.apply
 
-	
 	def forward(self, data):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
 		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
 		loss, correct, pairs = self.leave_one_out(wavelet_embeddings, self.contrastive_loss_fn)
-		return contextualizer_output, shape, loss, encoder_output
+		return contextualizer_output, shape, loss, encoder_output, correct, pairs
 	
 	def calculate_loss(self, inputs, encoder_decoder_output, contrastive_loss):
 		recon_loss = self._reconstruction_loss(inputs, encoder_decoder_output)
@@ -63,36 +60,12 @@ class MENDRTrainer(BaseModelTrainer):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
 		return WaveletReconstructionLoss(inputs, decodings)
 				    
-	def _contrastive_accuracy(self, inputs, outputs):
-		logits = outputs[0]
-		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-		return self._simple_accuracy([labels], logits)
-    
-	def calculate_metrics(self, *inputs, outputs, recon_loss):
-		"""
-		Cosine Similarity from Calculating Similarity
-		"""
-		# "Logits" from _calculate_similarity
-		logits = outputs[0]
-		labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-		
-		means = logits.mean(dim=0)
+	def calculate_metrics(self, correct, pairs, contrastive_loss, recon_loss):
 		return {
-			'Negative Similarity': means[0].item(),
-			'Positive Similarity': means[1].item(),
-			'Contrastive Accuracy': self._simple_accuracy([labels], logits),
-			'MASK_pct': self._mask_pct(inputs, outputs),
-			'BENDR Reconstruction MSE': recon_loss.item()
+			'Contrastive Accuracy': correct / pairs,
+			'Contrastive Loss': contrastive_loss.item(),
+			'Reconstruction Loss': recon_loss.item()
 		}
-	
-	@staticmethod
-	def _simple_accuracy(inputs, outputs):
-		if isinstance(outputs, (list, tuple)):
-			outputs = outputs[0]
-        # average over last dimensions
-		while len(outputs.shape) >= 3:
-			outputs = outputs.mean(dim=-1)
-		return (inputs[-1] == outputs.argmax(dim=-1)).float().mean().item()
 	
 	def leave_one_out(self, embeddings, criterion):
 		"""
@@ -128,13 +101,13 @@ class MENDRTrainer(BaseModelTrainer):
 			
 			trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 			trace = trace.view(-1, 1, 1)
-			other_embeddings /= * trace
+			other_embeddings /= trace
 			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
 			other_embeddings = other_embeddings + (1e-5 * other_embeddings)
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 
 			# Compute logits
-			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings, original_batch_shape) 
+			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings) 
 			labels = torch.arange(logits.shape[0], device=self.device)
 
 			# Forward loss
@@ -150,7 +123,7 @@ class MENDRTrainer(BaseModelTrainer):
 			pairs += logits.size(0)
 		return loss, correct, pairs
 
-	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, original_batch_shape):
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		for i in range(batch_A.shape[0]):
