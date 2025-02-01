@@ -1,5 +1,5 @@
-from mAtt.utils import *
-from mAtt import StiefelParameter
+from .utils import *
+from . import StiefelParameter
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/optimizer.py

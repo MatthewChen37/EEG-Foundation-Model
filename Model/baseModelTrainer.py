@@ -5,6 +5,7 @@ import mlflow
 from torch_geometric.loader import DataLoader
 from sys import gettrace
 from .transforms import BatchTransform
+from Model.MENDR.mAtt.optimizer import MixOptimizer
 
 '''
 Based on:
@@ -44,7 +45,7 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
-        self.optimizer = torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9)
+        self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
         self.scheduler = None
         self.scheduler_after_batch = False
         self.epoch = None
@@ -56,10 +57,10 @@ class BaseModelTrainer(object):
         self.best_metric = None
 
     def set_optimizer(self, optimizer):
-        assert isinstance(optimizer, torch.optim.Optimizer)
+        # assert isinstance(optimizer, torch.optim.Optimizer)
         del self.optimizer
         self.optimizer = optimizer
-        self.lr = float(self.optimizer.param_groups[0]['lr'])
+        self.lr = float(self.optimizer.optimizer.param_groups[0]['lr'])
 
     def set_scheduler(self, scheduler, step_every_batch=False):
         """
@@ -127,6 +128,8 @@ class BaseModelTrainer(object):
         """
         for member in self._trainables:
             yield from self.__dict__[member].parameters()
+            #print(f"{member} Total number of parameters: ", sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad))
+
 
     def forward(self, data):
         raise NotImplementedError

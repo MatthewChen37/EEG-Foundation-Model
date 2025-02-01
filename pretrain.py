@@ -17,7 +17,7 @@ from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.R2E import R2E
-from Model.transforms import RandomTemporalCrop
+from Model.MENDR.mAtt.optimizer import MixOptimizer
 #import torch.amp as amp
 
 from dataset import WaveletDataset
@@ -66,9 +66,10 @@ def main(args):
 	trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 
-	trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
-	trainer.add_batch_transform(RandomTemporalCrop(max_crop_frac=args.max_crop_frac))
-	'''
+	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
+	optimizer = MixOptimizer(optimizer)
+	trainer.set_optimizer(optimizer)
+
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -81,7 +82,6 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-	'''
 
 	print("*" * 50)
 	print("Cleaning up resources...")
@@ -132,32 +132,16 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--position_encoder", type=int, help="Position Encoder", default=25
-	)
-
-	parser.add_argument(
 		"--epochs", type=int, help="Number of Epochs for mATT", default=4
 	)
 
 	# Trainer Configs
 	parser.add_argument(
-		"--mask_span", type=int, help="Mask Span", default=10
-	)
-
-	parser.add_argument(
-		"--mask_rate", type=float, help="Mask Rate", default=0.065
-	)
-
-	parser.add_argument(
 		"--multi_gpu", type=bool, help="Multi GPU Training", default=False
 	)
 
 	parser.add_argument(
-		"--encoder_grad_frac", type=float, help="Encoder Gradient Fraction", default=1
-	)
-
-	parser.add_argument(
-		"--learning_rate", type=float, help="Learning Rate", default=0.1
+		"--learning_rate", type=float, help="Learning Rate", default=0.001
 	)
 
 	parser.add_argument(
@@ -165,27 +149,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--temp", type=float, help="Temperature", default=0.1
+		"--temp", type=float, help="Temperature", default=10.0
 	)
 
 	parser.add_argument(
 		"--enc_feat_l2", type=float, help="Encoder Feature L2", default=1e-5
-	)
-
-	parser.add_argument(
-		"--num_negatives", type=int, help="Number of Negatives in Contrastive Learning Task", default=20
-	)
-
-	parser.add_argument(
-		"--max_crop_frac", type=float, help="Maximum Crop Fraction on Random Temporal Crop", default=0.05
-	)
-
-	parser.add_argument(
-		"--permuted_encodings", type=bool, help="Permuted Encodings", default=False
-	)
-
-	parser.add_argument(
-		"--permuted_contexts", type=bool, help="Permuted Contexts", default=False
 	)
 
 	parser.add_argument(

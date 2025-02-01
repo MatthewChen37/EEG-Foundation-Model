@@ -18,8 +18,11 @@ class R2E(nn.Module):
 		'''
 		super().__init__()
 		self.epochs = epochs
-		self.tangent = SPDTangentSpace(12)
-
+		self.tangent = SPDTangentSpace(32)
+		self.layer_norm = nn.LayerNorm(528)
+		self.ff1 = nn.Linear(528, 32)
+		self.ff2 = nn.Linear(32, 32)
+		self.gelu = nn.GELU()
 
 	def forward(self, x, shape):
 		'''
@@ -29,6 +32,10 @@ class R2E(nn.Module):
 		'''
 		x = self.tangent(x)
 		x = x.view(shape[0], shape[1], -1)
+		x = self.layer_norm(x)
+		x = self.ff1(x)
+		x = self.gelu(x)
+		x = self.ff2(x)
 		return x
 	
 	def freeze_features(self, unfreeze=False, finetuning=False):

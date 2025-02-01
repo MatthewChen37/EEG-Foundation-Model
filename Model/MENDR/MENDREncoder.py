@@ -34,11 +34,11 @@ class WaveletEncoderDecoder(nn.Module):
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
 
-        self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads).to(self.device)
+        self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads, concat=False).to(self.device)
         self.gnn_group_norm = nn.GroupNorm(1, self.num_channels).to(self.device)
         self.gnn_dropout = nn.Dropout(p=0.1).to(self.device)
         self.gnn_gelu = nn.GELU().to(self.device)
-        L_out = self.encoded_h * self.heads
+        L_out = self.encoded_h
         self.decoders = nn.Sequential()
         for i, (w, s) in enumerate(zip(decoder_size, decoder_stride)):
             if i == len(decoder_size) - 1:
@@ -70,6 +70,16 @@ class WaveletEncoderDecoder(nn.Module):
         self.decoders = self.decoders.to(self.device)
 
 
+    def getEncoderParamCount(self):
+        patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
+        gnn_embbeder_count = sum(p.numel() for p in self.gnn_embedder.parameters() if p.requires_grad)
+        gnn_group_norm_count = sum(p.numel() for p in self.gnn_group_norm.parameters() if p.requires_grad)
+        return patch_embedder_count + gnn_embbeder_count + gnn_group_norm_count
+
+    def getDecoderParamCount(self):
+        decoder_count = sum(p.numel() for p in self.decoders.parameters() if p.requires_grad)
+        return decoder_count
+
     def forward(self, graph, x):
         patch_embedding = self.patch_embedder(x)
 
@@ -79,7 +89,7 @@ class WaveletEncoderDecoder(nn.Module):
         patch_embedding = patch_embedding.view(-1, patch_embedding.shape[-1])
 
         encoding = self.gnn_embedder(patch_embedding, edge_index, edge_dist)
-        encoding = encoding.view(-1, self.num_channels, self.encoded_h * self.heads)
+        encoding = encoding.view(-1, self.num_channels, self.encoded_h)
         encoding = self.gnn_dropout(self.gnn_group_norm(encoding))
         encoding = self.gnn_gelu(encoding)
 
@@ -158,6 +168,11 @@ class MENDREncoder(nn.Module):
                     device = device
                     ),
         })
+        
+        '''
+        for band, module in self.encoder_decoders.items():
+            print(f"Band {band}, Encoder Parameter Count: {module.getEncoderParamCount()} Decoder Parameter Count: {module.getDecoderParamCount()} ")
+        '''
 
     def forward(self, graph, data):
         assert data.keys() == self.encoder_decoders.keys()

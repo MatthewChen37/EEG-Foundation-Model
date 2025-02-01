@@ -63,7 +63,6 @@ class AttentionManifold(nn.Module):
         self.d_in = in_embed_size
         self.d_out = out_embed_size
         self.device = device
-        # TODO: Why are these on the CPU?
         self.q_trans = SPDTransform(self.d_in, self.d_out, self.device)
         self.k_trans = SPDTransform(self.d_in, self.d_out, self.device)
         self.v_trans = SPDTransform(self.d_in, self.d_out, self.device)
@@ -72,13 +71,21 @@ class AttentionManifold(nn.Module):
 
 
     def tensor_log(self, t):#4dim
+        '''
         output = torch.zeros(t.shape).to(self.device)
         for i in range(t.shape[0]):
             for j in range(t.shape[1]):
                 u, s, v = self.svd(t[i, j, :, :])
                 output[i, j] = u @ torch.diag_embed(torch.log(s)) @ v.permute(1, 0)
         return output
-        
+        '''
+        batch = t.shape[0]
+        epochs = t.shape[1]
+        u, s, v = self.svd(t.view(batch * epochs, t.shape[2], t.shape[3]))
+        u = u.view(batch, epochs, u.shape[1], u.shape[2])
+        s = s.view(batch, epochs, s.shape[1])
+        v = v.view(batch, epochs, v.shape[1], v.shape[2])
+        return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
     def tensor_exp(self, t):#4dim
         # condition: t is symmetric!
         s, u = torch.linalg.eigh(t)

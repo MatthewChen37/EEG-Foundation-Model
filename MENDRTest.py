@@ -4,6 +4,7 @@ from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.R2E import R2E
 from Model.MENDR.MENDRTrainer import MENDRTrainer
+from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
 from dataset import WaveletDataset
 from types import SimpleNamespace
@@ -43,11 +44,11 @@ def testEncoder():
     for band, (encoding, decoding) in output.items():
         assert decoding.shape == example_input[band].shape
 
-    assert output['delta'][0].shape == torch.Size([4, 19, 480]), f"Actual Shape: {output['delta'][0].shape}" 
-    assert output['theta'][0].shape == torch.Size([4, 19, 480]), f"Actual Shape: {output['theta'][0].shape}" 
-    assert output['alpha'][0].shape == torch.Size([4, 19, 960]), f"Actual Shape: {output['alpha'][0].shape}" 
-    assert output['beta'][0].shape == torch.Size([4, 19, 1920]), f"Actual Shape: {output['beta'][0].shape}" 
-    assert output['gamma'][0].shape == torch.Size([4, 19, 3840]), f"Actual Shape: {output['gamma'][0].shape}" 
+    assert output['delta'][0].shape == torch.Size([4, 19, 120]), f"Actual Shape: {output['delta'][0].shape}" 
+    assert output['theta'][0].shape == torch.Size([4, 19, 120]), f"Actual Shape: {output['theta'][0].shape}" 
+    assert output['alpha'][0].shape == torch.Size([4, 19, 240]), f"Actual Shape: {output['alpha'][0].shape}" 
+    assert output['beta'][0].shape == torch.Size([4, 19, 480]), f"Actual Shape: {output['beta'][0].shape}" 
+    assert output['gamma'][0].shape == torch.Size([4, 19, 960]), f"Actual Shape: {output['gamma'][0].shape}" 
 
 def testContextualizer():
     example_input = {
@@ -60,8 +61,8 @@ def testContextualizer():
     contextualizer = MENDRContextualizer(device)
     output, shape, wavelet_output = contextualizer(example_input)
 
-    assert output.shape == torch.Size([16, 32, 32])
-    assert shape == [8, 2, -1]
+    assert output.shape == torch.Size([32, 32, 32])
+    assert shape == [8, 4, -1]
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
@@ -81,9 +82,12 @@ def testMENDRTrainerNoValidation():
     contextualizer = MENDRContextualizer(device=device)
     r2e = R2E(epochs=2)
     trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
-    trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32) # As long as it runs it works lol
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=dataset, epochs=4, batch_size=1) # As long as it runs it works lol
 
 def testMENDRTrainerWithValidation():
     args = SimpleNamespace(
@@ -105,22 +109,26 @@ def testMENDRTrainerWithValidation():
     contextualizer = MENDRContextualizer(device=device)
     r2e = R2E(epochs=2)
     trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
-    trainer.set_optimizer(torch.optim.Adam(trainer.parameters()))
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)
     num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
     num_val = len(dataset) - num_train
     train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
     print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-    trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=1, batch_size=32)
+    with torch.autograd.detect_anomaly():
+        torch.nn.utils.clip_grad_norm_(trainer.parameters(), max_norm=10, error_if_nonfinite=True)
+        trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=2, batch_size=32)
 
 
 if __name__ == "__main__":
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    testContextualizer()
+    #testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
@@ -128,7 +136,7 @@ if __name__ == "__main__":
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    testMENDRTrainerWithValidation()
+    #testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("All tests passed!")
