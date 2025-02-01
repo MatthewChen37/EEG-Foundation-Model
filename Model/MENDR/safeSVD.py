@@ -51,6 +51,7 @@ class SVD(torch.autograd.Function):
 	'''
 
 	@staticmethod
+	# Must be a decomposition of batches of matrices
 	def backward(self, dU, dS, dV):
 		U, S, V = self.saved_tensors
 		# U: [B, N, N], S: [B, N], V: [B, N, N]
@@ -75,13 +76,7 @@ class SVD(torch.autograd.Function):
 		Sv = (F-G)*(VdV-VdV.permute(0, 2, 1))/2
 
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
-		if (M>NS):
-			dA = dA + (torch.eye(M, dtype=dU.dtype, device=dU.device) - U@Ut) @ (dU/S) @ Vt 
-		if (N>NS):
-			dA = dA + (U/S) @ dV.t() @ (torch.eye(N, dtype=dU.dtype, device=dU.device) - V@Vt)
-		return dA
-
-
+		return 100*dA
 
 class svdv2(torch.autograd.Function):
     @staticmethod

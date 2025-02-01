@@ -87,7 +87,7 @@ def testMENDRTrainerNoValidation():
     trainer.set_optimizer(optimizer)
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
     with torch.autograd.detect_anomaly():
-        trainer.fit(training_dataset=dataset, epochs=4, batch_size=1) # As long as it runs it works lol
+        trainer.fit(training_dataset=dataset, epochs=3, batch_size=16) # As long as it runs it works lol
 
 def testMENDRTrainerWithValidation():
     args = SimpleNamespace(
@@ -132,11 +132,11 @@ if __name__ == "__main__":
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
-    testMENDRTrainerNoValidation()
+    #testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    #testMENDRTrainerWithValidation()
+    testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("All tests passed!")

@@ -42,6 +42,8 @@ class MENDRTrainer(BaseModelTrainer):
 		}
 		self.svd = SVD.apply
 
+		self.softmax = nn.Softmax(dim=1)
+
 	def forward(self, data):
 		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
@@ -123,26 +125,23 @@ class MENDRTrainer(BaseModelTrainer):
 			other_embeddings = other_embeddings + (1e5 * identity)
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 
-			curr_target *= 1e5
-			other_embeddings *= 1e5
-
-
 			# Compute logits
-
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings)
 			labels = torch.arange(logits.shape[0], device=self.device)
 
 			# Forward loss
-			l = criterion(logits, labels)
+			forward_logits = self.softmax(logits)
+			l = criterion(forward_logits, labels)
 			loss += l
-			correct += (torch.argmax(logits, axis=0) == labels).sum().item()
-			pairs += logits.size(0)
+			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
+			pairs += forward_logits.size(0)
 
 			# Reverse loss
-			l = criterion(logits.T, labels)
+			reverse_logits = self.softmax(logits.T)
+			l = criterion(reverse_logits, labels)
 			loss += l
-			correct += (torch.argmax(logits, axis=1) == labels).sum().item()
-			pairs += logits.size(0)
+			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
+			pairs += reverse_logits.size(0)
 		return loss, correct, pairs
 
 
