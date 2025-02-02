@@ -65,7 +65,6 @@ def main(args):
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-
 	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)

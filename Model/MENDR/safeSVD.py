@@ -76,8 +76,10 @@ class SVD(torch.autograd.Function):
 		Sv = (F-G)*(VdV-VdV.permute(0, 2, 1))/2
 
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
-		return 100*dA
+		return dA
 
+
+# From https://arxiv.org/abs/2104.03821
 class svdv2(torch.autograd.Function):
     @staticmethod
     def forward(ctx, M):

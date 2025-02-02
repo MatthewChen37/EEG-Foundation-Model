@@ -44,34 +44,25 @@ class MENDRTrainer(BaseModelTrainer):
 
 		self.softmax = nn.Softmax(dim=1)
 
+	def _std_norm(self, x):
+		mean = torch.mean(x, dim=(0, 1), keepdim=True)
+		std = torch.std(x, dim=(0, 1), keepdim=True)
+		x = (x - mean) / std
+		return x
+
 	def forward(self, data):
-		relevant_bands = [data[band].float().to(self.device) for band in BANDS]
+		relevant_bands = [self._std_norm(data[band].float().to(self.device)) for band in BANDS]
 		inputs = dict(zip(BANDS, relevant_bands))
 		encoder_output = self.encoder(data['graph'], inputs)
 		contextualizer_output, shape, wavelet_embeddings = self.contextualizer(encoder_output)
-
-		'''
-		if torch.isnan(contextualizer_output).any():
-			print("Context NaN")
-		for k , v in wavelet_embeddings.items():
-			encoding = v[0]
-			decoding = v[1]
-			if torch.isnan(encoding).any():
-				print("Encoding NaN")
-			if torch.isnan(decoding).any():
-				print("Decoding NaN")
-		'''
-
-
-
 		loss, correct, pairs = self.leave_one_out(wavelet_embeddings, self.contrastive_loss_fn)
 		euclidean_embeddings = self.r2e(contextualizer_output, shape)
 		#print("Euclidean Embedding Shape:", euclidean_embeddings.shape)
 		return contextualizer_output, shape, loss, encoder_output, correct, pairs, euclidean_embeddings
 	
 	def calculate_loss(self, inputs, encoder_decoder_output, contrastive_loss):
-		recon_loss = self._reconstruction_loss(inputs, encoder_decoder_output)
-		return contrastive_loss, recon_loss
+		recon_loss, loss_dict = self._reconstruction_loss(inputs, encoder_decoder_output)
+		return recon_loss, recon_loss, loss_dict
 
 	def _reconstruction_loss(self, inputs, outputs):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
@@ -118,11 +109,13 @@ class MENDRTrainer(BaseModelTrainer):
 			# trace normalization
 			curr_target = embeddings[frequency_bands[i]][0] # curr_target already trace normalized
 
+			'''
 			trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 			trace = trace.view(-1, 1, 1)
 			other_embeddings /= trace
 			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
 			other_embeddings = other_embeddings + (1e5 * identity)
+			'''
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 
 			# Compute logits
@@ -202,7 +195,7 @@ class MENDRTrainer(BaseModelTrainer):
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
 		inner_term = tensor_log_A[:, None, ...] - tensor_log_B[None, ...]
-		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.temp)
+		output = torch.linalg.matrix_norm(inner_term, ord='fro') * 1
 
 		return output
 

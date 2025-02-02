@@ -46,8 +46,7 @@ class BaseModelTrainer(object):
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
         self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
-        self.scheduler = None
-        self.scheduler_after_batch = False
+        self.scheduler_after_batch = True
         self.epoch = None
         self.lr = lr
         self.weight_decay = l2_weight_decay
@@ -61,32 +60,6 @@ class BaseModelTrainer(object):
         del self.optimizer
         self.optimizer = optimizer
         self.lr = float(self.optimizer.optimizer.param_groups[0]['lr'])
-
-    def set_scheduler(self, scheduler, step_every_batch=False):
-        """
-        This allow the addition of a learning rate schedule to the process. By default, a linear warmup with cosine
-        decay will be used. Any scheduler that is an instance of :any:`Scheduler` (pytorch's schedulers, or extensions
-        thereof) can be set here. Additionally, a string keywords can be used including:
-          - "constant"
-
-        Parameters
-        ----------
-        scheduler: str, Scheduler
-        step_every_batch: bool
-                          Whether to call step after every batch (if `True`), or after every epoch (`False`)
-
-        """
-        if isinstance(scheduler, str):
-            if scheduler.lower() == 'constant':
-                scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda e: 1.0)
-            else:
-                raise ValueError("Scheduler {} is not supported.".format(scheduler))
-        # This is the most common one that needs this, force this to be true
-        elif isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
-            self.scheduler_after_batch = True
-        else:
-            self.scheduler_after_batch = step_every_batch
-        self.scheduler = scheduler    
 
     def _optimize_dataloader_kwargs(self, num_worker_cap=6, **loader_kwargs):
         loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
@@ -166,14 +139,16 @@ class BaseModelTrainer(object):
         correct = outputs[4]
         pairs = outputs[5]
         euclidean_embeddings = outputs[6]
-        loss, recon_loss = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
+        loss, recon_loss, loss_dict = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
         self.backward(loss)
         self.optimizer.step()
-        if self.scheduler is not None and self.scheduler_after_batch:
-            self.scheduler.step()
+        if self.scheduler_after_batch:
+            self.optimizer.scheduler_step(loss)
         train_metrics = self.calculate_metrics(correct=correct, pairs=pairs, contrastive_loss=contrastive_loss, recon_loss=recon_loss)
+        train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         train_metrics.setdefault('loss', loss.item())
-
+        for band, loss in loss_dict.items():
+            train_metrics[f'{band} Loss'] = loss
         return train_metrics
 
     def evaluate(self, dataset, **loader_kwargs):
@@ -241,7 +216,7 @@ class BaseModelTrainer(object):
                 correct += outputs[4]
                 pairs += outputs[5]
                 euclidean_embeddings = outputs[6]
-                loss, recon_loss = self.calculate_loss(input_batch, encoder_decoder_output, contrastive_loss)
+                loss, recon_loss, loss_dict = self.calculate_loss(input_batch, encoder_decoder_output, contrastive_loss)
                 recon_loss_agg += recon_loss
 
         return correct, pairs, contrastive_loss, recon_loss_agg
@@ -339,8 +314,8 @@ class BaseModelTrainer(object):
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics, val_metrics, 'loss')
-            if self.scheduler is not None and not self.scheduler_after_batch:
-                self.scheduler.step()
+            if not self.scheduler_after_batch:
+                self.optimizer.scheduler_step(train_metrics['loss'])
 
         if self.save_model_dir:
             import pickle as pkl

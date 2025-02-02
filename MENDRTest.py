@@ -110,6 +110,8 @@ def testMENDRTrainerWithValidation():
     r2e = R2E(epochs=2)
     trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
     optimizer = torch.optim.Adam(trainer.parameters())
+    scheduler = torch.optim.lr_scheduler.reducelronplateau(optimizer, mode='min')
+    trainer.set_scheduler(scheduler, step_every_batch=True)
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)

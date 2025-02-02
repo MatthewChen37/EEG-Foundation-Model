@@ -93,7 +93,10 @@ class AttentionManifold(nn.Module):
     def log_euclidean_distance(self, A, B):
         inner_term = self.tensor_log(A) - self.tensor_log(B)
         inner_multi = inner_term @ inner_term.permute(0, 1, 3, 2)
-        _, s, _= torch.svd(inner_multi)
+        batch = inner_multi.shape[0]
+        epochs = inner_multi.shape[1]
+        _, s, _= self.svd(inner_multi.view(batch * epochs, inner_multi.shape[2], inner_multi.shape[3]))
+        s = s.view(batch, epochs, s.shape[1])
         final = torch.sum(s, dim=-1)
         return final
 

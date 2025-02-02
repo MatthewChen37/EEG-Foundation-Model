@@ -11,10 +11,14 @@ class MixOptimizer(object):
 
     def __init__(self, optimizer):
         self.optimizer = optimizer
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min')
         self.state = {}
 
     def zero_grad(self):
         return self.optimizer.zero_grad()
+
+    def scheduler_step(self, metric):
+        self.scheduler.step(metric)
 
     def step(self, closure=None):
         """Performs a single optimization step.
