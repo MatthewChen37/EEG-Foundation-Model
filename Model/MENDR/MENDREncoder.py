@@ -43,6 +43,8 @@ class WaveletEncoderDecoder(nn.Module):
         for i, (w, s) in enumerate(zip(decoder_size, decoder_stride)):
             if i == len(decoder_size) - 1:
                 output_padding = self.seq_len - L_out
+                if output_padding + 1 > s:
+                    output_padding = -1
                 self.decoders.add_module("Decoder_Final".format(i),
                 nn.Sequential(
                     nn.ConvTranspose1d(self.num_channels, self.num_channels,
@@ -98,6 +100,7 @@ class WaveletEncoderDecoder(nn.Module):
 
         return encoding, decoding
 
+
 '''
 Initialize Encoders for each wavelet band and 
 put them into a single object.
@@ -105,9 +108,7 @@ put them into a single object.
 class MENDREncoder(nn.Module):
     def __init__(self, device):
         super(MENDREncoder, self).__init__()
-
-        self.downsampling_factor = 0
-
+        self.device = device
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(
                     num_channels = 19,
@@ -116,8 +117,8 @@ class MENDREncoder(nn.Module):
                     seq_len = 246,
                     heads = 4,
                     encoded_h = 120,
-                    decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1),
+                    decoder_size = (2, 1),
+                    decoder_stride = (2, 1),
                     device = device
                     ),
 
@@ -128,52 +129,47 @@ class MENDREncoder(nn.Module):
                     seq_len = 246,
                     heads = 4,
                     encoded_h = 120,
-                    decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1),
+                    decoder_size = (2, 1),
+                    decoder_stride = (2, 1),
                     device = device
                     ),
 
             'alpha': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 2,
-                    conv_kernel_stride = 2,
+                    conv_kernel_size = 4,
+                    conv_kernel_stride = 4,
                     seq_len = 486,
                     heads = 4,
                     encoded_h = 240,
                     decoder_size = (2, 2, 1),
                     decoder_stride = (2, 2, 1),
-                    device = device
+                    device = device 
                     ),
 
             'beta': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 2,
-                    conv_kernel_stride = 2,
+                    conv_kernel_size = 8,
+                    conv_kernel_stride = 8,
                     seq_len = 966,
                     heads = 4,
                     encoded_h = 480,
-                    decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1),
+                    decoder_size = (2, 2, 2, 1),
+                    decoder_stride = (2, 2, 2, 1),
                     device = device
                     ),
 
             'gamma': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 2,
-                    conv_kernel_stride = 2,
+                    conv_kernel_size = 16,
+                    conv_kernel_stride = 16,
                     seq_len = 1925,
                     heads = 4,
                     encoded_h = 960,
-                    decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1),
+                    decoder_size = (2, 2, 2, 1),
+                    decoder_stride = (2, 2, 2, 1),
                     device = device
                     ),
         })
-        
-        '''
-        for band, module in self.encoder_decoders.items():
-            print(f"Band {band}, Encoder Parameter Count: {module.getEncoderParamCount()} Decoder Parameter Count: {module.getDecoderParamCount()} ")
-        '''
 
     def forward(self, graph, data):
         assert data.keys() == self.encoder_decoders.keys()

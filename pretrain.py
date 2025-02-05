@@ -16,7 +16,7 @@ import torch.utils.data as torchdata
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
-from Model.MENDR.R2E import R2E
+#from Model.MENDR.R2E import R2E
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 #import torch.amp as amp
 
@@ -59,11 +59,11 @@ def main(args):
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDREncoder(device=device)
 	contextualizer = MENDRContextualizer(device=device)
-	r2e = R2E(args)
+	#r2e = R2E(args)
 
 	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
+	trainer = MENDRTrainer(encoder, contextualizer, args)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
 	optimizer = MixOptimizer(optimizer)
@@ -140,7 +140,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--learning_rate", type=float, help="Learning Rate", default=0.001
+		"--learning_rate", type=float, help="Learning Rate", default=0.01
 	)
 
 	parser.add_argument(

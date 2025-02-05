@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
+from .mAtt.spd import SPDTangentSpace
 from ..layers import Permute, Flatten
 
 '''
@@ -36,9 +37,54 @@ class MENDRContextualizer(nn.Module):
 			)
 		})
 
+		self.wavelet_r2e_tangent_spaces = nn.ParameterDict({
+			'delta': SPDTangentSpace(32),
+			'theta': SPDTangentSpace(32),
+			'alpha': SPDTangentSpace(32),
+			'beta': SPDTangentSpace(32),
+			'gamma': SPDTangentSpace(32),
+		})
+
+		self.wavelet_r2e_lin = nn.ParameterDict({
+			'delta': nn.Sequential({
+				nn.Flatten(),
+				nn.GELU(),
+				nn.Linear(80, 80),
+			}),
+			'theta': nn.Sequential({
+				nn.Flatten(),
+				nn.GELU(),
+				nn.Linear(80, 80),
+			}),
+			'alpha': nn.Sequential({
+				nn.Flatten(),
+				nn.GELU(),
+				nn.Linear(80, 80),
+			}),
+			'beta': nn.Sequential({
+				nn.Flatten(),
+				nn.GELU(),
+				nn.Linear(80, 80),
+			}),
+			'gamma': nn.Sequential({
+				nn.Flatten(),
+				nn.GELU(),
+				nn.Linear(80, 80),
+			})
+		})
+
+		self.combined_r2e_tangent_space = nn.Sequential(
+			SPDTangentSpace(32)
+		)
+
+		self.combined_r2e_lin = nn.Sequential(
+			nn.Flatten(),
+			nn.GELU(),
+			nn.Linear(80, 80),
+		)
+
 		self.combined_attention = AttentionManifold(32, 32, self.device)
 		self.ract = SPDRectified()
-	
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 	def forward(self, x, mask_t=None, mask_c=None):
@@ -48,12 +94,16 @@ class MENDRContextualizer(nn.Module):
 			# Batch Size, Num of Channels, Time Length
 			embedding_shapes[band] = x[band][0].shape
 
-		wavelet_output = dict()
+		wavelet_manifold_output = dict()
+		wavelet_r2e_output = dict()
 		for band, band_encodings_decodings in x.items():
-			wavelet_output[band] = self.wavelet_attention_manifolds[band](band_encodings_decodings[0])
-			output = wavelet_output[band][0]
-			shape  = wavelet_output[band][1]
-			wavelet_output[band] = (self.ract(output), shape)
+			wavelet_manifold_output[band] = self.wavelet_attention_manifolds[band](band_encodings_decodings[0])
+			output = wavelet_manifold_output[band][0]
+			shape  = wavelet_manifold_output[band][1]
+			wavelet_manifold_output[band] = (self.ract(output), shape)
+			wavelet_r2e_output[band] = self.wavelet_r2e_tangent_spaces[band](output)
+			wavelet_r2e_output[band] = self.wavelet_r2e_output[band].view(shape[0], shape[1], -1)
+			wavelet_r2e_output[band] = self.wavelet_r2e_lin[band](wavelet_r2e_output[band])
 
 		# The sum of SPD matrices is also SPD
 		combined_wavelet_spd = torch.zeros(embedding_shapes['delta'][0], 4, 32, 32).to(self.device)
@@ -63,13 +113,13 @@ class MENDRContextualizer(nn.Module):
 			output = output.view((shape[0], shape[1], 32, 32))
 			combined_wavelet_spd += output
 
-		x, shape = self.combined_attention(combined_wavelet_spd)
-		# TODO: FIX
-		x = x.to(self.device)
-		output = self.ract(x)
+		combined_manifold_output, shape = self.combined_attention(combined_wavelet_spd)
+		combined_r2e_output = self.ract(combined_manifold_output)
+		combined_r2e_output = self.combined_r2e_tangent_space(combined_r2e_output)
+		combined_r2e_output = combined_r2e_output.shape(shape[0], shape[1], -1)
+		combined_r2e_output = self.combined_r2e_lin(combined_manifold_output)
+		return combined_r2e_output, combined_manifold_output, wavelet_r2e_output, wavelet_manifold_output
 
-		return output, shape, wavelet_output
-	
 	def freeze_features(self, unfreeze=False, finetuning=False):
 		for param in self.parameters():
 			param.requires_grad = unfreeze

@@ -87,8 +87,16 @@ class BaseModelTrainer(object):
         batch = next(iterator)
         for key, value in batch.items():
             if isinstance(value, torch.Tensor):
-                batch[key] = value.to(self.device)
+                # Perform batch normalization across channels 
+                batch[key] = self._std_norm(value.float().to(self.device))
         return batch
+    
+    def _std_norm(self, x):
+        mean = torch.mean(x, dim=(0, 1), keepdim=True)
+        std = torch.std(x, dim=(0, 1), keepdim=True)
+        x = (x - mean) / std
+        return x
+
 
     def parameters(self):
         """
@@ -101,7 +109,6 @@ class BaseModelTrainer(object):
         """
         for member in self._trainables:
             yield from self.__dict__[member].parameters()
-            #print(f"{member} Total number of parameters: ", sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad))
 
 
     def forward(self, data):
@@ -132,23 +139,28 @@ class BaseModelTrainer(object):
     def train_step(self, inputs):
         self.train(True)
         outputs = self.forward(inputs)
-        contextualizer_embeddings = outputs[0]
-        original_batch_shape = outputs[1]
-        contrastive_loss = outputs[2]
-        encoder_decoder_output = outputs[3]
-        correct = outputs[4]
-        pairs = outputs[5]
-        euclidean_embeddings = outputs[6]
-        loss, recon_loss, loss_dict = self.calculate_loss(inputs, encoder_decoder_output, contrastive_loss)
-        self.backward(loss)
+
+        encoder_output = outputs['encoder_output']
+        combined_r2e_output = outputs['combined_r2e_output']
+        combined_manifold_output = outputs['combined_manifold_output']
+        wavelet_r2e_output = outputs['wavelet_r2e_output']
+        wavelet_manifold_output = outputs['wavelet_manifold_output']
+        combined_loss = outputs['combined_loss']
+        wavelet_loss = outputs['wavelet_loss']
+        combined_acc = outputs['combined_acc']
+        wavelet_acc = oiutputs['wavelet_acc']
+
+        recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
+        total_loss = recon_loss + combined_loss + wavelet_loss
+        self.backward(total_loss)
         self.optimizer.step()
-        if self.scheduler_after_batch:
-            self.optimizer.scheduler_step(loss)
-        train_metrics = self.calculate_metrics(correct=correct, pairs=pairs, contrastive_loss=contrastive_loss, recon_loss=recon_loss)
+        train_metrics = self.calculate_metrics(combined_loss, wavelet_loss, recon_loss, combined_acc, wavelet_acc)
+        train_metrics.setdefault('loss', total_loss.item())
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
-        train_metrics.setdefault('loss', loss.item())
         for band, loss in loss_dict.items():
             train_metrics[f'{band} Loss'] = loss
+        if self.scheduler_after_batch:
+            self.optimizer.scheduler_step(loss)
         return train_metrics
 
     def evaluate(self, dataset, **loader_kwargs):
@@ -194,7 +206,6 @@ class BaseModelTrainer(object):
                   The outputs from each run of :function:`forward`
         """
         self.train(False)
-        loader_kwargs.setdefault('batch_size', 1)
         dataset = self._make_dataloader(dataset, **loader_kwargs)
 
         pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
@@ -202,24 +213,26 @@ class BaseModelTrainer(object):
 
         correct = 0
         pairs = 0
-        contrastive_loss = 0
+        contrastive_loss_agg = 0
         recon_loss_agg = 0
 
         with torch.no_grad():
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 outputs = self.forward(input_batch)
+
                 contextualizer_embeddings = outputs[0]
                 original_batch_shape = outputs[1]
-                contrastive_loss += outputs[2]
+                contrastive_loss = outputs[2]
                 encoder_decoder_output = outputs[3]
                 correct += outputs[4]
                 pairs += outputs[5]
                 euclidean_embeddings = outputs[6]
-                loss, recon_loss, loss_dict = self.calculate_loss(input_batch, encoder_decoder_output, contrastive_loss)
-                recon_loss_agg += recon_loss
 
-        return correct, pairs, contrastive_loss, recon_loss_agg
+                recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_decoder_output)
+                recon_loss_agg += recon_loss.item()
+                contrastive_loss_agg += contrastive_loss.item()
+        return correct, pairs, contrastive_loss_agg, recon_loss_agg
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
@@ -301,6 +314,8 @@ class BaseModelTrainer(object):
         mlflow.start_run()
         mlflow.autolog()
         for epoch in range(epochs):
+            total_epoch_training_loss = 0
+            total_epoch_validation_loss = 0
             self.epoch = epoch
             pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             data_iterator = iter(training_dataloader)
@@ -308,15 +323,17 @@ class BaseModelTrainer(object):
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
+                total_epoch_training_loss += train_metrics['loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
+                total_epoch_validation_loss += val_metrics['loss']
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics, val_metrics, 'loss')
             if not self.scheduler_after_batch:
-                self.optimizer.scheduler_step(train_metrics['loss'])
-
+                self.optimizer.scheduler_step(val_metrics['loss'])
+            print("Epoch: ", epoch, "Total Training Loss: ", total_epoch_training_loss, "Total Validation Loss: ", total_epoch_validation_loss)
         if self.save_model_dir:
             import pickle as pkl
             best = self.save_best()

@@ -16,13 +16,19 @@ class signal2spd(nn.Module):
         x = x.squeeze()
         mean = x.mean(axis=-1).unsqueeze(-1).repeat(1, 1, x.shape[-1])
         x = x - mean
+        # Add Gaussian noise with variance 1E-5 and mean 0 to ensure that 
+        # No zero values exist (especially along the diagonals)
+        x = x + (1E-5**0.5)*torch.randn(x.shape).to(x.device)
         cov = x@x.permute(0, 2, 1)
         cov = cov.to(self.dev)
         cov = cov/(x.shape[-1]-1)
         tra = cov.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
         tra = tra.view(-1, 1, 1)
+        # Again to avoid division by 0 error
+        x = x + (1E-5**0.5)*torch.randn(x.shape).to(x.device)
         cov /= tra
         identity = torch.eye(cov.shape[-1], cov.shape[-1], device=self.dev).to(self.dev).repeat(x.shape[0], 1, 1)
+        # Notice how they also added 1e-5 originally
         cov = cov+(1e-5*identity)
         return cov 
 
@@ -54,6 +60,8 @@ class E2R(nn.Module):
         x = torch.stack(x_list).permute(1, 0, 2, 3)
         x = x.to(self.device)
         return x
+
+
 
 
 class AttentionManifold(nn.Module):

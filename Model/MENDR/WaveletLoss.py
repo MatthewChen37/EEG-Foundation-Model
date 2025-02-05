@@ -10,6 +10,14 @@ def WaveletReconstructionLoss(inputs, outputs):
         if isinstance(output_data, torch.Tensor):
             outputs[band] = output_data.float()
 
+    '''
+    assert inputs['delta'].shape == outputs['delta'].shape, f"Input Shape {inputs['delta'].shape} Output Shape {outputs['delta'].shape}"
+    assert inputs['theta'].shape == outputs['theta'].shape, f"Input Shape {inputs['theta'].shape} Output Shape {outputs['theta'].shape}"
+    assert inputs['alpha'].shape == outputs['alpha'].shape, f"Input Shape {inputs['alpha'].shape} Output Shape {outputs['alpha'].shape}"
+    assert inputs['beta'].shape == outputs['beta'].shape, f"Input Shape {inputs['beta'].shape} Output Shape {outputs['beta'].shape}"
+    assert inputs['gamma'].shape == outputs['gamma'].shape, f"Input Shape {inputs['gamma'].shape} Output Shape {outputs['gamma'].shape}"
+    '''
+
     delta_loss = loss_fn(inputs['delta'], outputs['delta']) + fft_loss(inputs['delta'], outputs['delta']) 
     theta_loss = loss_fn(inputs['theta'], outputs['theta'])  + fft_loss(inputs['theta'], outputs['theta'])
     alpha_loss = loss_fn(inputs['alpha'], outputs['alpha'])  + fft_loss(inputs['alpha'], outputs['alpha'])
@@ -37,4 +45,4 @@ def fft_loss(output, target):
     target_amplitude = torch.abs(target_fft)
     target_angle = torch.abs(target_fft)
 
-    return (loss_fn(output_amplitude, target_amplitude) + (loss_fn(output_angle, target_angle))) * 1e-3
+    return (loss_fn(output_amplitude, target_amplitude) + (loss_fn(output_angle, target_angle))) * 1e-2

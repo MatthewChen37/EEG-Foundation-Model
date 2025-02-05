@@ -6,6 +6,7 @@ import numpy as np
 
 from .utils import *
 from . import StiefelParameter
+from ..safeSVD import SVD
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/spd.py
