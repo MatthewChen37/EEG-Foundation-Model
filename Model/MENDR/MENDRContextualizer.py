@@ -37,11 +37,11 @@ class MENDRContextualizer(nn.Module):
 		})
 
 		self.wavelet_r2e_tangent_spaces = nn.ParameterDict({
-			'delta': SPDTangentSpace(10),
-			'theta': SPDTangentSpace(10),
-			'alpha': SPDTangentSpace(10),
-			'beta': SPDTangentSpace(10),
-			'gamma': SPDTangentSpace(10),
+			'delta': SPDTangentSpace(10, self.device),
+			'theta': SPDTangentSpace(10, self.device),
+			'alpha': SPDTangentSpace(10, self.device),
+			'beta': SPDTangentSpace(10, self.device),
+			'gamma': SPDTangentSpace(10, self.device),
 		})
 
 		self.wavelet_r2e_lin = nn.ParameterDict({
@@ -73,7 +73,7 @@ class MENDRContextualizer(nn.Module):
 		})
 
 		self.combined_r2e_tangent_space = nn.Sequential(
-			SPDTangentSpace(10)
+			SPDTangentSpace(8, self.device)
 		)
 
 		self.combined_r2e_lin = nn.Sequential(
@@ -84,7 +84,6 @@ class MENDRContextualizer(nn.Module):
 
 		self.combined_attention = AttentionManifold(10, 8, self.device)
 		self.ract = SPDRectified()
-		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 	def forward(self, x, mask_t=None, mask_c=None):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
@@ -105,14 +104,14 @@ class MENDRContextualizer(nn.Module):
 			wavelet_r2e_output[band] = self.wavelet_r2e_lin[band](wavelet_r2e_output[band])
 
 		# The sum of SPD matrices is also SPD
-		combined_wavelet_spd = torch.zeros(embedding_shapes['delta'][0], 4, 10, 10).to(self.device)
+		combined_manifold_output = torch.zeros(embedding_shapes['delta'][0], 4, 10, 10).to(self.device)
 		for band in wavelet_manifold_output.keys():
 			output = wavelet_manifold_output[band][0]
 			shape  = wavelet_manifold_output[band][1]
 			output = output.view((shape[0], shape[1], 10, 10))
-			combined_wavelet_spd += output
+			combined_manifold_output += output
 
-		combined_manifold_output, shape = self.combined_attention(combined_wavelet_spd)
+		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
 		combined_r2e_output = self.ract(combined_manifold_output)
 		combined_r2e_output = self.combined_r2e_tangent_space(combined_r2e_output)
 		combined_r2e_output = combined_r2e_output.view(shape[0], shape[1], -1)

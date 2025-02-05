@@ -9,7 +9,8 @@ from dataset import WaveletDataset
 from types import SimpleNamespace
 import torch.utils.data as torchdata
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu' 
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
 
 def testEncoder():

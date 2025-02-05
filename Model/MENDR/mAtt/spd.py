@@ -56,9 +56,9 @@ class SPDIncreaseDim(nn.Module):
 
 class ParametricVectorize(nn.Module):
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, device):
         super(ParametricVectorize, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         self.weight = nn.Parameter(torch.ones(output_size, input_size), requires_grad=True)
         self.weight.to(self.device)
     def forward(self, input):
@@ -72,9 +72,9 @@ class ParametricVectorize(nn.Module):
 
 class SPDVectorize(nn.Module):
 
-    def __init__(self, input_size):
+    def __init__(self, input_size, device):
         super(SPDVectorize, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         row_idx, col_idx = torch.triu_indices(input_size, input_size)
         self.register_buffer('row_idx', torch.LongTensor(row_idx).to(self.device))
         self.register_buffer('col_idx', torch.LongTensor(col_idx).to(self.device))
@@ -174,11 +174,11 @@ class SPDTangentSpaceFunction(Function):
 
 class SPDTangentSpace(nn.Module):
 
-    def __init__(self, input_size, vectorize=True):
+    def __init__(self, input_size, device, vectorize=True):
         super(SPDTangentSpace, self).__init__()
         self.vectorize = vectorize
         if vectorize:
-            self.vec = SPDVectorize(input_size)
+            self.vec = SPDVectorize(input_size, device)
 
     def forward(self, input):
         output = SPDTangentSpaceFunction.apply(input)
@@ -375,9 +375,9 @@ class SPDPowerFunction(Function):
 
 class SPDPower(nn.Module):
 
-    def __init__(self, input_dim):
+    def __init__(self, input_dim, device):
         super(SPDPower, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device 
         self.weight = nn.Parameter(torch.ones(input_dim).to(self.device), requires_grad=True)
 
     def forward(self, input):

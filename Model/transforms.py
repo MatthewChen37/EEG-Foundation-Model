@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 
 '''
@@ -39,7 +40,7 @@ class BatchTransform(object):
 
 class RandomTemporalCrop(BatchTransform):
 
-    def __init__(self, max_crop_frac=0.25, temporal_axis=1):
+    def __init__(self, max_crop_frac=0.25, temporal_axis=-1):
         """
         Uniformly crops the time-dimensions of a batch.
 
@@ -61,7 +62,7 @@ class RandomTemporalCrop(BatchTransform):
         crop_len = np.random.randint(int((1 - self.max_crop_frac) * trial_len), trial_len)
         offset = np.random.randint(0, trial_len - crop_len)
 
-        return x[:, offset:offset + crop_len, ...]
+        return x[..., offset:offset + crop_len]
 
 class RandomGaussianNoise(BatchTransform):
     def __init__(self, max_crop_frac=0.25, temporal_axis=1):
@@ -76,8 +77,8 @@ class RandomGaussianNoise(BatchTransform):
         if not training:
             return x
 
-        mean = torch.mean(x, dim=0, keepdim=True)
-        std = torch.std(x, dim=0, keepdim=True)
+        mean = torch.mean(x, dim=(0, 1), keepdim=True)
+        std = torch.std(x, dim=(0, 1), keepdim=True)
 
         noise = torch.normal(mean, std)
 

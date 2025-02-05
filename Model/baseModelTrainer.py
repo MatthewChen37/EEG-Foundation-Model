@@ -25,8 +25,8 @@ class BaseModelTrainer(object):
                 tqdm.tqdm.write("No GPU detected: training and model execution will be performed on CPU.")
         if isinstance(cuda, bool):
             if cuda:
-                cuda = "cuda"
-                print(f"Device Properties: {torch.cuda.get_device_properties(cuda)}")
+                cuda = "cpu"
+                #print(f"Device Properties: {torch.cuda.get_device_properties(cuda)}")
             else:
                 cuda = "cpu"
 
@@ -109,7 +109,7 @@ class BaseModelTrainer(object):
         """
         for member in self._trainables:
             yield from self.__dict__[member].parameters()
-            print(f"{member}: {sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad)}")
+            #print(f"{member}: {sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad)}")
 
 
     def forward(self, data):
@@ -149,13 +149,14 @@ class BaseModelTrainer(object):
         combined_loss = outputs['combined_loss']
         wavelet_loss = outputs['wavelet_loss']
         combined_acc = outputs['combined_acc']
-        wavelet_acc = oiutputs['wavelet_acc']
+        wavelet_acc = outputs['wavelet_acc']
 
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
+        recon_loss = recon_loss
         total_loss = recon_loss + combined_loss + wavelet_loss
         self.backward(total_loss)
         self.optimizer.step()
-        train_metrics = self.calculate_metrics(combined_loss, wavelet_loss, recon_loss, combined_acc, wavelet_acc)
+        train_metrics = self.calculate_metrics(combined_loss.item(), wavelet_loss.item(), recon_loss.item(), combined_acc, wavelet_acc)
         train_metrics.setdefault('loss', total_loss.item())
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
@@ -213,8 +214,8 @@ class BaseModelTrainer(object):
         combined_loss_agg = 0
         wavelet_loss_agg = 0
         recon_loss_agg = 0
-        combined_acc = 0
-        wavelet_acc = 0
+        combined_acc_agg = 0
+        wavelet_acc_agg = 0
         with torch.no_grad():
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
@@ -227,19 +228,16 @@ class BaseModelTrainer(object):
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
                 combined_loss_agg += outputs['combined_loss'].item()
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
-                combined_acc_agg += outputs['combined_acc'].item()
-                wavelet_acc_agg += outputs['wavelet_acc'].item()
+                combined_acc_agg += outputs['combined_acc']
+                wavelet_acc_agg += outputs['wavelet_acc']
 
-                recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
+                recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
                 recon_loss_agg += recon_loss.item()
-                total_loss_agg = combined_acc_agg + wavelet_acc_agg + recon_loss_agg
 
-                recon_loss_agg += recon_loss.item()
-                contrastive_loss_agg += contrastive_loss.item()
-        total_loss_agg = combined_acc_agg + wavelet_acc_agg + recon_loss_agg
-        val_metrics = calculate_metrics(combined_loss_agg, wavelet_loss_agg, recon_loss_agg, combined_acc, wavelet_acc)
-        val_metrics.set_default('loss', total_loss_agg)
-        return val_metrics
+            total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
+            val_metrics = self.calculate_metrics(combined_loss_agg, wavelet_loss_agg, recon_loss_agg, combined_acc_agg / len(pbar), wavelet_acc_agg / len(pbar))
+            val_metrics.setdefault('loss', total_loss_agg)
+            return val_metrics
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):

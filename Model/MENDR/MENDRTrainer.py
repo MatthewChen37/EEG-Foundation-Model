@@ -32,6 +32,8 @@ class MENDRTrainer(BaseModelTrainer):
 			save_model_directory=config.save_model_directory, **kwargs)
 
 		self.svd = SVD.apply
+
+		self.RandomGaussianNoise = RandomGaussianNoise()
 	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
@@ -73,42 +75,43 @@ class MENDRTrainer(BaseModelTrainer):
 			'Wavelet Acc': wavelet_acc,
 		}
 
-	def simCLR(self, inputs, data_graph, embeddings, criterion):
+	def simCLR(self, inputs, data_graph, combined_embedding, criterion):
 		'''
 		Batchwise Simple CLR Loss on combined attention euclidean embeddings.
 		'''
 		frequency_bands = list(inputs.keys())
 		num_targets = inputs[frequency_bands[0]].shape[0]
 		self.encoder.freeze_features(unfreeze=False)
-		self.encoder_output.freeze_features(unfreeze=False)
+		self.contextualizer.freeze_features(unfreeze=False)
 		loss = 0.0
 		correct = 0
 		pairs = 0
-
-		# Add random temporal cropping and noise
-		transformed_inputs = RandomTemporalCrop(RandomGaussianNoise(inputs, training=True), training=True)
 		with torch.no_grad():
-			transformed_encoder_output = self.encoder(data_graph, transported_inputs)
+			transformed_inputs = dict()
+			for band in frequency_bands:
+				# Add random noise
+				transformed_inputs[band] = self.RandomGaussianNoise(inputs[band], training=True)
+			transformed_encoder_output = self.encoder(data_graph, transformed_inputs)
 			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
-		# Compute logits
-		logits = torch.matmul(embeddings, transformed_embeddings.T) * torch.exp(self.temp2)
-		labels = torch.arange(num_targets, device=self.device)
+			# Compute logits
+			logits = torch.matmul(combined_embedding, transformed_embeddings.T) * torch.exp(self.temp2)
+			labels = torch.arange(combined_embedding.shape[0], device=self.device)
 
-		# Forward loss
-		forward_logits = logits
-		l = criterion(forward_logits, labels)
-		loss += l
-		correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
-		pairs += forward_logits.size(0)
+			# Forward loss
+			forward_logits = logits
+			l = criterion(forward_logits, labels)
+			loss += l
+			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
+			pairs += forward_logits.size(0)
 
-		# Reverse loss
-		reverse_logits = logits.T
-		l = criterion(reverse_logits, labels)
-		loss += l
-		correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
-		pairs += reverse_logits.size(0)
+			# Reverse loss
+			reverse_logits = logits.T
+			l = criterion(reverse_logits, labels)
+			loss += l
+			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
+			pairs += reverse_logits.size(0)
 		self.encoder.freeze_features(unfreeze=True)
-		self.encoder_output.freeze_features(unfreeze=True)
+		self.contextualizer.freeze_features(unfreeze=True)
 		return loss, correct, pairs
 
 	def leave_one_out(self, embeddings, criterion):
@@ -150,7 +153,7 @@ class MENDRTrainer(BaseModelTrainer):
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
 			'''
 			# Compute logits
-			# logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings) 
+			# logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings)
 			logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
 			labels = torch.arange(logits.shape[0], device=self.device)
 
