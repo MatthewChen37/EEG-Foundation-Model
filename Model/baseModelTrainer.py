@@ -25,8 +25,8 @@ class BaseModelTrainer(object):
                 tqdm.tqdm.write("No GPU detected: training and model execution will be performed on CPU.")
         if isinstance(cuda, bool):
             if cuda:
-                cuda = "cpu"
-                #print(f"Device Properties: {torch.cuda.get_device_properties(cuda)}")
+                cuda = "cuda"
+                print(f"Device Properties: {torch.cuda.get_device_properties(cuda)}")
             else:
                 cuda = "cpu"
 
