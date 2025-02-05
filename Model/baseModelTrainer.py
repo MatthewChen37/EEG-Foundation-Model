@@ -181,10 +181,8 @@ class BaseModelTrainer(object):
                 Metric scores for the entire
         """
         self.train(False)
-        correct, pairs, contrastive_loss, recon_loss = self.predict(dataset, **loader_kwargs)
-        metrics = self.calculate_metrics(correct=correct, pairs=pairs, contrastive_loss=contrastive_loss, recon_loss=recon_loss)
-        metrics['loss'] = contrastive_loss + recon_loss
-        return metrics
+        eval_metrics = self.predict(dataset, **loader_kwargs)
+        return eval_metrics
 
     def predict(self, dataset, **loader_kwargs):
         """
@@ -211,28 +209,36 @@ class BaseModelTrainer(object):
         pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
         data_iterator = iter(dataset)
 
-        correct = 0
-        pairs = 0
-        contrastive_loss_agg = 0
+        combined_loss_agg = 0
+        wavelet_loss_agg = 0
         recon_loss_agg = 0
-
+        combined_acc = 0
+        wavelet_acc = 0
         with torch.no_grad():
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 outputs = self.forward(input_batch)
 
-                contextualizer_embeddings = outputs[0]
-                original_batch_shape = outputs[1]
-                contrastive_loss = outputs[2]
-                encoder_decoder_output = outputs[3]
-                correct += outputs[4]
-                pairs += outputs[5]
-                euclidean_embeddings = outputs[6]
+                encoder_output = outputs['encoder_output']
+                combined_r2e_output = outputs['combined_r2e_output']
+                combined_manifold_output = outputs['combined_manifold_output']
+                wavelet_r2e_output = outputs['wavelet_r2e_output']
+                wavelet_manifold_output = outputs['wavelet_manifold_output']
+                combined_loss_agg += outputs['combined_loss'].item()
+                wavelet_loss_agg += outputs['wavelet_loss'].item()
+                combined_acc_agg += outputs['combined_acc'].item()
+                wavelet_acc_agg += outputs['wavelet_acc'].item()
 
-                recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_decoder_output)
+                recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
+                recon_loss_agg += recon_loss.item()
+                total_loss_agg = combined_acc_agg + wavelet_acc_agg + recon_loss_agg
+
                 recon_loss_agg += recon_loss.item()
                 contrastive_loss_agg += contrastive_loss.item()
-        return correct, pairs, contrastive_loss_agg, recon_loss_agg
+        total_loss_agg = combined_acc_agg + wavelet_acc_agg + recon_loss_agg
+        val_metrics = calculate_metrics(combined_loss_agg, wavelet_loss_agg, recon_loss_agg, combined_acc, wavelet_acc)
+        val_metrics.set_default('loss', total_loss_agg)
+        return val_metrics
 
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
