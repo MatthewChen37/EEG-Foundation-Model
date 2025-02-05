@@ -62,3 +62,23 @@ class RandomTemporalCrop(BatchTransform):
         offset = np.random.randint(0, trial_len - crop_len)
 
         return x[:, offset:offset + crop_len, ...]
+
+class RandomGaussianNoise(BatchTransform):
+    def __init__(self, max_crop_frac=0.25, temporal_axis=1):
+        """
+        Adds Gaussian Noise to each batch by calculating the mean signal
+        and std of each batch
+        """
+        super(RandomGaussianNoise, self).__init__(only_trial_data=True)
+
+    def __call__(self, x, training=False):
+
+        if not training:
+            return x
+
+        mean = torch.mean(x, dim=0, keepdim=True)
+        std = torch.std(x, dim=0, keepdim=True)
+
+        noise = torch.normal(mean, std)
+
+        return x + noise

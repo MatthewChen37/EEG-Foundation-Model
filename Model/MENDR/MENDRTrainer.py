@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
+from ..transforms import RandomTemporalCrop, RandomGaussianNoise
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 from .safeSVD import SVD, svdv2
@@ -18,16 +19,18 @@ class MENDRTrainer(BaseModelTrainer):
 	'''
 	def __init__(self, encoder, contextualizer, config, **kwargs):
 		# Initialize temperature as a trainable parameter
-		self.temp = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
+		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
+		self.temp2 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		if config.multi_gpu:
 			encoder = nn.DataParallel(encoder)
 			contextualizer = nn.DataParallel(contextualizer)
-			temp = nn.DataParallel(temp)
-	
+			self.temp1 = nn.DataParallel(self.temp1)
+			self.temp2 = nn.DataParallel(self.temp2)
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer,
-			temp=self.temp, contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate,
+			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), 
 			save_model_directory=config.save_model_directory, **kwargs)
+
 		self.svd = SVD.apply
 	
 	def forward(self, data):
@@ -43,7 +46,7 @@ class MENDRTrainer(BaseModelTrainer):
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_r2e_output, self.contrastive_loss_fn)
 
 		# Combined contrastive loss
-		c_loss, c_correct, c_pairs = self.leave_one_out(wavelet_r2e_output, self.contrastive_loss_fn)
+		c_loss, c_correct, c_pairs = self.simCLR(inputs, data['graph'], combined_r2e_output, self.contrastive_loss_fn)
 
 		return {
 				'encoder_output': encoder_output,
@@ -70,12 +73,44 @@ class MENDRTrainer(BaseModelTrainer):
 			'Wavelet Acc': wavelet_acc,
 		}
 
-	def simCLR(self, embeddings, criterion):
+	def simCLR(self, inputs, data_graph, embeddings, criterion):
 		'''
-		Simple CLR loss on combined attention euclidean embeddings
-		
+		Batchwise Simple CLR Loss on combined attention euclidean embeddings.
 		'''
-	
+		frequency_bands = list(inputs.keys())
+		num_targets = inputs[frequency_bands[0]].shape[0]
+		self.encoder.freeze_features(unfreeze=False)
+		self.encoder_output.freeze_features(unfreeze=False)
+		loss = 0.0
+		correct = 0
+		pairs = 0
+
+		# Add random temporal cropping and noise
+		transformed_inputs = RandomTemporalCrop(RandomGaussianNoise(inputs, training=True), training=True)
+		with torch.no_grad():
+			transformed_encoder_output = self.encoder(data_graph, transported_inputs)
+			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
+		# Compute logits
+		logits = torch.matmul(embeddings, transformed_embeddings.T) * torch.exp(self.temp2)
+		labels = torch.arange(num_targets, device=self.device)
+
+		# Forward loss
+		forward_logits = logits
+		l = criterion(forward_logits, labels)
+		loss += l
+		correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
+		pairs += forward_logits.size(0)
+
+		# Reverse loss
+		reverse_logits = logits.T
+		l = criterion(reverse_logits, labels)
+		loss += l
+		correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
+		pairs += reverse_logits.size(0)
+		self.encoder.freeze_features(unfreeze=True)
+		self.encoder_output.freeze_features(unfreeze=True)
+		return loss, correct, pairs
+
 	def leave_one_out(self, embeddings, criterion):
 		"""
 		Compute leave-one-out loss for wavelet embeddings.
@@ -116,7 +151,7 @@ class MENDRTrainer(BaseModelTrainer):
 			'''
 			# Compute logits
 			# logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings) 
-			logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temperature)
+			logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
 			labels = torch.arange(logits.shape[0], device=self.device)
 
 			# Forward loss
@@ -134,7 +169,9 @@ class MENDRTrainer(BaseModelTrainer):
 			pairs += reverse_logits.size(0)
 		return loss, correct, pairs
 
-
+	'''
+	Currently not being used
+	'''
 	def check_degenerate_singular_values(self, matrix, tol=1e-5):
 		"""
 		Checks for degenerate singular values in a matrix.

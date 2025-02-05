@@ -177,3 +177,9 @@ class MENDREncoder(nn.Module):
         for band, band_decomposition in data.items():
             output[band] = self.encoder_decoders[band](graph, band_decomposition)
         return output
+
+    def freeze_features(self, unfreeze=False, finetuning=False):
+        for param in self.parameters():
+            param.requires_grad = unfreeze
+        if finetuning:
+            self.mask_replacement.requires_grad = False
