@@ -49,14 +49,14 @@ class WaveletEncoderDecoder(nn.Module):
                 nn.Sequential(
                     nn.ConvTranspose1d(self.num_channels, self.num_channels,
                     w, stride=s, padding=w//2, output_padding=0 if output_padding < 0 else output_padding),
-                    nn.Dropout(0.1),
-                    nn.GroupNorm(1, self.num_channels),
-                    nn.GELU()
                     )
                 )
                 if output_padding < 0:
                     L_out = (L_out - 1) * s - 2 * (w//2) + 1 * (w - 1) + 1
-                    self.decoders.add_module("Decoder_Final_Linear".format(i), nn.Linear(L_out, self.seq_len))
+                    self.decoders.add_module("Decoder_Final_Linear".format(i), nn.Sequential(nn.Dropout(0.1), 
+                    nn.GroupNorm(1, self.num_channels),
+                    nn.GELU(),
+                    nn.Linear(L_out, self.seq_len)))
             else:
                 self.decoders.add_module("Decoder_{}".format(i),
                 nn.Sequential(
@@ -94,7 +94,6 @@ class WaveletEncoderDecoder(nn.Module):
         encoding = encoding.view(-1, self.num_channels, self.encoded_h)
         encoding = self.gnn_group_norm(encoding)
         encoding = self.gnn_dropout(self.gnn_group_norm(encoding))
-        encoding = self.gnn_gelu(encoding)
 
         decoding = self.decoders(encoding)
 
@@ -116,7 +115,7 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 120,
+                    encoded_h = 63,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device
@@ -128,7 +127,7 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 120,
+                    encoded_h = 63,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device
@@ -136,37 +135,37 @@ class MENDREncoder(nn.Module):
 
             'alpha': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 4,
-                    conv_kernel_stride = 4,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
                     seq_len = 486,
                     heads = 4,
-                    encoded_h = 240,
-                    decoder_size = (2, 2, 1),
-                    decoder_stride = (2, 2, 1),
+                    encoded_h = 123,
+                    decoder_size = (2, 1),
+                    decoder_stride = (2, 1),
                     device = device 
                     ),
 
             'beta': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 8,
-                    conv_kernel_stride = 8,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
                     seq_len = 966,
                     heads = 4,
-                    encoded_h = 480,
-                    decoder_size = (2, 2, 2, 1),
-                    decoder_stride = (2, 2, 2, 1),
+                    encoded_h = 240,
+                    decoder_size = (2, 1),
+                    decoder_stride = (2, 1),
                     device = device
                     ),
 
             'gamma': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 16,
-                    conv_kernel_stride = 16,
+                    conv_kernel_size = 2,
+                    conv_kernel_stride = 2,
                     seq_len = 1925,
                     heads = 4,
-                    encoded_h = 960,
-                    decoder_size = (2, 2, 2, 1),
-                    decoder_stride = (2, 2, 2, 1),
+                    encoded_h = 480,
+                    decoder_size = (2, 1),
+                    decoder_stride = (2, 1),
                     device = device
                     ),
         })

@@ -2,7 +2,6 @@ import torch
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
-from Model.MENDR.R2E import R2E
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
@@ -80,8 +79,7 @@ def testMENDRTrainerNoValidation():
 
     encoder = MENDREncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    r2e = R2E(epochs=2)
-    trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -107,11 +105,8 @@ def testMENDRTrainerWithValidation():
 
     encoder = MENDREncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    r2e = R2E(epochs=2)
-    trainer = MENDRTrainer(encoder, contextualizer, r2e, args)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
-    scheduler = torch.optim.lr_scheduler.reducelronplateau(optimizer, mode='min')
-    trainer.set_scheduler(scheduler, step_every_batch=True)
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
     dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)

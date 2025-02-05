@@ -64,6 +64,10 @@ def main(args):
 	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
+
+	for band, encoder in encoder.encoder_decoders.items():
+		print(f"{band} Encoder Number of Params: {encoder.getEncoderParamCount()}")
+		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
 	optimizer = MixOptimizer(optimizer)
@@ -81,9 +85,9 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-
 	print("*" * 50)
 	print("Cleaning up resources...")
+
 	# Clear the PyTorch cache (for GPU)
 	torch.cuda.empty_cache()
 	# Force garbage collection (for CPU and GPU tensors)

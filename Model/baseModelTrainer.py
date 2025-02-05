@@ -109,6 +109,7 @@ class BaseModelTrainer(object):
         """
         for member in self._trainables:
             yield from self.__dict__[member].parameters()
+            print(f"{member}: {sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad)}")
 
 
     def forward(self, data):
