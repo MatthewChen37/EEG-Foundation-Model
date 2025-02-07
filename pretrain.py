@@ -79,11 +79,10 @@ def main(args):
 		num_val = len(dataset) - num_train
 		train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
 		print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-
-		#trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
-		#trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 
 	print("*" * 50)
 	print("Cleaning up resources...")

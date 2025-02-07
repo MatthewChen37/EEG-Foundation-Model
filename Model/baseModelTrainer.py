@@ -349,6 +349,7 @@ class BaseModelTrainer(object):
                 self.optimizer.scheduler_step(val_metrics['loss'])
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
             mlflow.log_metrics(epoch_metrics, step=epoch)
-    if self.ckpt_dir != None:
-        print(f"Saved Model to: {self.ckpt_dir/{mlflow.active_run().info.run_id}}")
-    mlflow.end_run()
+
+        if self.ckpt_dir != None:
+            print(f"Saved Model to: {self.ckpt_dir/{mlflow.active_run().info.run_id}}")
+        mlflow.end_run()
