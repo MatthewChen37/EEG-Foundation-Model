@@ -11,3 +11,4 @@ nedc_pyprint_edf/*
 *.pkl
 model.pkl
 runs/
+checkpoint/

@@ -1,11 +1,13 @@
 import torch
 import tqdm
 import re
+import os
 import mlflow
 from torch_geometric.loader import DataLoader
 from sys import gettrace
 from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
+from pathlib import Path
 
 '''
 Based on:
@@ -13,7 +15,7 @@ Based on:
 '''
 class BaseModelTrainer(object):
 
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, save_model_directory=None, **kwargs):
+    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, ckpt_dir=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
         """
@@ -38,22 +40,22 @@ class BaseModelTrainer(object):
 
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
+
+        # Names of trainable objects
         self._trainables = list()
         for member in new_members:
             if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor)):
                 if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
-
+        print(f"Trainables: {self._trainables}")
         self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
         self.scheduler_after_batch = False
         self.epoch = None
         self.lr = lr
         self.weight_decay = l2_weight_decay
-        self.save_model_dir = save_model_directory
-
-        # TODO: Modify
-        self.best_metric = None
+        self.ckpt_dir = ckpt_dir
+        self.best_metric = float("Inf")
 
     def set_optimizer(self, optimizer):
         # assert isinstance(optimizer, torch.optim.Optimizer)
@@ -260,39 +262,31 @@ class BaseModelTrainer(object):
         best : Any
                Whatever format is needed for load_best(), will be the argument provided to it.
         """
-        return [{k: v.cpu() for k, v in self.__dict__[m].state_dict().items()} for m in self._trainables]
-
-    def load_best(self, best):
+        assert self.ckpt_dir != None, "Checkpoint Directory is none."
+        Path(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}').mkdir(parents=True, exist_ok=True)
+        run_save_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
+        for trainable_member in self._trainables:
+            torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(run_save_dir, f'{trainable_member}_weights.pth'))
+    def load_best(self):
         """
         Load the parameters as saved by save_best().
 
-        Parameters
-        ----------
-        best: Any
         """
-        for m, state_dict in zip(self._trainables, best):
-            self.__dict__[m].load_state_dict({k: v.to(self.device) for k, v in state_dict.items()})
+        ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
+        assert os.path.exists(ckpt_dir), "Checkpoint Directory does not exist."
+        for trainable_member in self._trainables:
+                module_weight_path = os.path.join(ckpt_dir, f'{trainable_member}_weights.pth') 
+                assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
+                self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
 
-    def _retain_best(self, old_checkpoint, metrics_to_check: dict, retain_string: str):
-        if retain_string is None:
-            return old_checkpoint
-        best_checkpoint = old_checkpoint
-
-        def found_best():
-            tqdm.tqdm.write("Best {}. Retaining checkpoint...".format(retain_string))
-            self.best_metric = metrics_to_check[retain_string]
-            return self.save_best()
-
-        if retain_string not in metrics_to_check.keys():
-            tqdm.tqdm.write("No metric {} found in recorded metrics. Not saving best.")
-        if self.best_metric is None:
-            best_checkpoint = found_best()
-        elif retain_string == 'loss' and metrics_to_check[retain_string] <= self.best_metric:
-            best_checkpoint = found_best()
-        elif retain_string != 'loss' and metrics_to_check[retain_string] >= self.best_metric:
-            best_checkpoint = found_best()
-
-        return best_checkpoint
+    def _retain_best(self, metrics_to_check: dict,):
+        if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
+            tqdm.tqdm.write(f"Best loss: {metrics_to_check['loss']}. Retaining checkpoint...")
+            self.best_metric = metrics_to_check['loss']
+            self.save_best()
+        else:
+            tqdm.tqdm.write(f"Failed to beat best loss. Curr Loss: {metrics_to_check['loss']}. Best Loss: {self.best_metric}. Reverting to old checkpoint...")
+            self.load_best()
 
     @staticmethod
     def _dataloader_args(dataset, training=False, **loader_kwargs):
@@ -349,15 +343,12 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
-                self._retain_best(val_metrics, val_metrics, 'loss')
+                self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=iteration)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(val_metrics['loss'])
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
             mlflow.log_metrics(epoch_metrics, step=epoch)
-        if self.save_model_dir:
-            import pickle as pkl
-            best = self.save_best()
-            with open(f'{self.save_model_dir}/model_{mlflow.active_run().info.run_id}.pkl', 'wb+') as f:
-                pkl.dump(best, f)
-        mlflow.end_run()
+    if self.ckpt_dir != None:
+        print(f"Saved Model to: {self.ckpt_dir/{mlflow.active_run().info.run_id}}")
+    mlflow.end_run()

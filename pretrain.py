@@ -16,9 +16,7 @@ import torch.utils.data as torchdata
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
-#from Model.MENDR.R2E import R2E
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-#import torch.amp as amp
 
 from dataset import WaveletDataset
 
@@ -30,8 +28,10 @@ def main(args):
 
 
 	# Create input directory if it doesn't exist
-	if args.save_model_directory is not None:
-		Path(args.save_model_directory).mkdir(parents=True, exist_ok=True)
+	if args.ckpt_dir is not None:
+		if args.val_frac <= 0:
+			raise Exception("Must have validation dataset to save to dir")
+		Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
 	### Seed ###
 	torch.cuda.empty_cache()
@@ -52,8 +52,7 @@ def main(args):
 	# Load Dataset
 	dataset = WaveletDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
 	print("*" * 50)
-	print("Dataset Loaded. Length of Dataset: ", len(dataset), 
-	   " given frac: ", args.train_frac + args.val_frac)
+	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
 	
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -73,7 +72,6 @@ def main(args):
 	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
-
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -82,11 +80,10 @@ def main(args):
 		train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
 		print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
 
-		trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		#trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
-		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-	
+		#trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
 
 	print("*" * 50)
 	print("Cleaning up resources...")
@@ -163,7 +160,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--save_model_directory", type=str, help="If not none, save somewhere.", required=False, default=None
+		"--ckpt_dir", type=str, help="If not none, save after each epoch if validation loss decreases.", required=False, default=None
 	)
 
 	# parse args

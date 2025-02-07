@@ -21,15 +21,18 @@ class MENDRTrainer(BaseModelTrainer):
 		# Initialize temperature as a trainable parameter
 		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		self.temp2 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
+		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
+		self.contrastive_loss_fn_combined = nn.CrossEntropyLoss()
+
 		if config.multi_gpu:
 			encoder = nn.DataParallel(encoder)
 			contextualizer = nn.DataParallel(contextualizer)
 			self.temp1 = nn.DataParallel(self.temp1)
 			self.temp2 = nn.DataParallel(self.temp2)
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer,
-			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn=nn.CrossEntropyLoss(), lr=config.learning_rate,
-			l2_weight_decay=config.l2_weight_decay, metrics=dict(), 
-			save_model_directory=config.save_model_directory, **kwargs)
+			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
+			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
 		self.svd = SVD.apply
 
@@ -45,10 +48,10 @@ class MENDRTrainer(BaseModelTrainer):
 		combined_r2e_output, combined_manifold_output, wavelet_r2e_output, wavelet_manifold_output = self.contextualizer(encoder_output)
 
 		# Wavelet wise contrastive loss, i.e. Multi-headed loss
-		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_r2e_output, self.contrastive_loss_fn)
+		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_r2e_output, self.contrastive_loss_fn_wavelet)
 
 		# Combined contrastive loss
-		c_loss, c_correct, c_pairs = self.simCLR(inputs, data['graph'], combined_r2e_output, self.contrastive_loss_fn)
+		c_loss, c_correct, c_pairs = self.simCLR(inputs, data['graph'], combined_r2e_output, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
