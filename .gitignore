@@ -10,3 +10,4 @@ nedc_pyprint_edf/*
 /mlruns
 *.pkl
 model.pkl
+runs/

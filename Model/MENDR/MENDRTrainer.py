@@ -94,9 +94,9 @@ class MENDRTrainer(BaseModelTrainer):
 			transformed_encoder_output = self.encoder(data_graph, transformed_inputs)
 			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
 			# Compute logits
+			#print(combined_embedding.shape, transformed_embeddings.shape)
 			logits = torch.matmul(combined_embedding, transformed_embeddings.T) * torch.exp(self.temp2)
 			labels = torch.arange(combined_embedding.shape[0], device=self.device)
-
 			# Forward loss
 			forward_logits = logits
 			l = criterion(forward_logits, labels)
@@ -132,44 +132,45 @@ class MENDRTrainer(BaseModelTrainer):
 		loss = 0.0
 		correct = 0
 		pairs = 0
+		with torch.no_grad():
+			for i in range(num_targets):
+				# Average embeddings of all other modalities
+				other_embeddings = []
+				for j in list(range(i)) + list(range(i + 1, num_targets)):
+					embedding_tensor = embeddings[frequency_bands[j]]
+					other_embeddings.append(embedding_tensor)
+				other_embeddings = torch.stack(other_embeddings).sum(0) / (num_targets - 1)
+				curr_target = embeddings[frequency_bands[i]]
 
-		for i in range(num_targets):
-			# Average embeddings of all other modalities
-			other_embeddings = []
-			for j in list(range(i)) + list(range(i + 1, num_targets)):
-				embedding_tensor = embeddings[frequency_bands[j]]
-				other_embeddings.append(embedding_tensor)
-			other_embeddings = torch.stack(other_embeddings).sum(0) / (num_targets - 1)
-			curr_target = embeddings[frequency_bands[i]]
+				'''
+				When embeddings where matrices, not vectors.
+				# trace normalization
+				trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+				trace = trace.view(-1, 1, 1)
+				other_embeddings /= trace
+				identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
+				other_embeddings = other_embeddings + (1e5 * identity)
+				assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
+				'''
+				# Compute logits
+				# logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings)
+				#print(curr_target.shape, other_embeddings.shape)
+				logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
+				labels = torch.arange(logits.shape[0], device=self.device)
 
-			'''
-			When embeddings where matrices, not vectors.
-			# trace normalization
-			trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
-			trace = trace.view(-1, 1, 1)
-			other_embeddings /= trace
-			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
-			other_embeddings = other_embeddings + (1e5 * identity)
-			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
-			'''
-			# Compute logits
-			# logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings)
-			logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
-			labels = torch.arange(logits.shape[0], device=self.device)
+				# Forward loss
+				forward_logits = logits
+				l = criterion(forward_logits, labels)
+				loss += l
+				correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
+				pairs += forward_logits.size(0)
 
-			# Forward loss
-			forward_logits = logits
-			l = criterion(forward_logits, labels)
-			loss += l
-			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
-			pairs += forward_logits.size(0)
-
-			# Reverse loss
-			reverse_logits = logits.T
-			l = criterion(reverse_logits, labels)
-			loss += l
-			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
-			pairs += reverse_logits.size(0)
+				# Reverse loss
+				reverse_logits = logits.T
+				l = criterion(reverse_logits, labels)
+				loss += l
+				correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
+				pairs += reverse_logits.size(0)
 		return loss, correct, pairs
 
 	'''

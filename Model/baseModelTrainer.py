@@ -46,7 +46,7 @@ class BaseModelTrainer(object):
                 self.__dict__[member] = self.__dict__[member].to(self.device)
 
         self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
-        self.scheduler_after_batch = True
+        self.scheduler_after_batch = False
         self.epoch = None
         self.lr = lr
         self.weight_decay = l2_weight_decay
@@ -150,7 +150,6 @@ class BaseModelTrainer(object):
         wavelet_loss = outputs['wavelet_loss']
         combined_acc = outputs['combined_acc']
         wavelet_acc = outputs['wavelet_acc']
-
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
         recon_loss = recon_loss
         total_loss = recon_loss + combined_loss + wavelet_loss
@@ -318,9 +317,18 @@ class BaseModelTrainer(object):
 
         mlflow.start_run()
         mlflow.autolog()
+        signature = None
         for epoch in range(epochs):
-            total_epoch_training_loss = 0
-            total_epoch_validation_loss = 0
+            epoch_metrics = {
+                'total_epoch_training_loss': 0,
+                'total_epoch_combined_training_loss': 0,
+                'total_epoch_wavelet_training_loss': 0,
+                'total_epoch_reconstruction_training_loss': 0,
+                'total_epoch_validation_loss': 0,
+                'total_epoch_combined_validation_loss': 0,
+                'total_epoch_wavelet_validation_loss': 0,
+                'total_epoch_reconstruction_validation_loss': 0,
+            }
             self.epoch = epoch
             pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             data_iterator = iter(training_dataloader)
@@ -328,17 +336,25 @@ class BaseModelTrainer(object):
             for iteration in pbar:
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
-                total_epoch_training_loss += train_metrics['loss']
+                epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
+                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Loss']
+                epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
+                epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
-                total_epoch_validation_loss += val_metrics['loss']
+                epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
+                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Loss']
+                epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
+                epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics, val_metrics, 'loss')
+                mlflow.log_metrics(val_metrics, step=iteration)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(val_metrics['loss'])
-            print("Epoch: ", epoch, "Total Training Loss: ", total_epoch_training_loss, "Total Validation Loss: ", total_epoch_validation_loss)
+            print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
+            mlflow.log_metrics(epoch_metrics, step=epoch)
         if self.save_model_dir:
             import pickle as pkl
             best = self.save_best()

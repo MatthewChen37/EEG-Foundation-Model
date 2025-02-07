@@ -13,27 +13,20 @@ class MENDRContextualizer(nn.Module):
 		super(MENDRContextualizer, self).__init__()
 		self.device = device
 
+		self.wavelet_e2r = nn.ParameterDict({
+			'delta': E2R(epochs=4, device=self.device),
+			'theta': E2R(epochs=4, device=self.device),
+			'alpha': E2R(epochs=4, device=self.device),
+			'beta': E2R(epochs=4, device=self.device),
+			'gamma': E2R(epochs=4, device=self.device),
+		})
+
 		self.wavelet_attention_manifolds = nn.ParameterDict({
-			'delta': nn.Sequential(
-				E2R(epochs=4, device=self.device),
-				AttentionManifold(19, 10, self.device)
-			),
-			'theta': nn.Sequential(
-				E2R(epochs=4, device=self.device),
-				AttentionManifold(19, 10, self.device)
-			),
-			'alpha': nn.Sequential(
-				E2R(epochs=4, device=self.device),
-				AttentionManifold(19, 10, self.device)
-			),
-			'beta': nn.Sequential(
-				E2R(epochs=4, device=self.device),
-				AttentionManifold(19, 10, self.device)
-			),
-			'gamma': nn.Sequential(
-				E2R(epochs=4, device=self.device),
-				AttentionManifold(19, 10, self.device)
-			)
+			'delta': AttentionManifold(19, 10, self.device),
+			'theta': AttentionManifold(19, 10, self.device),
+			'alpha': AttentionManifold(19, 10, self.device),
+			'beta': AttentionManifold(19, 10, self.device),
+			'gamma': AttentionManifold(19, 10, self.device)
 		})
 
 		self.wavelet_r2e_tangent_spaces = nn.ParameterDict({
@@ -48,42 +41,56 @@ class MENDRContextualizer(nn.Module):
 			'delta': nn.Sequential(
 				nn.Flatten(),
 				nn.GELU(),
-				nn.Linear(220, 110),
+				nn.Dropout(p=0.1),
+				nn.GroupNorm(1, 220),
+				nn.Linear(220, 55),
 			),
 			'theta': nn.Sequential(
 				nn.Flatten(),
 				nn.GELU(),
-				nn.Linear(220, 110),
+				nn.Dropout(p=0.1),
+				nn.GroupNorm(1, 220),
+				nn.Linear(220, 55),
 			),
 			'alpha': nn.Sequential(
 				nn.Flatten(),
+				nn.Dropout(p=0.1),
 				nn.GELU(),
-				nn.Linear(220, 110),
+				nn.GroupNorm(1, 220),
+				nn.Linear(220, 55),
 			),
 			'beta': nn.Sequential(
 				nn.Flatten(),
 				nn.GELU(),
-				nn.Linear(220, 110),
+				nn.GroupNorm(1, 220),
+				nn.Linear(220, 55),
 			),
 			'gamma': nn.Sequential(
 				nn.Flatten(),
+				nn.Dropout(p=0.1),
 				nn.GELU(),
-				nn.Linear(220, 110),
+				nn.GroupNorm(1, 220),
+				nn.Linear(220, 55),
 			)
 		})
 
 		self.combined_r2e_tangent_space = nn.Sequential(
-			SPDTangentSpace(8, self.device)
+			SPDTangentSpace(10, self.device)
 		)
 
 		self.combined_r2e_lin = nn.Sequential(
 			nn.Flatten(),
 			nn.GELU(),
-			nn.Linear(64, 64)
+			nn.Dropout(p=0.1),
+			nn.GroupNorm(1, 220),
+			nn.Linear(220, 110),
 		)
 
-		self.combined_attention = AttentionManifold(10, 8, self.device)
+		self.combined_attention = AttentionManifold(10, 10, self.device)
 		self.ract = SPDRectified()
+
+		self.apply(self.init_params)
+
 
 	def forward(self, x, mask_t=None, mask_c=None):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
@@ -95,9 +102,12 @@ class MENDRContextualizer(nn.Module):
 		wavelet_manifold_output = dict()
 		wavelet_r2e_output = dict()
 		for band, band_encodings_decodings in x.items():
-			wavelet_manifold_output[band] = self.wavelet_attention_manifolds[band](band_encodings_decodings[0])
-			output = wavelet_manifold_output[band][0]
-			shape  = wavelet_manifold_output[band][1]
+			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings_decodings[0])
+			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band])
+			# Skip Connection
+			#og_output_shape = output.shape
+			#output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
+			#output = output.view(og_output_shape) 
 			wavelet_manifold_output[band] = (self.ract(output), shape)
 			wavelet_r2e_output[band] = self.wavelet_r2e_tangent_spaces[band](output)
 			wavelet_r2e_output[band] = wavelet_r2e_output[band].view(shape[0], shape[1], -1)
@@ -111,11 +121,12 @@ class MENDRContextualizer(nn.Module):
 			output = output.view((shape[0], shape[1], 10, 10))
 			combined_manifold_output += output
 
-		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
-		combined_r2e_output = self.ract(combined_manifold_output)
-		combined_r2e_output = self.combined_r2e_tangent_space(combined_r2e_output)
+		combined_manifold_output_skip, shape = self.combined_attention(combined_manifold_output)
+		# Skip connection
+		combined_manifold_output =  combined_manifold_output.view(shape[0]*shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3]) + combined_manifold_output_skip
+		combined_r2e_output = self.combined_r2e_tangent_space(combined_manifold_output)
 		combined_r2e_output = combined_r2e_output.view(shape[0], shape[1], -1)
-		combined_r2e_output = self.combined_r2e_lin(combined_manifold_output)
+		combined_r2e_output = self.combined_r2e_lin(combined_r2e_output)
 		return combined_r2e_output, combined_manifold_output, wavelet_r2e_output, wavelet_manifold_output
 
 	def freeze_features(self, unfreeze=False, finetuning=False):
@@ -123,3 +134,9 @@ class MENDRContextualizer(nn.Module):
 			param.requires_grad = unfreeze
 		if finetuning:
 			self.mask_replacement.requires_grad = False
+
+	def init_params(self, module):
+		if isinstance(module, nn.Linear):
+			nn.init.xavier_uniform_(module.weight.data)
+			if module.bias is not None:
+				module.bias.data.zero_()

@@ -33,7 +33,7 @@ class WaveletEncoderDecoder(nn.Module):
 
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
-
+        assert self.encoded_h == L_out
         self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads, concat=False).to(self.device)
         self.gnn_group_norm = nn.GroupNorm(1, self.num_channels).to(self.device)
         self.gnn_dropout = nn.Dropout(p=0.1).to(self.device)
@@ -88,10 +88,11 @@ class WaveletEncoderDecoder(nn.Module):
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
 
-        patch_embedding = patch_embedding.view(-1, patch_embedding.shape[-1])
-
-        encoding = self.gnn_embedder(patch_embedding, edge_index, edge_dist)
+        gnn_input = patch_embedding.view(-1, patch_embedding.shape[-1])
+        encoding = self.gnn_embedder(gnn_input, edge_index, edge_dist)
         encoding = encoding.view(-1, self.num_channels, self.encoded_h)
+        # Skip connection
+        encoding = encoding + patch_embedding
         encoding = self.gnn_group_norm(encoding)
         encoding = self.gnn_dropout(self.gnn_group_norm(encoding))
 
@@ -115,7 +116,7 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 63,
+                    encoded_h = 124,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device
@@ -127,7 +128,7 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 63,
+                    encoded_h = 124,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device
@@ -139,7 +140,7 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 486,
                     heads = 4,
-                    encoded_h = 123,
+                    encoded_h = 244,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device 
@@ -151,24 +152,26 @@ class MENDREncoder(nn.Module):
                     conv_kernel_stride = 2,
                     seq_len = 966,
                     heads = 4,
-                    encoded_h = 240,
+                    encoded_h = 484,
                     decoder_size = (2, 1),
                     decoder_stride = (2, 1),
                     device = device
                     ),
-
             'gamma': WaveletEncoderDecoder(
                     num_channels = 19,
-                    conv_kernel_size = 2,
-                    conv_kernel_stride = 2,
+                    conv_kernel_size = 3,
+                    conv_kernel_stride = 3,
                     seq_len = 1925,
                     heads = 4,
-                    encoded_h = 480,
-                    decoder_size = (2, 1),
-                    decoder_stride = (2, 1),
+                    encoded_h = 642,
+                    decoder_size = (3, 1),
+                    decoder_stride = (3, 1),
                     device = device
                     ),
-        })
+         })
+
+
+        self.apply(self.init_params)
 
     def forward(self, graph, data):
         assert data.keys() == self.encoder_decoders.keys()
@@ -182,3 +185,9 @@ class MENDREncoder(nn.Module):
             param.requires_grad = unfreeze
         if finetuning:
             self.mask_replacement.requires_grad = False
+
+    def init_params(self, module):
+         if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight.data)
+            if module.bias is not None:
+                module.bias.data.zero_()

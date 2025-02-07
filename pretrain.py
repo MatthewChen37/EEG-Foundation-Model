@@ -68,6 +68,7 @@ def main(args):
 	for band, encoder in encoder.encoder_decoders.items():
 		print(f"{band} Encoder Number of Params: {encoder.getEncoderParamCount()}")
 		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
+	print("Contextualizer parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
 	optimizer = MixOptimizer(optimizer)
@@ -85,6 +86,8 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+	
+
 	print("*" * 50)
 	print("Cleaning up resources...")
 

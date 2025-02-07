@@ -11,7 +11,7 @@ class MixOptimizer(object):
 
     def __init__(self, optimizer):
         self.optimizer = optimizer
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min')
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=3, threshold=1e3, mode='min')
         self.state = {}
 
     def zero_grad(self):

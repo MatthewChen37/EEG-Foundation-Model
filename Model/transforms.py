@@ -81,5 +81,4 @@ class RandomGaussianNoise(BatchTransform):
         std = torch.std(x, dim=(0, 1), keepdim=True)
 
         noise = torch.normal(mean, std)
-
         return x + noise

@@ -45,4 +45,4 @@ def fft_loss(output, target):
     target_amplitude = torch.abs(target_fft)
     target_angle = torch.abs(target_fft)
 
-    return (loss_fn(output_amplitude, target_amplitude) + (loss_fn(output_angle, target_angle))) * 1e-2
+    return (loss_fn(output_amplitude, target_amplitude) + (loss_fn(output_angle, target_angle)))
