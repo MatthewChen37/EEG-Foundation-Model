@@ -351,5 +351,5 @@ class BaseModelTrainer(object):
             mlflow.log_metrics(epoch_metrics, step=epoch)
 
         if self.ckpt_dir != None:
-            print(f"Saved Model to: {self.ckpt_dir/{mlflow.active_run().info.run_id}}")
+            print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}")
         mlflow.end_run()

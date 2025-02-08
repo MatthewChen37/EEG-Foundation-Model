@@ -1,1 +1,1 @@
-python pretrain.py --input_dir=/home/hice1/mchen439/scratch/eegfoundationmodeldata --train_frac=0.9 --val_frac=0.1 --learning_rate=0.001 --batch_size=256 --training_epochs=2 --ckpt_dir=./checkpoint
+python pretrain.py --input_dir=/home/hice1/mchen439/scratch/eegfoundationmodeldata --train_frac=0.9 --val_frac=0.1 --learning_rate=0.0001 --batch_size=128 --training_epochs=2 --ckpt_dir=./checkpoint
