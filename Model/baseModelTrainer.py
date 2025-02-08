@@ -335,7 +335,7 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=iteration)
+                mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
@@ -344,7 +344,7 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics)
-                mlflow.log_metrics(val_metrics, step=iteration)
+                mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(val_metrics['loss'])
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
