@@ -50,7 +50,7 @@ class BaseModelTrainer(object):
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
         self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
-        self.scheduler_after_batch = False
+        self.scheduler_after_batch = True
         self.epoch = None
         self.lr = lr
         self.weight_decay = l2_weight_decay
@@ -279,7 +279,7 @@ class BaseModelTrainer(object):
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
 
-    def _retain_best(self, metrics_to_check: dict,):
+    def _retain_best(self, metrics_to_check: dict):
         if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
             tqdm.tqdm.write(f"Best loss: {metrics_to_check['loss']}. Retaining checkpoint...")
             self.best_metric = metrics_to_check['loss']

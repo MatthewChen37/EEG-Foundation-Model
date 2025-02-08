@@ -69,7 +69,7 @@ def main(args):
 		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
 	print("Contextualizer parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-	optimizer = torch.optim.Adam(trainer.parameters(), lr=args.learning_rate)
+	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=5e-4)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
 	# Split Dataset
