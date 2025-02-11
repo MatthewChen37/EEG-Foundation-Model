@@ -3,6 +3,7 @@ import torch.nn as nn
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace
 from ..layers import Permute, Flatten
+import math
 
 '''
 BENDR-style Contextualizer using mATT module 
@@ -102,13 +103,24 @@ class MENDRContextualizer(nn.Module):
 
 		self.apply(self.init_params)
 
+		self.position_encoder = {
+			'delta': PositionalEncoding(19, 0.1, 246),
+			'theta': PositionalEncoding(19, 0.1, 246),
+			'alpha': PositionalEncoding(19, 0.1, 486),
+			'beta': PositionalEncoding(19, 0.1, 966),
+			'gamma': PositionalEncoding(19, 0.1, 1925),
+		}
 
-	def forward(self, x, mask_t=None, mask_c=None):
+	def forward(self, x):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
 		embedding_shapes = dict()
 		for band in x.keys():
 			# Batch Size, Num of Channels, Time Length
 			embedding_shapes[band] = x[band][0].shape
+			if self.position_encoder:
+				x[band] = x.permute(2, 0, 1)
+				x[band] = self.position_encoder[band](x[band])
+				x[band] = x[band].permute(1, 2, 0)
 
 		wavelet_manifold_output = dict()
 		wavelet_r2e_output = dict()
@@ -151,3 +163,25 @@ class MENDRContextualizer(nn.Module):
 			nn.init.xavier_uniform_(module.weight.data)
 			if module.bias is not None:
 				module.bias.data.zero_()
+
+# From https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
