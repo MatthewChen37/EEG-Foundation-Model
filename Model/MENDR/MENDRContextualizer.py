@@ -103,13 +103,15 @@ class MENDRContextualizer(nn.Module):
 
 		self.apply(self.init_params)
 
-		self.position_encoder = {
+		self.position_encoder = None
+
+		'''self.position_encoder = {
 			'delta': PositionalEncoding(19, 0.1, 246),
 			'theta': PositionalEncoding(19, 0.1, 246),
 			'alpha': PositionalEncoding(19, 0.1, 486),
 			'beta': PositionalEncoding(19, 0.1, 966),
 			'gamma': PositionalEncoding(19, 0.1, 1925),
-		}
+		}'''
 
 	def forward(self, x):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
