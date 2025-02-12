@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
-from ..transforms import RandomTemporalCrop, RandomGaussianNoise
+from ..transforms import RandomTemporalCrop, RandomGaussianNoise, RandomFTSurrogate
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 from .safeSVD import SVD, svdv2
@@ -32,6 +32,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 
 		self.RandomGaussianNoise = RandomGaussianNoise()
+		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.1, random_state=config.random_state)
 	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
@@ -88,7 +89,7 @@ class MENDRTrainer(BaseModelTrainer):
 			transformed_inputs = dict()
 			for band in frequency_bands:
 				# Add random noise
-				transformed_inputs[band] = self.RandomGaussianNoise(inputs[band], training=True)
+				transformed_inputs[band] = self.RandomFTSurrogate(self.RandomGaussianNoise(inputs[band]))
 			transformed_encoder_output = self.encoder(data_graph, transformed_inputs)
 			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
 			# Compute logits
