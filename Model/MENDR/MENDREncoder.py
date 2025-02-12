@@ -187,7 +187,7 @@ class MENDREncoder(nn.Module):
             self.mask_replacement.requires_grad = False
 
     def init_params(self, module):
-         if isinstance(module, nn.Linear):
+         if isinstance(module, nn.Linear, nn.Conv1d, nn.ConvTranspose1d):
             nn.init.xavier_uniform_(module.weight.data)
             if module.bias is not None:
                 module.bias.data.zero_()
