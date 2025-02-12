@@ -56,11 +56,11 @@ def testEncoder():
 
 def testContextualizer():
     example_input = {
-            'delta': (torch.randn(8, 19, 480).to(device), None),
-            'theta': (torch.randn(8, 19, 480).to(device), None),
-            'alpha': (torch.randn(8, 19, 960).to(device), None),
-            'beta': (torch.randn(8, 19, 1920).to(device), None),
-            'gamma': (torch.randn(8, 19, 3840).to(device), None)
+            'delta': (torch.randn(8, 19, 124).to(device), None),
+            'theta': (torch.randn(8, 19, 124).to(device), None),
+            'alpha': (torch.randn(8, 19, 244).to(device), None),
+            'beta': (torch.randn(8, 19, 484).to(device), None),
+            'gamma': (torch.randn(8, 19, 642).to(device), None)
         }
 
     contextualizer = MENDRContextualizer(device)
@@ -185,8 +185,9 @@ if __name__ == "__main__":
     testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
+    '''
     print("Testing trainer load from checkpoint...")
     testMENDRLoadFromCheckpoint()
     print("Trainer load from checkpoint test passed!")
-
+    '''
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

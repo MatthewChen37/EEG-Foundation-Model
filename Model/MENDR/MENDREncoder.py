@@ -33,7 +33,7 @@ class WaveletEncoderDecoder(nn.Module):
 
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
-        assert self.encoded_h == L_out
+        assert self.encoded_h == L_out, f"Encoded H {self.encoded_h} L_out {L_out}"
         self.gnn_embedder = GATConv(L_out, self.encoded_h, heads=self.heads, concat=False).to(self.device)
         self.gnn_group_norm = nn.GroupNorm(1, self.num_channels).to(self.device)
         self.gnn_dropout = nn.Dropout(p=0.1).to(self.device)

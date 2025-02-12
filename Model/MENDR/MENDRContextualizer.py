@@ -104,15 +104,13 @@ class MENDRContextualizer(nn.Module):
 
 		self.apply(self.init_params)
 
-		self.position_encoder = None
-
-		'''self.position_encoder = {
-			'delta': PositionalEncoding(19, 0.1, 246),
-			'theta': PositionalEncoding(19, 0.1, 246),
-			'alpha': PositionalEncoding(19, 0.1, 486),
-			'beta': PositionalEncoding(19, 0.1, 966),
-			'gamma': PositionalEncoding(19, 0.1, 1925),
-		}'''
+		self.position_encoder = nn.ParameterDict({
+			'delta': PositionalEncoding(19, 124, 0, 0.1, 4),
+			'theta': PositionalEncoding(19, 124, 0, 0.1, 4),
+			'alpha': PositionalEncoding(19, 244, 0, 0.1, 4),
+			'beta': PositionalEncoding(19, 484, 0, 0.1, 4),
+			'gamma': PositionalEncoding(19, 642, 2, 0.1, 4),
+		}).to(self.device)
 
 	def forward(self, x):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
@@ -121,9 +119,7 @@ class MENDRContextualizer(nn.Module):
 			# Batch Size, Num of Channels, Time Length
 			embedding_shapes[band] = x[band][0].shape
 			if self.position_encoder:
-				x[band] = x.permute(2, 0, 1)
-				x[band] = self.position_encoder[band](x[band])
-				x[band] = x[band].permute(1, 2, 0)
+				x[band] = (self.position_encoder[band](x[band][0]), x[band][1])
 
 		wavelet_manifold_output = dict()
 		wavelet_r2e_output = dict()
@@ -167,24 +163,37 @@ class MENDRContextualizer(nn.Module):
 			if module.bias is not None:
 				module.bias.data.zero_()
 
-# From https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+# Based on BENDR's Convolutional Position Encoding Scheme
 class PositionalEncoding(nn.Module):
+	def __init__(self, channels, seq_len, zero_padding=0, dropout=0.1, epochs=4):
+		super().__init__()
+		self.channels = channels
+		self.epochs = epochs
+		self.zero_padding = zero_padding
 
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
+		if seq_len % self.epochs != 0:
+			assert self.zero_padding != 0, f"Since seq len not divisible by epochs must add padding to make seq len divisible by epochs"
+			assert (seq_len + self.zero_padding) % self.epochs == 0, f"Zero padding does not make seq divisble by epochs"
+			self.len = seq_len + self.zero_padding
+		else:
+			self.len = seq_len
 
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+		conv = nn.Conv1d(self.len, self.len, self.channels, padding= self.channels // 2, groups=self.epochs)
+		nn.init.normal_(conv.weight, mean=0, std=1)
+		nn.init.constant_(conv.bias, 0)
+		conv = nn.utils.weight_norm(conv, dim=2)
+		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout))
 
-    def forward(self, x):
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
+	def forward(self, x):
+		"""
+		Arguments:
+			x: Tensor, shape ``[batch_size, channels, seq_len]``
+		"""
+		B, C, L = x.shape
+		if self.zero_padding:
+			x = torch.cat([x, torch.zeros(B, C, self.zero_padding).to(x.device)], dim=-1)
+		x = x.permute(0, 2, 1)
+		positional_encoding = self.conv(x)
+		x = x + positional_encoding
+		x = x.permute(0, 2, 1)
+		return x
