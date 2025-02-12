@@ -83,7 +83,7 @@ def main(args):
 		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
-	'''
+
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -95,7 +95,6 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-	'''
 
 	print("*" * 50)
 	print("Cleaning up resources...")

@@ -1,4 +1,5 @@
 import torch
+from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
@@ -127,7 +128,7 @@ def testMENDRTrainerWithValidation():
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)
+    dataset = ConcatDataset([WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)])
     num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
     num_val = len(dataset) - num_train
     train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
