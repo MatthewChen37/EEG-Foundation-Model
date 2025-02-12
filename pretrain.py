@@ -49,7 +49,6 @@ def main(args):
 
 	if args.train_frac + args.val_frac > 1:
 		raise ValueError("Train and Val Fraction should not exceed 1.")
-	'''
 	# Load Dataset
 	dataset = WaveletDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
 	if args.input_dir_2:
@@ -59,7 +58,7 @@ def main(args):
 
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
-	'''	
+
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDREncoder(device=device)
@@ -86,7 +85,6 @@ def main(args):
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
 
-	'''
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -98,7 +96,7 @@ def main(args):
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
 		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
-	'''
+
 	print("*" * 50)
 	print("Cleaning up resources...")
 
