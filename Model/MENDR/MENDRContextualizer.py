@@ -44,44 +44,44 @@ class MENDRContextualizer(nn.Module):
 				nn.GELU(),
 				nn.Dropout(p=0.1),
 				nn.GroupNorm(1, 760),
-				nn.Linear(760, 380),
+				nn.Linear(760, 190),
 				nn.GELU(),
-				nn.Linear(380, 190),
+				nn.Linear(190, 95),
 			),
 			'theta': nn.Sequential(
 				nn.Flatten(),
 				nn.GELU(),
 				nn.Dropout(p=0.1),
 				nn.GroupNorm(1, 760),
-				nn.Linear(760, 380),
+				nn.Linear(760, 190),
 				nn.GELU(),
-				nn.Linear(380, 190),
+				nn.Linear(190, 95),
 			),
 			'alpha': nn.Sequential(
 				nn.Flatten(),
 				nn.Dropout(p=0.1),
 				nn.GELU(),
 				nn.GroupNorm(1, 760),
-				nn.Linear(760, 380),
+				nn.Linear(760, 190),
 				nn.GELU(),
-				nn.Linear(380, 190),
+				nn.Linear(190, 95),
 			),
 			'beta': nn.Sequential(
 				nn.Flatten(),
 				nn.GELU(),
 				nn.GroupNorm(1, 760),
-				nn.Linear(760, 380),
+				nn.Linear(760, 190),
 				nn.GELU(),
-				nn.Linear(380, 190),
+				nn.Linear(190, 95),
 			),
 			'gamma': nn.Sequential(
 				nn.Flatten(),
 				nn.Dropout(p=0.1),
 				nn.GELU(),
 				nn.GroupNorm(1, 760),
-				nn.Linear(760, 380),
+				nn.Linear(760, 190),
 				nn.GELU(),
-				nn.Linear(380, 190),
+				nn.Linear(190, 95),
 			)
 		}).to(self.device)
 
@@ -94,9 +94,9 @@ class MENDRContextualizer(nn.Module):
 			nn.GELU(),
 			nn.Dropout(p=0.1),
 			nn.GroupNorm(1, 760),
-			nn.Linear(760, 380),
+			nn.Linear(760, 190),
 			nn.GELU(),
-			nn.Linear(380, 380)
+			nn.Linear(190, 95)
 		).to(self.device)
 
 		self.combined_attention = AttentionManifold(19, 19, self.device)
@@ -181,7 +181,7 @@ class PositionalEncoding(nn.Module):
 		conv = nn.Conv1d(self.len, self.len, self.channels, padding= self.channels // 2, groups=self.epochs)
 		nn.init.normal_(conv.weight, mean=0, std=1)
 		nn.init.constant_(conv.bias, 0)
-		conv = nn.utils.weight_norm(conv, dim=2)
+		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
 		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout))
 
 	def forward(self, x):

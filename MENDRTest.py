@@ -66,10 +66,10 @@ def testContextualizer():
     contextualizer = MENDRContextualizer(device)
     combined_r2e_output, combined_manifold_output, wavelet_r2e_output, wavelet_manifold_output = contextualizer(example_input)
 
-    assert combined_r2e_output.shape == torch.Size([8, 380]), f'Combined R2E Shape: {combined_r2e_output.shape}'
+    assert combined_r2e_output.shape == torch.Size([8, 95]), f'Combined R2E Shape: {combined_r2e_output.shape}'
     assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
     for band, v in example_input.items():
-        assert wavelet_r2e_output[band].shape == torch.Size([8, 190]), f'{band} Wavelet R2E Shape: {wavelet_r2e_output[band].shape}'
+        assert wavelet_r2e_output[band].shape == torch.Size([8, 95]), f'{band} Wavelet R2E Shape: {wavelet_r2e_output[band].shape}'
         output, shape = wavelet_manifold_output[band]
         assert output.shape == torch.Size([32, 19, 19]), f'{band} Wavelet Manifold Shape: {wavelet_manifold_output[band].shape}'
         assert shape == [8, 4, -1], f'{band} Shape: {shape}'
