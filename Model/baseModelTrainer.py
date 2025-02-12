@@ -267,6 +267,7 @@ class BaseModelTrainer(object):
         run_save_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
         for trainable_member in self._trainables:
             torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(run_save_dir, f'{trainable_member}_weights.pth'))
+
     def load_best(self):
         """
         Load the parameters as saved by save_best().
@@ -274,8 +275,11 @@ class BaseModelTrainer(object):
         """
         ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
         assert os.path.exists(ckpt_dir), "Checkpoint Directory does not exist."
+        self.load_from_ckpt(ckpt_dir)
+        
+    def load_from_ckpt(self, ckpt_path):
         for trainable_member in self._trainables:
-                module_weight_path = os.path.join(ckpt_dir, f'{trainable_member}_weights.pth') 
+                module_weight_path = os.path.join(ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
 

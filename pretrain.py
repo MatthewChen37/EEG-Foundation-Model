@@ -33,6 +33,7 @@ def main(args):
 			raise Exception("Must have validation dataset to save to dir")
 		Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
+	
 	### Seed ###
 	torch.cuda.empty_cache()
 	random.seed(args.random_state)
@@ -58,8 +59,8 @@ def main(args):
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDREncoder(device=device)
 	contextualizer = MENDRContextualizer(device=device)
-	#r2e = R2E(args)
 
+	
 	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
@@ -72,6 +73,15 @@ def main(args):
 	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=5e-4)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
+
+	if args.load_from_ckpt:
+		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
+		if not os.path.exists(args.load_from_ckpt):
+			raise Exception(f"Checkpoint folder {args.load_from_ckpt} does not exist.")
+		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
+		trainer.load_from_ckpt(args.load_from_ckpt)
+		print(f'Weights successfully loaded.')
+
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -156,6 +166,10 @@ def parse_args():
 
 	parser.add_argument(
 		"--ckpt_dir", type=str, help="If not none, save after each epoch if validation loss decreases.", required=False, default=None
+	)
+
+	parser.add_argument(
+		"--load_from_ckpt", type=str, help="Initializes weights of encoder and contextualizer with weights from folder. If it cannot throws an error.", required=False, default=None
 	)
 
 	# parse args
