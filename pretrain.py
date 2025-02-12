@@ -139,10 +139,6 @@ def parse_args():
 
 	# Trainer Configs
 	parser.add_argument(
-		"--multi_gpu", type=bool, help="Multi GPU Training", default=False
-	)
-
-	parser.add_argument(
 		"--learning_rate", type=float, help="Learning Rate", default=0.01
 	)
 

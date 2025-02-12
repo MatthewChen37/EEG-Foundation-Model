@@ -24,11 +24,6 @@ class MENDRTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.CrossEntropyLoss()
 
-		if config.multi_gpu:
-			encoder = nn.DataParallel(encoder)
-			contextualizer = nn.DataParallel(contextualizer)
-			self.temp1 = nn.DataParallel(self.temp1)
-			self.temp2 = nn.DataParallel(self.temp2)
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer,
 			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
