@@ -171,8 +171,6 @@ class BaseModelTrainer(object):
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
             train_metrics[f'{band} Loss'] = loss
-        if self.scheduler_after_batch:
-            self.optimizer.scheduler_step(loss)
         return train_metrics
 
     def evaluate(self, dataset, **loader_kwargs):
@@ -325,6 +323,7 @@ class BaseModelTrainer(object):
         mlflow.start_run()
         mlflow.autolog()
         signature = None
+        self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
             epoch_metrics = {
                 'total_epoch_training_loss': 0,
@@ -349,6 +348,8 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
+                if self.scheduler_after_batch:
+                    self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
@@ -359,7 +360,7 @@ class BaseModelTrainer(object):
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
             if not self.scheduler_after_batch:
-                self.optimizer.scheduler_step(val_metrics['loss'])
+                self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
             mlflow.log_metrics(epoch_metrics, step=epoch)
 
