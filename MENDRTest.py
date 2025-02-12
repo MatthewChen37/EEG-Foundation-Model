@@ -185,9 +185,7 @@ if __name__ == "__main__":
     testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
-    '''
     print("Testing trainer load from checkpoint...")
     testMENDRLoadFromCheckpoint()
     print("Trainer load from checkpoint test passed!")
-    '''
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

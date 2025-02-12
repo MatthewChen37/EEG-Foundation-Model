@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.utils.data as torchdata
+import torch.utils.data as torchdata, ConcatDataset
 
 from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
@@ -52,6 +52,11 @@ def main(args):
 
 	# Load Dataset
 	dataset = WaveletDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
+	if args.input_dir_2:
+		print(f"Second Data Dir specified: {args.input_dir_2}")
+		dataset2 = WaveletDataset(root=args.input_dir_2, frac=args.train_frac + args.val_frac)
+		dataset = ConcatDataset([dataset, dataset2])
+
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
 	
@@ -60,7 +65,6 @@ def main(args):
 	encoder = MENDREncoder(device=device)
 	contextualizer = MENDRContextualizer(device=device)
 
-	
 	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
@@ -113,6 +117,10 @@ def parse_args():
 	# Training Parameters
 	parser.add_argument(
 		'--input_dir', type=str, help='Path to training data', required=True
+	)
+
+	parser.add_argument(
+		'--input_dir_2', type=str, help='Path to more training data (datasets will be concatenated)', required=False
 	)
 
 	parser.add_argument(
