@@ -154,7 +154,7 @@ def testMENDRLoadFromCheckpoint():
     val_frac=0.2,
     ckpt_dir="./checkpoint",
     random_state=42,
-    load_from_ckpt="./checkpoint/batch_size_128"
+    load_from_ckpt="./checkpoint/MockCkpt"
     )
 
     encoder = MENDREncoder(device=device)

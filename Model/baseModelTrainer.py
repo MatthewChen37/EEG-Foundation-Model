@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import tqdm
 import re
 import os
@@ -131,6 +132,14 @@ class BaseModelTrainer(object):
     def backward(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
+        # Clamp temperature to non-negative values
+        with torch.no_grad():
+            self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
+            self.temp2.copy_(torch.clamp(self.temp2, min=0.0))
+
+        # Gradient Clipping
+        nn.utils.clip_grad_norm_(self.parameters(), 10, error_if_nonfinite=True)
+
 
     def train(self, mode=True):
         self._training = mode

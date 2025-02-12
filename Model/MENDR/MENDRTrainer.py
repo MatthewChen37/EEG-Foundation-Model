@@ -32,7 +32,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 
 		self.RandomGaussianNoise = RandomGaussianNoise()
-		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.2, random_state=config.random_state)
+		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.3, random_state=config.random_state)
 	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
