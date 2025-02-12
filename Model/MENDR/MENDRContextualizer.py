@@ -83,7 +83,7 @@ class MENDRContextualizer(nn.Module):
 				nn.GELU(),
 				nn.Linear(380, 190),
 			)
-		})
+		}).to(self.device)
 
 		self.combined_r2e_tangent_space = nn.Sequential(
 			SPDTangentSpace(19, self.device)
@@ -97,7 +97,8 @@ class MENDRContextualizer(nn.Module):
 			nn.Linear(760, 380),
 			nn.GELU(),
 			nn.Linear(380, 380)
-		)
+		).to(self.device)
+
 		self.combined_attention = AttentionManifold(19, 19, self.device)
 		self.ract = SPDRectified()
 

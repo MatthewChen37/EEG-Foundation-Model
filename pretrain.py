@@ -165,7 +165,7 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--ckpt_dir", type=str, help="If not none, save after each epoch if validation loss decreases.", required=False, default=None
+		"--ckpt_dir", type=str, help="If not none, save after each epoch if validation loss decreases.", required=True, default=None
 	)
 
 	parser.add_argument(
