@@ -14,7 +14,7 @@ def main(args):
 	subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
 	print("Subjects: ", len(subjects))
 
-	subjects_grouped = group_list(subjects, 32)
+	subjects_grouped = group_list(subjects, 32)[422:]
 	print(f"Processing {len(subjects_grouped)} groups")
 
 	with ProcessPoolExecutor() as executor:
