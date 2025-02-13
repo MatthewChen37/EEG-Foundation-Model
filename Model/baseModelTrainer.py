@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import tqdm
 import re
 import os
@@ -131,6 +132,14 @@ class BaseModelTrainer(object):
     def backward(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
+        # Clamp temperature to non-negative values
+        with torch.no_grad():
+            self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
+            self.temp2.copy_(torch.clamp(self.temp2, min=0.0))
+
+        # Gradient Clipping
+        nn.utils.clip_grad_norm_(self.parameters(), 10, error_if_nonfinite=True)
+
 
     def train(self, mode=True):
         self._training = mode
@@ -162,8 +171,6 @@ class BaseModelTrainer(object):
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
             train_metrics[f'{band} Loss'] = loss
-        if self.scheduler_after_batch:
-            self.optimizer.scheduler_step(loss)
         return train_metrics
 
     def evaluate(self, dataset, **loader_kwargs):
@@ -267,6 +274,7 @@ class BaseModelTrainer(object):
         run_save_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
         for trainable_member in self._trainables:
             torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(run_save_dir, f'{trainable_member}_weights.pth'))
+
     def load_best(self):
         """
         Load the parameters as saved by save_best().
@@ -274,8 +282,11 @@ class BaseModelTrainer(object):
         """
         ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
         assert os.path.exists(ckpt_dir), "Checkpoint Directory does not exist."
+        self.load_from_ckpt(ckpt_dir)
+        
+    def load_from_ckpt(self, ckpt_path):
         for trainable_member in self._trainables:
-                module_weight_path = os.path.join(ckpt_dir, f'{trainable_member}_weights.pth') 
+                module_weight_path = os.path.join(ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
 
@@ -312,6 +323,7 @@ class BaseModelTrainer(object):
         mlflow.start_run()
         mlflow.autolog()
         signature = None
+        self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
             epoch_metrics = {
                 'total_epoch_training_loss': 0,
@@ -336,6 +348,8 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
+                if self.scheduler_after_batch:
+                    self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
@@ -346,7 +360,7 @@ class BaseModelTrainer(object):
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
             if not self.scheduler_after_batch:
-                self.optimizer.scheduler_step(val_metrics['loss'])
+                self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
             mlflow.log_metrics(epoch_metrics, step=epoch)
 

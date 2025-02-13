@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import ptwt
 from ..baseModelTrainer import BaseModelTrainer
-from ..transforms import RandomTemporalCrop, RandomGaussianNoise
+from ..transforms import RandomTemporalCrop, RandomGaussianNoise, RandomFTSurrogate
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
 from .safeSVD import SVD, svdv2
@@ -24,11 +24,6 @@ class MENDRTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.CrossEntropyLoss()
 
-		if config.multi_gpu:
-			encoder = nn.DataParallel(encoder)
-			contextualizer = nn.DataParallel(contextualizer)
-			self.temp1 = nn.DataParallel(self.temp1)
-			self.temp2 = nn.DataParallel(self.temp2)
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer,
 			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
@@ -37,6 +32,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 
 		self.RandomGaussianNoise = RandomGaussianNoise()
+		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.2, random_state=config.random_state)
 	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
@@ -93,7 +89,7 @@ class MENDRTrainer(BaseModelTrainer):
 			transformed_inputs = dict()
 			for band in frequency_bands:
 				# Add random noise
-				transformed_inputs[band] = self.RandomGaussianNoise(inputs[band], training=True)
+				transformed_inputs[band] = self.RandomFTSurrogate(self.RandomGaussianNoise(inputs[band]))
 			transformed_encoder_output = self.encoder(data_graph, transformed_inputs)
 			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
 			# Compute logits

@@ -59,15 +59,13 @@ class WaveletDataset(Dataset):
 			
 
 	def _process_subject(self, subject):
-		subject_graph_path = os.path.join(self.root, subject, "graphs")
-		if os.path.exists(subject_graph_path) and len(os.listdir(subject_graph_path)) > 0:
-			subject_graph_path = os.listdir(subject_graph_path)[0]
-			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(self.root, subject, "graphs", subject_graph_path))
-			subject_path = os.path.join(self.root, subject)
-			wavelet_path = os.path.join(subject_path, "wavelet_decompositions")
+		subject_graph_folder = os.path.join(self.root, subject, "graphs")
+		wavelet_path = os.path.join(self.root, subject, "wavelet_decompositions")
+		if os.path.exists(subject_graph_folder) and len(os.listdir(subject_graph_folder)) > 0 and os.path.exists(wavelet_path) and len(os.listdir(wavelet_path)) > 0:
+			subject_graph_path = os.listdir(subject_graph_folder)[0]
+			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(subject_graph_folder, subject_graph_path))
 			wavelet_files = os.listdir(wavelet_path)
 			subject_epochs = dict()
-
 			for file_name in wavelet_files:
 				attributes = file_name.split("_")
 				epoch_idx = int(attributes[-1][:-3])
