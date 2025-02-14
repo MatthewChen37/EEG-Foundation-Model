@@ -29,9 +29,9 @@ def simplePipeline(raw):
 	raw.notch_filter((60, 120), verbose=False)
 	epochs = make_fixed_length_epochs(raw, duration=60, preload=True)
 	epochs = epochs.load_data()
-	if len(epochs) <= 3:
-		raise ValueError("Not enough epochs")
-	epochs.drop([0, len(epochs) - 1], verbose=False)
+	#if len(epochs) <= 3:
+	#raise ValueError("Not enough epochs")
+	#epochs.drop([0, len(epochs) - 1], verbose=False)
 	epochs.drop_bad(verbose=False)
 	epochs.resample(128, verbose=False)
 	epochs.apply_function(lambda x: x * 1e5, verbose=False)

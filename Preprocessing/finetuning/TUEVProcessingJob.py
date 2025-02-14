@@ -9,64 +9,111 @@ from preprocessingPipeline import simplePipeline
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import warnings
 import traceback
-from collections import OrderedDict
 from convertTUHtoBIDS import _rename_channels, CHANNELS_TO_KEEP
 
-INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
-		    'O1', 'O2', 'F7', 'F8', 'T3', 'T4', 'T5', 'T6',
-			  'Fz', 'Cz', 'Pz']
+def group_list(data, size):
+    return [data[i:i + size] for i in range(0, len(data), size)]
 
 failed_files = []
 
-def convertTUEV(subject_dir, subject_name):
-	for session in os.listdir(subject_dir):
-		for montage_layout in os.listdir(os.path.join(subject_dir, session)):
-			for file in os.listdir(os.path.join(subject_dir, session, montage_layout)):
-				if file.endswith(".edf"):
-					raw_filepath = os.path.join(subject_dir, session, montage_layout, file)
-					channel_annotation_file_path = os.path.join(subject_dir, session, montage_layout, file[:-4] + ".csv")
-					global_annotation_file_path = os.path.join(subject_dir, session, montage_layout, file[:-4] + ".csv_bi")
+def main(args):
+	sessions = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
+	print(f"Found {len(sessions)} session")
+	session_grouped = group_list(sessions, 10)
+	print(f"Processing {len(session_grouped)} groups")
+	# Define the columns for the empty DataFrame
+	columns = ['f_path', 'error', 'traceback']
 
-					raw = mne.io.read_raw_edf(raw_filepath, preload=False)
-					_rename_channels(raw)
+	with ProcessPoolExecutor() as executor:
+		futures = [executor.submit(_process_file_group, args, session_group) for session_group in session_grouped]
+		for future in tqdm(futures):
+			future.result()
 
-					'''
-					BIDS Format requires line frequency to be specified.
-					Line frequency is the frequency of the power line in the country where the data was recorded.
-					For the United States, the line frequency is (typically) 60 Hz.	
-					'''
-					raw.info["line_freq"] = 60
+	failed_files_df = pd.DataFrame(failed_files, columns=columns)
+	print(f"Failed files: {len(failed_files)}")
+	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"), index=False)
 
-					# Handling annotations
-					annotations_df = pd.read_csv(channel_annotation_file_path, delimiter=',', comment='#')
-					onset = annotations_df['start_time']
-					duration = annotations_df['stop_time'] - annotations_df['start_time']
-					description = annotations_df['label']
-					ch_names = [_channel_mapping(x.split("-")) for x in annotations_df['channel'].values.tolist()]
-					
-					global_annotations_df = pd.read_csv(global_annotation_file_path, delimiter=',', comment='#')
-					onset = pd.concat([onset, global_annotations_df['start_time']])
-					duration = pd.concat([duration, global_annotations_df['stop_time'] - global_annotations_df['start_time']])
-					description = pd.concat([description, global_annotations_df['label']])
-					global_channel_names = [[] for x in global_annotations_df['channel'].values.tolist()]
-					ch_names = ch_names + global_channel_names
-					
-					annotations = mne.Annotations(onset=onset, duration=duration, description=description, ch_names=ch_names)
+def _process_file_group(args, session_group):
+	with ThreadPoolExecutor() as executor:
+		futures = [executor.submit(process_session, os.path.join(args.input_directory, session)) for session in session_group]
+		for future in futures:
+			future.result()
 
+# From https://github.com/fjssharpsword/MedIR/blob/3d1eef266e8ad82a0cfad7a6111076028b8d42fa/EEG/TUSZ/dsts/tuev_spsw.py#L87
+def parse_annotation(ann_path):
+	# Annotation in one bipolar channel means annotation in both
+	montage = ['Fp1-F7', 'F7-T3', 'T3-T5', 'T5-O1', 'Fp2-F8', 'F8-T4', 'T4-T6', 'T6-O2', 'A1-T3', 'T3-C3', 'C3-Cz',\
+                   'Cz-C4', 'C4-T4', 'T4-A2', 'Fp1-F3', 'F3-C3', 'C3-P3', 'P3-O1', 'Fp2-F4', 'F4-C4', 'C4-P4', 'P4-O2']
+	annotations = []
+	with open(ann_path, 'r') as ann_file:
+		for line in ann_file.readlines():
+			line = line.split(',')
+			ch, st, ed, cl =  eval(line[0]), eval(line[1]), eval(line[2]), eval(line[3])
+			ch_names = montage[ch].split('-')
+			channel_1 = ch_names[0]
+			channel_2 = ch_names[1]
+			annotations.append(([channel_1, channel_2], st, ed, cl))
+	return annotations
 
-					raw.set_annotations(annotations)
-					raw.set_montage("standard_1005", on_missing="ignore")
+def process_session(session_path):
+	file_list = os.listdir(session_path)
+	for file in file_list:
+		if file.endswith('.edf'):
+			file_ouput_path = os.path.join(args.output_dir, f"{file[:-4]}_epo.fif")
+			if os.path.exists(file_ouput_path):
+				continue
+			try: 
+				raw = mne.io.read_raw_edf(os.path.join(session_path, file), preload=True)
+				assert raw.times[-1] > 60, f"Duration is {raw.times[-1]} {session_path} {file}"
+				_rename_channels(raw)
+				raw.info['line_freq'] = 60
+				annotations_file = file[:-4] + '.rec'
+				annotations_list = parse_annotation(os.path.join(session_path, annotations_file))
+				annotations_df = pd.DataFrame(annotations_list, columns=['channel', 'start', 'end', 'class'])
+				annotations_df['duration'] = annotations_df['end'] - annotations_df['start']
+				annotations = mne.Annotations(onset=annotations_df['start'], duration=annotations_df['duration'], description=annotations_df['class'], ch_names=annotations_df['channel'].tolist())
 
-def _channel_mapping(channel_list):
-	new_list = []
+				raw.set_annotations(annotations)
+				raw.set_montage("standard_1005", on_missing="ignore")
+				raw.set_meas_date(None)
 
-	for channel in channel_list:
-		if channel == "FP1":
-			new_list.append("Fp1")
-		elif channel == "FP2":
-			new_list.append("Fp2")
-		elif channel == "CZ":
-			new_list.append("Cz")
+				to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
+				raw.drop_channels(to_drop)
+				if 'A1' and 'A2' in raw.ch_names:
+					raw = raw.drop_channels(['A1', 'A2'])
+				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
+
+				epochs = simplePipeline(raw)
+				epochs.save(file_ouput_path, overwrite=False)
+			except Exception as e:
+				print(f"Failed to process {file, session_path}, error: {e}")
+				failed_files.append((os.path.join(file, session_path), e, traceback.format_exc()))
 		else:
-			new_list.append(channel)
-	return new_list
+			pass # ignore other files
+
+def parse_args():
+	parser = argparse.ArgumentParser(description='Preprocess TUEV data')
+	parser.add_argument('--input_directory', type=str, help='Path to the directory containing the TUEV data')
+	parser.add_argument('--output_dir', type=str, help='Path to the directory where the preprocessed data will be stored')
+	args = parser.parse_args()
+	return args
+
+if __name__ == '__main__':
+	# Ignore warnings
+	warnings.filterwarnings("ignore")
+
+	args = parse_args()
+	Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+	main(args)
+
+
+'''
+eval
+
+
+error: Duration is 19.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/031 bckg_031_a_.edf
+error: Duration is 9.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/040 bckg_040_a_.edf
+error: Duration is 34.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/028 bckg_028_a_.edf
+error: Duration is 41.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/006 pled_006_a_.edf
+error: Duration is 37.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/093 bckg_093_a_2.edf
+'''
