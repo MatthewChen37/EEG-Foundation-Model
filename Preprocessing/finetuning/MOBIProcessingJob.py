@@ -43,7 +43,7 @@ def _process_subject(args, subject):
 
 				epochs = simplePipeline(raw)
 				#print(raw.get_channel_types())
-				epochs.save(os.path.join(args.output_dir, subject, "epochs", f"{session}_epo.fif"), overwrite=)
+				epochs.save(os.path.join(args.output_dir, subject, "epochs", f"{session}_epo.fif"), overwrite=True)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='Preprocess MOBI data')
