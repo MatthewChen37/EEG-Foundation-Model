@@ -25,14 +25,15 @@ def simplePipeline(raw):
 
 	'''
 	
-	raw.filter(0.1, 75, verbose=False)
-	raw.notch_filter((60, 120), verbose=False)
+	raw.filter(0.1, 49.0, verbose=False, picks='eeg')
+	#raw.notch_filter((60, 120), verbose=False, picks='eeg')
 	epochs = make_fixed_length_epochs(raw, duration=60, preload=True)
 	epochs = epochs.load_data()
-	#if len(epochs) <= 3:
-	#raise ValueError("Not enough epochs")
-	#epochs.drop([0, len(epochs) - 1], verbose=False)
+	if len(epochs) <= 3:
+		raise ValueError("Not enough epochs")
+	epochs.drop([0, len(epochs) - 1], verbose=False)
 	epochs.drop_bad(verbose=False)
 	epochs.resample(128, verbose=False)
+	raw.filter(0.1, 49.0, verbose=False, picks='eeg')
 	epochs.apply_function(lambda x: x * 1e5, verbose=False)
 	return epochs
