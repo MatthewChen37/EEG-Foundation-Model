@@ -29,19 +29,19 @@ class WaveletEncoderDecoder(nn.Module):
             nn.Conv1d(self.num_channels, self.num_channels, 
             self.conv_kernel_size, stride=self.conv_kernel_stride,
             padding=self.conv_kernel_size//2),
-            nn.BatchNorm(self.num_channels), # Same as Layer Norm
+            nn.BatchNorm1d(self.num_channels), # Same as Layer Norm
             nn.Dropout1d(0.1),
             nn.GELU(),
             nn.Linear(L_out, self.encoded_h)
         ).to(self.device)
 
         self.gnn_encoder = GATConv(encoded_h, self.encoded_h, heads=self.heads, concat=False).to(self.device)
-        self.gnn_bnorm = nn.BatchNorm1d(self.num_channels)
+        self.gnn_bnorm = nn.BatchNorm1d(self.num_channels).to(self.device)
         self.dropout = nn.Dropout1d(0.1)
         self.act = nn.GELU()
-        self.lin = nn.Linear(self.encoded_h, self.encoded_h)
+        self.lin = nn.Linear(self.encoded_h, self.encoded_h).to(self.device)
 
-        self.learnable_padding = torch.nn.Parameter(torch.normal(0, self.encoded_h**(-0.5), size=(self.num_channels, self.seq_len - self.encoded_h), requires_grad=True))
+        self.learnable_padding = torch.nn.Parameter(torch.normal(0, self.encoded_h**(-0.5), size=(self.num_channels, self.seq_len - self.encoded_h), requires_grad=True)).to(self.device)
         self.transformer_decoder1 = nn.TransformerDecoderLayer(self.num_channels, nhead=1, dim_feedforward=L_out, activation=nn.GELU(), batch_first=True).to(self.device)
         self.transformer_decoder2 = nn.TransformerDecoderLayer(self.num_channels, nhead=1, dim_feedforward=L_out, activation=nn.GELU(), batch_first=True).to(self.device)
 
@@ -81,7 +81,7 @@ put them into a single object.
 '''
 class MENDRAutoEncoder(nn.Module):
     def __init__(self, device):
-        super(EncoderDecoder, self).__init__()
+        super(MENDRAutoEncoder, self).__init__()
         self.device = device
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(
