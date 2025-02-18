@@ -121,7 +121,7 @@ def testMENDRTrainerWithValidation():
     random_state=42
     )
 
-    encoder = MENDREncoder(device=device)
+    encoder = MENDRAutoEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -157,7 +157,7 @@ def testMENDRLoadFromCheckpoint():
     load_from_ckpt="./checkpoint/MockCkpt"
     )
 
-    encoder = MENDREncoder(device=device)
+    encoder = MENDRAutoEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -170,11 +170,11 @@ def testMENDRLoadFromCheckpoint():
 
 if __name__ == "__main__":
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    #testContextualizer()
+    testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
@@ -182,10 +182,10 @@ if __name__ == "__main__":
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    #testMENDRTrainerWithValidation()
+    testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("Testing trainer load from checkpoint...")
-    #testMENDRLoadFromCheckpoint()
+    testMENDRLoadFromCheckpoint()
     print("Trainer load from checkpoint test passed!")
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

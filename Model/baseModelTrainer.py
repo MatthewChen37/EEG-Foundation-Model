@@ -230,18 +230,18 @@ class BaseModelTrainer(object):
                 encoder_output = outputs['encoder_output']
                 combined_r2e_output = outputs['combined_r2e_output']
                 combined_manifold_output = outputs['combined_manifold_output']
-                wavelet_r2e_output = outputs['wavelet_r2e_output']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg += outputs['combined_total_loss'].item()
+                euclidean_loss = outputs['euclidean_loss']
+                riemannian_loss = outputs['riemannian_loss']
+                combined_loss_agg += (outputs['euclidean_loss'] + outputs['riemannian_loss']).item()
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
-                combined_acc_agg += outputs['combined_acc']
                 wavelet_acc_agg += outputs['wavelet_acc']
 
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
                 recon_loss_agg += recon_loss.item()
 
             total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
-            val_metrics = self.calculate_metrics(combined_loss_agg, wavelet_loss_agg, recon_loss_agg, combined_acc_agg / len(pbar), wavelet_acc_agg / len(pbar))
+            val_metrics = self.calculate_metrics(combined_loss_agg, euclidean_loss.item(), riemannian_loss.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg)
             val_metrics.setdefault('loss', total_loss_agg)
             return val_metrics
 
