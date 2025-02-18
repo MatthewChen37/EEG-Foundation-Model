@@ -22,19 +22,34 @@ class MENDRTrainer(BaseModelTrainer):
 		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		self.temp2 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
-		self.contrastive_loss_fn_combined = nn.CrossEntropyLoss()
+		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.negatives_loo = 50
 
-		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer,
-			temp1=self.temp1, temp2=self.temp2, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+		self.band_mask = {}
+		self.epoch_indices = {}
+		for band in BANDS:
+			num_channels = encoder.encoder_decoders[band].num_channels
+			encoded_seq_len = encoder.encoder_decoders[band].encoded_h
+			epoch_seq_len = encoded_seq_len // contextualizer.epochs
+			self.band_mask[band] = nn.Parameter(torch.normal(0, encoded_h**(-0.5)), size=(num_channels, epoch_seq_len), requires_grad=True)
+			self.epoch_indices[band] = []
+			for epoch_idx in range(contextualizer.epochs):
+				self.epoch_indices[band].append(epoch(epoch_idx * epoch_seq_len, (epoch_idx + 1) * epoch_seq_len))
+
+		# Band mask is learnable
+		self.band_mask = nn.ParameterDict(self.band_mask)
+
+		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
+			temp1=self.temp1, temp2=self.temp2, band_mask=self.band_mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
 		self.svd = SVD.apply
 
+		''' Unused
 		self.RandomGaussianNoise = RandomGaussianNoise()
 		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.2, random_state=config.random_state)
-	
+		'''	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
 
@@ -48,7 +63,7 @@ class MENDRTrainer(BaseModelTrainer):
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		c_loss, c_correct, c_pairs = self.simCLR(inputs, data['graph'], combined_r2e_output, self.contrastive_loss_fn_combined)
+		euclidean_loss, riemannian_loss = self.epochMaskedRecon(encoder_output, combined_r2e_output, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
@@ -56,9 +71,10 @@ class MENDRTrainer(BaseModelTrainer):
 				'combined_manifold_output': combined_manifold_output,
 				'wavelet_r2e_output': wavelet_r2e_output,
 				'wavelet_manifold_output': wavelet_manifold_output,
-				'combined_loss': c_loss,
+				'combined_total_loss': euclidean_loss + riemannian_loss,
 				'wavelet_loss': w_loss,
-				'combined_acc': c_correct / c_pairs,
+				'euclidean_loss': euclidean_loss,
+				'riemannian_loss': riemannian_loss,
 				'wavelet_acc': w_correct / w_pairs
 		}
 	
@@ -75,44 +91,35 @@ class MENDRTrainer(BaseModelTrainer):
 			'Wavelet Acc': wavelet_acc,
 		}
 
-	def simCLR(self, inputs, data_graph, combined_embedding, criterion):
-		'''
-		Batchwise Simple CLR Loss on combined attention euclidean embeddings.
-		'''
+	def epochMaskedRecon(self, inputs, combined_r2e_embedding, combined_manifold_embedding, criterion):
 		frequency_bands = list(inputs.keys())
 		num_targets = inputs[frequency_bands[0]].shape[0]
-		self.encoder.freeze_features(unfreeze=False)
+
+		batch_size = combined_embedding.shape[0]
+		masked_epochs = torch.randint(self.contextualizer.epochs, (batch_size,))
+
 		self.contextualizer.freeze_features(unfreeze=False)
+
 		loss = 0.0
 		correct = 0
 		pairs = 0
 		with torch.no_grad():
-			transformed_inputs = dict()
+			# We mask one epoch and try to reconstruct it from the other epochs in a patch
+			masked_inputs = dict()
 			for band in frequency_bands:
-				# Add random noise
-				transformed_inputs[band] = self.RandomFTSurrogate(self.RandomGaussianNoise(inputs[band]))
-			transformed_encoder_output = self.encoder(data_graph, transformed_inputs)
-			transformed_embeddings, _, _, _ = self.contextualizer(transformed_encoder_output)
-			# Compute logits
-			#print(combined_embedding.shape, transformed_embeddings.shape)
-			logits = torch.matmul(combined_embedding, transformed_embeddings.T) * torch.exp(self.temp2)
-			labels = torch.arange(combined_embedding.shape[0], device=self.device)
-			# Forward loss
-			forward_logits = logits
-			l = criterion(forward_logits, labels)
-			loss += l
-			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
-			pairs += forward_logits.size(0)
+				band_embedding = inputs[band]
+				epoch_length = band_embedding.shape[2] // self.epochs
+				masked_inputs[band] = band_embedding.clone()
+				for batch_idx in range(batch_size):
+					masked_inputs[band][batch_idx,:, epoch_length * masked_epochs:epoch_length * (masked_epochs + 1)] = self.band_mask[band]
 
-			# Reverse loss
-			reverse_logits = logits.T
-			l = criterion(reverse_logits, labels)
-			loss += l
-			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
-			pairs += reverse_logits.size(0)
-		self.encoder.freeze_features(unfreeze=True)
+			transformed_r2e_embeddings, transformed_manifold_output, _ = self.contextualizer(masked_inputs)
+
+			# Reconstruction loss
+			euclidean_loss = criterion(transformed_r2e_embeddings, combined_r2e_embedding)
+			riemannian_loss = criterion(transformed_manifold_output, combined_manifold_embedding)
 		self.contextualizer.freeze_features(unfreeze=True)
-		return loss, correct, pairs
+		return euclidean_loss, riemannian_loss
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""
@@ -201,9 +208,6 @@ class MENDRTrainer(BaseModelTrainer):
 		diff = torch.abs(singular_values[:, :-1] - singular_values[:, 1:])
 		return torch.any(diff < tol), torch.where(diff < tol)
 
-	'''
-	Currently not being used
-	'''
 	def _batchWiseMatrixSimilarity(self, batch_A, batch_B):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
