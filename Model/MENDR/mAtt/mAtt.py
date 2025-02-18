@@ -12,7 +12,6 @@ class signal2spd(nn.Module):
         super().__init__()
         self.dev = torch.device('cpu')
     def forward(self, x):
-        
         x = x.squeeze()
         mean = x.mean(axis=-1).unsqueeze(-1).repeat(1, 1, x.shape[-1])
         x = x - mean

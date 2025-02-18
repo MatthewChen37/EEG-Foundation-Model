@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
 
-from Model.MENDR.MENDREncoder import MENDREncoder, WaveletEncoderDecoder
+from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
@@ -60,7 +60,7 @@ def main(args):
 
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	encoder = MENDREncoder(device=device)
+	encoder = MENDRAutoEncoder(device=device)
 	contextualizer = MENDRContextualizer(device=device)
 
 	print("Starting training.")
@@ -83,7 +83,7 @@ def main(args):
 		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
-
+	'''
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -107,7 +107,7 @@ def main(args):
 	if torch.cuda.is_available():
 		torch.cuda.synchronize()
 	print("Cleanup complete.")
-
+	'''
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()
