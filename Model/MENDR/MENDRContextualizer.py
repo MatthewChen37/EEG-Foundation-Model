@@ -112,6 +112,10 @@ class MENDRContextualizer(nn.Module):
 			'gamma': PositionalEncoding(19, 642, 2, 0.1, 4),
 		}).to(self.device)
 
+
+		self.combined_mask_token
+
+
 	def forward(self, x):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
 		embedding_shapes = dict()
