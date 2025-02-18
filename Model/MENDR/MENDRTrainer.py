@@ -26,15 +26,11 @@ class MENDRTrainer(BaseModelTrainer):
 		self.negatives_loo = 50
 
 		self.band_mask = {}
-		self.epoch_indices = {}
 		for band in BANDS:
 			num_channels = encoder.encoder_decoders[band].num_channels
 			encoded_seq_len = encoder.encoder_decoders[band].encoded_h
 			epoch_seq_len = encoded_seq_len // contextualizer.epochs
-			self.band_mask[band] = nn.Parameter(torch.normal(0, encoded_h**(-0.5)), size=(num_channels, epoch_seq_len), requires_grad=True)
-			self.epoch_indices[band] = []
-			for epoch_idx in range(contextualizer.epochs):
-				self.epoch_indices[band].append(epoch(epoch_idx * epoch_seq_len, (epoch_idx + 1) * epoch_seq_len))
+			self.band_mask[band] = nn.Parameter(torch.normal(0.0, encoded_seq_len**(-0.5), size=(num_channels, epoch_seq_len)), requires_grad=True)
 
 		# Band mask is learnable
 		self.band_mask = nn.ParameterDict(self.band_mask)
@@ -63,15 +59,13 @@ class MENDRTrainer(BaseModelTrainer):
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		euclidean_loss, riemannian_loss = self.epochMaskedRecon(encoder_output, combined_r2e_output, self.contrastive_loss_fn_combined)
+		euclidean_loss, riemannian_loss = self.epochMaskedRecon(encoder_output, combined_r2e_output, combined_manifold_output, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
 				'combined_r2e_output': combined_r2e_output,
 				'combined_manifold_output': combined_manifold_output,
-				'wavelet_r2e_output': wavelet_r2e_output,
 				'wavelet_manifold_output': wavelet_manifold_output,
-				'combined_total_loss': euclidean_loss + riemannian_loss,
 				'wavelet_loss': w_loss,
 				'euclidean_loss': euclidean_loss,
 				'riemannian_loss': riemannian_loss,
@@ -82,36 +76,32 @@ class MENDRTrainer(BaseModelTrainer):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
 		return WaveletReconstructionLoss(inputs, decodings)
 				    
-	def calculate_metrics(self, combined_loss, wavelet_loss, recon_loss, combined_acc, wavelet_acc):
+	def calculate_metrics(self, combined_total_loss, combined_euclidean_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
 		return {
-			'Combined Loss': combined_loss,
+			'Combined Total Loss': combined_total_loss,
+			'Combined Euclidean Loss': combined_euclidean_loss,
+			'Combined Riemannian Loss': combined_riemannian_loss,
 			'Wavelet Loss': wavelet_loss,
-			'Recon Loss': recon_loss,
-			'Combined Acc': combined_acc,
 			'Wavelet Acc': wavelet_acc,
+			'Recon Loss': recon_loss,
 		}
 
 	def epochMaskedRecon(self, inputs, combined_r2e_embedding, combined_manifold_embedding, criterion):
 		frequency_bands = list(inputs.keys())
-		num_targets = inputs[frequency_bands[0]].shape[0]
-
-		batch_size = combined_embedding.shape[0]
+		batch_size = combined_r2e_embedding.shape[0]
 		masked_epochs = torch.randint(self.contextualizer.epochs, (batch_size,))
 
 		self.contextualizer.freeze_features(unfreeze=False)
 
-		loss = 0.0
-		correct = 0
-		pairs = 0
 		with torch.no_grad():
 			# We mask one epoch and try to reconstruct it from the other epochs in a patch
 			masked_inputs = dict()
 			for band in frequency_bands:
-				band_embedding = inputs[band]
-				epoch_length = band_embedding.shape[2] // self.epochs
-				masked_inputs[band] = band_embedding.clone()
+				band_encoding, band_decoding = inputs[band]
+				epoch_length = band_encoding.shape[2] // self.contextualizer.epochs
+				masked_inputs[band] = (band_encoding.clone(), band_decoding)
 				for batch_idx in range(batch_size):
-					masked_inputs[band][batch_idx,:, epoch_length * masked_epochs:epoch_length * (masked_epochs + 1)] = self.band_mask[band]
+					masked_inputs[band][0][batch_idx,:, epoch_length * masked_epochs[batch_idx]:epoch_length * (masked_epochs[batch_idx] + 1)] = self.band_mask[band]
 
 			transformed_r2e_embeddings, transformed_manifold_output, _ = self.contextualizer(masked_inputs)
 
@@ -137,6 +127,7 @@ class MENDRTrainer(BaseModelTrainer):
 		"""
 		frequency_bands = list(embeddings.keys())
 		num_targets = len(frequency_bands)
+		batch_size = embeddings['delta'][0].shape[0]
 	
 		loss = 0.0
 		correct = 0
@@ -145,14 +136,14 @@ class MENDRTrainer(BaseModelTrainer):
 			for i in range(num_targets):
 				# Average embeddings of all other modalities
 				other_embeddings = []
-				negative_selection = torch.randperm(embedding_tensor.shape[0])
+				negative_selection = torch.randperm(batch_size)
 				negative_indices = negative_selection[:negatives]
+
 				for j in list(range(i)) + list(range(i + 1, num_targets)):
 					embedding_tensor = embeddings[frequency_bands[j]][0] # [Batch * epochs, C, C]
 					embedding_tensor = embedding_tensor[negative_indices]
 					other_embeddings.append(embedding_tensor)
-
-				curr_target = embeddings[frequency_bands[i]][0]
+				curr_target = embeddings[frequency_bands[i]][0][negative_indices]
 				other_embeddings = torch.stack(other_embeddings, dim=1)
 				# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
 				other_embeddings_log = self.contextualizer.combined_attention.tensor_log(other_embeddings)

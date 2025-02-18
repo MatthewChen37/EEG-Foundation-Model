@@ -138,7 +138,7 @@ class BaseModelTrainer(object):
             self.temp2.copy_(torch.clamp(self.temp2, min=0.0))
 
         # Gradient Clipping
-        nn.utils.clip_grad_norm_(self.parameters(), 10, error_if_nonfinite=True)
+        nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
 
     def train(self, mode=True):
@@ -155,18 +155,16 @@ class BaseModelTrainer(object):
         encoder_output = outputs['encoder_output']
         combined_r2e_output = outputs['combined_r2e_output']
         combined_manifold_output = outputs['combined_manifold_output']
-        wavelet_r2e_output = outputs['wavelet_r2e_output']
         wavelet_manifold_output = outputs['wavelet_manifold_output']
-        combined_loss = outputs['combined_loss']
+        euclidean_loss = outputs['euclidean_loss']
+        riemannian_loss = outputs['riemannian_loss']
         wavelet_loss = outputs['wavelet_loss']
-        combined_acc = outputs['combined_acc']
         wavelet_acc = outputs['wavelet_acc']
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
-        recon_loss = recon_loss
-        total_loss = recon_loss + combined_loss + wavelet_loss
+        total_loss = recon_loss + euclidean_loss + riemannian_loss + wavelet_loss
         self.backward(total_loss)
         self.optimizer.step()
-        train_metrics = self.calculate_metrics(combined_loss.item(), wavelet_loss.item(), recon_loss.item(), combined_acc, wavelet_acc)
+        train_metrics = self.calculate_metrics((euclidean_loss + riemannian_loss).item(), euclidean_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
         train_metrics.setdefault('loss', total_loss.item())
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
@@ -234,7 +232,7 @@ class BaseModelTrainer(object):
                 combined_manifold_output = outputs['combined_manifold_output']
                 wavelet_r2e_output = outputs['wavelet_r2e_output']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg += outputs['combined_loss'].item()
+                combined_loss_agg += outputs['combined_total_loss'].item()
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 combined_acc_agg += outputs['combined_acc']
                 wavelet_acc_agg += outputs['wavelet_acc']
@@ -343,7 +341,7 @@ class BaseModelTrainer(object):
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
-                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Loss']
+                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Total Loss']
                 epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
@@ -353,7 +351,7 @@ class BaseModelTrainer(object):
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
-                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Loss']
+                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Total Loss']
                 epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
