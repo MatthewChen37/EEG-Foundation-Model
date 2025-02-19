@@ -32,6 +32,7 @@ class MENDRContextualizer(nn.Module):
 		})
 
 		self.combined_r2e_tangent_space = SPDTangentSpace(19, self.device)
+
 		self.combined_r2e_lin = nn.Sequential(
 			nn.Flatten(),
 			nn.BatchNorm1d(760),
@@ -46,6 +47,7 @@ class MENDRContextualizer(nn.Module):
 		self.combined_attention = AttentionManifold(19, 19, self.device)
 		self.ract = SPDRectified()
 		self.apply(self.init_params)
+		
 		self.position_encoder = nn.ParameterDict({
 			'delta': PositionalEncoding(19, 124, 0, 0.1, self.epochs),
 			'theta': PositionalEncoding(19, 124, 0, 0.1, self.epochs),

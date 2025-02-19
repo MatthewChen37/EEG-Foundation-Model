@@ -20,7 +20,6 @@ class MENDRTrainer(BaseModelTrainer):
 	def __init__(self, encoder, contextualizer, config, **kwargs):
 		# Initialize temperature as a trainable parameter
 		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
-		self.temp2 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.negatives_loo = 50
@@ -36,7 +35,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.band_mask = nn.ParameterDict(self.band_mask)
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
-			temp1=self.temp1, temp2=self.temp2, band_mask=self.band_mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+			temp1=self.temp1, band_mask=self.band_mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
