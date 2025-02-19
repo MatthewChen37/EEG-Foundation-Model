@@ -12,3 +12,4 @@ nedc_pyprint_edf/*
 model.pkl
 runs/
 checkpoint/
+Model/mlruns

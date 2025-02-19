@@ -319,7 +319,6 @@ class BaseModelTrainer(object):
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
         mlflow.start_run()
-        mlflow.autolog()
         signature = None
         self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
@@ -364,4 +363,5 @@ class BaseModelTrainer(object):
 
         if self.ckpt_dir != None:
             print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}")
+
         mlflow.end_run()
