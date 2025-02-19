@@ -13,6 +13,7 @@ from MENDREncoder import MENDRAutoEncoder
 EMBEDDER_SIGNATURE = infer_signature(torch.zeros(64, 19, 246).numpy(), torch.zeros(64, 19, 122).numpy())
 GNN_BNORM_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
 LIN_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
+LEARNABLE_PADDING_SIGNATURE = infer_signature(torch.zeros(64, 19, 124).numpy(), torch.zeros(64, 19, 246).numpy())
 TRANSFORMER1_SIGNATURE = infer_signature({'tgt': torch.zeros(64, 19, 246).numpy(), 'memory': torch.zeros(64, 19, 122).numpy()}, torch.zeros(64, 19, 246).numpy())
 TRANSFORMER2_SIGNATURE = infer_signature({'tgt': torch.zeros(64, 19, 246).numpy(), 'memory': torch.zeros(64, 19, 122).numpy()}, torch.zeros(64, 19, 246).numpy())
 
@@ -27,6 +28,9 @@ def logEncoderParams(encoder):
 
         lin = encoder_decoder.lin
         mlflow.pytorch.log_model(lin, f"{band}_gnn_linear", signature=LIN_SIGNATURE)
+
+        learnable_padding = encoder_decoder.learnable_padding
+        mlflow.pytorch.log_model(learnable_padding, f"{band}_learnable_padding", signature=)
 
         transformer1 = encoder_decoder.transformer_decoder1
         mlflow.pytorch.log_model(transformer1, f"{band}_transformer_decoder1", signature=TRANSFORMER1_SIGNATURE)
