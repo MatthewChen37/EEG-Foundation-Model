@@ -5,11 +5,6 @@ import seaborn as sns
 import mlflow
 from mlflow.models import infer_signature
 
-import sys
-sys.path.append("../Model/MENDR")
-
-from MENDREncoder import MENDRAutoEncoder
-
 EMBEDDER_SIGNATURE = infer_signature(torch.zeros(64, 19, 246).numpy(), torch.zeros(64, 19, 122).numpy())
 GNN_BNORM_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
 LIN_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
@@ -70,7 +65,3 @@ def logMENDRTrainerParams(temp1, band_mask):
     mlflow.pytorch.log(temp1, "LOO Temperature 1", signature=TEMP_SIGNATURE)
     for band, mask in band_mask.items():
         mlflow.pytorch.log(mask, f"{band}_MAE_mask", signature=MAE_MASK_SIGNATURE)
-
-
-
-

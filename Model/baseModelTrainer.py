@@ -9,6 +9,7 @@ from sys import gettrace
 from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
+from .loggingUtil import logEncoderParams, logContextualizerParams, logMENDRTrainerParams
 
 '''
 Based on:
@@ -356,6 +357,9 @@ class BaseModelTrainer(object):
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
+                logEncoderParams(self.encoder)
+                logContextualizerParams(self.contextualizer)
+                logMENDRTrainerParams(self.temp1, self.band_mask)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
