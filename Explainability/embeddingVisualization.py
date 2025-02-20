@@ -44,6 +44,8 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax):
     descending_indices = np.argsort(eigenvalues)[::-1]
     top_eigenvalues = eigenvalues[descending_indices[:3]]
     top_eigenvectors = eigenvectors[:, descending_indices[:3]][:3]
+    # Note that unlike PCA the points already start out in 3D, we are just projecting the points along the basis if 
+    # we were to truncate that basis into 3 Dimensions 
 
     # From https://stackoverflow.com/questions/75796504/plotting-an-ellipse-with-eigenvectors-using-matplotlib-and-numpy
     coefs = top_eigenvalues # eigenvals = (a0/c, a1/c, a2/c)
