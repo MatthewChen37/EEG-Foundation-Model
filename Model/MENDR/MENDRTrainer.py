@@ -11,7 +11,7 @@ from torch_geometric.utils import unbatch
 from .safeSVD import SVD, svdv2
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
-PRECISION = 9 # Number of decimal places to consider equal
+PRECISION = 7 # Number of decimal places to consider equal
 
 class MENDRTrainer(BaseModelTrainer):
 	'''
@@ -47,21 +47,20 @@ class MENDRTrainer(BaseModelTrainer):
 
 		encoder_output = self.encoder(data['graph'], inputs)
 
-		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(encoder_output)
+		wavelet_manifold_output, epoched_shape = self.contextualizer.WaveletContextualizer(encoder_output)
 
 		# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		riemannian_loss = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+		riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
-				'combined_r2e_output': combined_r2e_output,
 				'combined_manifold_output': combined_manifold_output,
+				'combined_manifold_output_masked': combined_manifold_output_masked,
 				'wavelet_manifold_output': wavelet_manifold_output,
 				'wavelet_loss': w_loss,
-				'euclidean_loss': euclidean_loss,
 				'riemannian_loss': riemannian_loss,
 				'wavelet_acc': w_correct / w_pairs
 		}
@@ -70,10 +69,9 @@ class MENDRTrainer(BaseModelTrainer):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
 		return WaveletReconstructionLoss(inputs, decodings)
 				    
-	def calculate_metrics(self, combined_total_loss, combined_euclidean_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
+	def calculate_metrics(self, total_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
 		return {
-			'Combined Total Loss': combined_total_loss,
-			'Combined Euclidean Loss': combined_euclidean_loss,
+			'Total Loss': total_loss,
 			'Combined Riemannian Loss': combined_riemannian_loss,
 			'Wavelet Loss': wavelet_loss,
 			'Wavelet Acc': wavelet_acc,
@@ -113,6 +111,7 @@ class MENDRTrainer(BaseModelTrainer):
 
 		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
+		# MY BRIAN IS SO FRIED I RAN OUT OF GOOD NAMEs
 		combined_manifold_output_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
 		combined_manifold_output_masked_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
 
@@ -122,7 +121,10 @@ class MENDRTrainer(BaseModelTrainer):
 
 		# Reconstruction loss
 		riemannian_loss = criterion(combined_manifold_output_important_part, combined_manifold_output_masked_important_part)
-		return riemannian_loss
+
+		combined_manifold_output = combined_manifold_output.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output_masked.shape[2], combined_manifold_output_masked.shape[3])
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""
@@ -172,7 +174,7 @@ class MENDRTrainer(BaseModelTrainer):
 			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
 			other_embeddings = other_embeddings + (1e5 * identity)
 			'''
-			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
+			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings} {other_embeddings.shape}"
 
 			# Compute logits
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)

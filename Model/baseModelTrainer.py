@@ -154,18 +154,17 @@ class BaseModelTrainer(object):
         outputs = self.forward(inputs)
 
         encoder_output = outputs['encoder_output']
-        combined_r2e_output = outputs['combined_r2e_output']
-        combined_manifold_output = outputs['combined_manifold_output']
+        #combined_r2e_output = outputs['combined_r2e_output']
+        #combined_manifold_output = outputs['combined_manifold_output']
         wavelet_manifold_output = outputs['wavelet_manifold_output']
-        euclidean_loss = outputs['euclidean_loss']
         riemannian_loss = outputs['riemannian_loss']
         wavelet_loss = outputs['wavelet_loss']
         wavelet_acc = outputs['wavelet_acc']
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
-        total_loss = recon_loss + euclidean_loss + riemannian_loss + wavelet_loss
+        total_loss = recon_loss +  riemannian_loss + wavelet_loss
         self.backward(total_loss)
         self.optimizer.step()
-        train_metrics = self.calculate_metrics((euclidean_loss + riemannian_loss).item(), euclidean_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
+        train_metrics = self.calculate_metrics(total_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
         train_metrics.setdefault('loss', total_loss.item())
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
@@ -229,15 +228,14 @@ class BaseModelTrainer(object):
                 outputs = self.forward(input_batch)
 
                 encoder_output = outputs['encoder_output']
-                combined_r2e_output = outputs['combined_r2e_output']
                 combined_manifold_output = outputs['combined_manifold_output']
+                combined_manifold_output_masked = outputs['combined_manifold_output_masked']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                euclidean_loss = outputs['euclidean_loss']
-                riemannian_loss = outputs['riemannian_loss']
-                combined_loss_agg += (outputs['euclidean_loss'] + outputs['riemannian_loss']).item()
+                combined_loss_agg +=  outputs['riemannian_loss'].item()
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 wavelet_acc_agg += outputs['wavelet_acc']
 
+                # TODO: Log decodings too + Log masked reconstruction
                 if idx == 0: # Log only the first 16 of the first batch in the validation set
                     wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16)
                     for band, wavelet_fig in wavelet_figs.items():
@@ -347,7 +345,7 @@ class BaseModelTrainer(object):
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
-                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Total Loss']
+                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Riemannian Loss']
                 epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
@@ -357,7 +355,7 @@ class BaseModelTrainer(object):
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
-                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Total Loss']
+                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Riemannian Loss']
                 epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
