@@ -5,7 +5,6 @@ import pandas as pd
 import seaborn as sns
 
 def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16):
-    wavelet_manifold_output = {band: wavelet[0] for band, wavelet in wavelet_manifold_output.items()}
     B, N, N = combined_manifold_output.shape
     MAX_FIGS = max_figs
     NUM_FIGS_PER_ROW = 4

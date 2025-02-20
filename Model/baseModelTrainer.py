@@ -231,7 +231,7 @@ class BaseModelTrainer(object):
                 combined_manifold_output = outputs['combined_manifold_output']
                 combined_manifold_output_masked = outputs['combined_manifold_output_masked']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg +=  outputs['riemannian_loss'].item()
+                combined_loss_agg +=  outputs['riemannian_loss'].item() # TODO: Why is Riemannian Loss so low?
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 wavelet_acc_agg += outputs['wavelet_acc']
 
@@ -246,7 +246,7 @@ class BaseModelTrainer(object):
                 recon_loss_agg += recon_loss.item()
 
             total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
-            val_metrics = self.calculate_metrics(combined_loss_agg, euclidean_loss.item(), riemannian_loss.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg)
+            val_metrics = self.calculate_metrics(total_loss_agg, combined_loss_agg, wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg)
             val_metrics.setdefault('loss', total_loss_agg)
             return val_metrics
 
@@ -363,7 +363,7 @@ class BaseModelTrainer(object):
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
                 logEncoderParams(self.encoder, step=epoch)
                 logContextualizerParams(self.contextualizer, step=epoch)
-                logMENDRTrainerParams(self.temp1, self.band_mask, step=epoch)
+                logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])

@@ -6,6 +6,8 @@ from mlflow.models import infer_signature
 ''' 
 We save state dicts as json files....
 Hopefully this is not TOO inefficient
+
+TODO: Pickle the state dicts instead
 '''
 def logEncoderParams(encoder, step):
     torch.set_printoptions(precision=5, threshold=1e6, linewidth=1e3)
@@ -37,7 +39,7 @@ def logEncoderParams(encoder, step):
 def logContextualizerParams(contextualizer, step):
     torch.set_printoptions(precision=5, threshold=1e6, linewidth=1e6)
 
-    for band, position_encoder in contextualizer.position_encoder.items():
+    for band, position_encoder in contextualizer.WaveletContextualizer.position_encoder.items():
         mlflow.log_dict(position_encoder.state_dict(), artifact_file=f"{band}_position_encoder_{step}.json")
 
     ''' E2R doesn't have any weights
@@ -45,10 +47,13 @@ def logContextualizerParams(contextualizer, step):
         mlflow.log_dict(band_e2r.state_dict(), artifact_file=f"{band}_band_e2r_weights_{step}.json")
     '''
 
-    for band, attention_manifold in contextualizer.wavelet_attention_manifolds.items():
+    for band, attention_manifold in contextualizer.WaveletContextualizer.wavelet_attention_manifolds.items():
         mlflow.log_dict(attention_manifold.state_dict(), artifact_file=f"{band}_attention_manifold_{step}.json")
 
-    combined_attention = contextualizer.combined_attention
+    for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+        mlflow.log_dict(spd_transform.state_dict(), artifact_file=f"{band}_spd_transform_{step}.json")
+
+    combined_attention = contextualizer.CombinedContextualizer.combined_attention
     mlflow.log_dict(combined_attention.state_dict(), artifact_file=f"combined_attention_{step}.json")
 
     ''' R2E only has row, col indices as "params", which are the same no matter what
@@ -56,18 +61,18 @@ def logContextualizerParams(contextualizer, step):
     mlflow.log_dict(combined_r2e_tangent_space.state_dict(), artifact_file=f"combined_r2e_tangent_space_{step}.json")
     '''
 
-    combined_r2e_lin = contextualizer.combined_r2e_lin
-    mlflow.log_dict(combined_r2e_lin.state_dict(), artifact_file=f"combined_r2e_lin_weights_{step}.json")
+    combined_spd_transform1 = contextualizer.CombinedContextualizer.combined_spd_transform1
+    mlflow.log_dict(combined_spd_transform1.state_dict(), artifact_file=f"combined_spd_transform_1_weights_{step}.json")
+
+    combined_spd_transform2 = contextualizer.CombinedContextualizer.combined_spd_transform2
+    mlflow.log_dict(combined_spd_transform2.state_dict(), artifact_file=f"combined_spd_transform_2_weights_{step}.json")
 
     torch.set_printoptions()
 
-def logMENDRTrainerParams(temp1, band_mask, step):
+def logMENDRTrainerParams(temp1, mask, step):
     torch.set_printoptions(precision=7)
 
     mlflow.log_dict({"LOO Temperature 1": str(temp1.item())}, artifact_file=f"LOO_Temperature_{step}.json")
-    mask_log_dict = dict()
-    for band, mask in band_mask.items():
-        mask_log_dict[band] = mask.data
-    mlflow.log_dict(mask_log_dict, f"mask_{step}.json")
+    mlflow.log_dict({"Mask": mask.data}, artifact_file=f"Mask_{step}.json")
 
     torch.set_printoptions()
