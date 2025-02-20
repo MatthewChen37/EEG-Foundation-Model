@@ -2,63 +2,53 @@ import torch
 import mlflow
 from mlflow.models import infer_signature
 
-EMBEDDER_SIGNATURE = infer_signature(torch.zeros(64, 19, 246).numpy(), torch.zeros(64, 19, 122).numpy())
-GNN_BNORM_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
-LIN_SIGNATURE = infer_signature(torch.zeros(64, 19, 122).numpy(), torch.zeros(64, 19, 122).numpy())
-LEARNABLE_PADDING_SIGNATURE = infer_signature(torch.zeros(64, 19, 124).numpy(), torch.zeros(64, 19, 246).numpy())
-TRANSFORMER1_SIGNATURE = infer_signature({'tgt': torch.zeros(64, 19, 246).numpy(), 'memory': torch.zeros(64, 19, 122).numpy()}, torch.zeros(64, 19, 246).numpy())
-TRANSFORMER2_SIGNATURE = infer_signature({'tgt': torch.zeros(64, 19, 246).numpy(), 'memory': torch.zeros(64, 19, 122).numpy()}, torch.zeros(64, 19, 246).numpy())
-
-def logEncoderParams(encoder):
+def logEncoderParams(encoder, step):
     for band, encoder_decoder in encoder.encoder_decoders.items():
         patch_embedder = encoder_decoder.patch_embedder
-        mlflow.pytorch.log_model(patch_embedder, f"{band}_patch_embedder", signature=EMBEDDER_SIGNATURE)
+        mlflow.log_dict(patch_embedder.state_dict(), artifact_file=f"{band}_patch_embedder_weights_{step}.json")
 
-        # TODO: Cannot log GATConv since it is more complicated than tensor in tensor out
+        gnn_encoder = encoder_decoder.gnn_encoder
+        mlflow.log_dict(gnn_encoder.state_dict(), artifact_file=f"{band}_gnn_encoder_weights_{step}.json")
+
         gnn_bnorm = encoder_decoder.gnn_bnorm
-        mlflow.pytorch.log_model(patch_embedder, f"{band}_gnn_bnorm", signature=GNN_BNORM_SIGNATURE)
+        mlflow.log_dict(gnn_bnorm.state_dict(), artifact_file=f"{band}_gnn_bnorm_weights_{step}.json")
 
         lin = encoder_decoder.lin
-        mlflow.pytorch.log_model(lin, f"{band}_gnn_linear", signature=LIN_SIGNATURE)
+        mlflow.log_dict(lin.state_dict(), artifact_file=f"{band}_gnn_lin_weights_{step}.json")
 
         learnable_padding = encoder_decoder.learnable_padding
-        mlflow.pytorch.log_model(learnable_padding, f"{band}_learnable_padding", signature=LEARNABLE_PADDING_SIGNATURE)
+        mlflow.log_dict(learnable_padding, artifact_file=f"{band}_learnable_padding_{step}.json")
 
         transformer1 = encoder_decoder.transformer_decoder1
-        mlflow.pytorch.log_model(transformer1, f"{band}_transformer_decoder1", signature=TRANSFORMER1_SIGNATURE)
+        mlflow.log_dict(transformer1.state_dict(), artifact_file=f"{band}_transformer_1_{step}.json")
 
         transformer2 = encoder_decoder.transformer_decoder2
-        mlflow.pytorch.log_model(transformer2, f"{band}_transformer_decoder2", signature=TRANSFORMER2_SIGNATURE)
+        mlflow.log_dict(transformer2.state_dict(), artifact_file=f"{band}_transformer_2_{step}.json")
 
-POSITION_ENCODER_SIGNATURE = infer_signature(torch.zeros(64, 19, 124).numpy(), torch.zeros(64, 19, 124).numpy())
-E2R_SIGNATURE = infer_signature(torch.zeros(64, 19, 124).numpy(), torch.zeros(64, 4, 19, 19).numpy())
-ATTENTION_MANIFOLD_SIGNATURE = infer_signature(torch.zeros(64, 4, 19, 19).numpy(), torch.zeros(64, 4, 19, 19).numpy())
-R2E_SIGNATURE = infer_signature(torch.zeros(64, 4, 19, 19).numpy(), torch.zeros(64, 760).numpy())
-R2E_LIN_SIGNATURE = infer_signature(torch.zeros(64, 760).numpy(), torch.zeros(64, 190).numpy())
-
-def logContextualizerParams(contextualizer):
+def logContextualizerParams(contextualizer, step):
     for band, position_encoder in contextualizer.position_encoder.items():
-        mlflow.pytorch.log_model(position_encoder, f"{band}_position_encoder", signature=POSITION_ENCODER_SIGNATURE)
+        mlflow.log_dict(position_encoder.state_dict(), artifact_file=f"{band}_position_encoder_{step}.json")
 
+    ''' E2R doesn't have any weights
     for band, band_e2r in contextualizer.wavelet_e2r.items():
-        mlflow.pytorch.log_model(band_e2r, f"{band}_e2r", signature=E2R_SIGNATURE)
-    
+        mlflow.log_dict(band_e2r.state_dict(), artifact_file=f"{band}_band_e2r_weights_{step}.json")
+    '''
+
     for band, attention_manifold in contextualizer.wavelet_attention_manifolds.items():
-        mlflow.pytorch.log_model(attention_manifold, f"{band}_attention_manifold", signature=ATTENTION_MANIFOLD_SIGNATURE)
+        mlflow.log_dict(attention_manifold.state_dict(), artifact_file=f"{band}_attention_manifold_{step}.json")
 
     combined_attention = contextualizer.combined_attention
-    mlflow.pytorch.log_model(combined_attention, "combined_attention", signature=ATTENTION_MANIFOLD_SIGNATURE)
+    mlflow.log_dict(combined_attention.state_dict(), artifact_file=f"combined_attention_{step}.json")
 
+    ''' R2E only has row, col indices as "params", which are the same no matter what
     combined_r2e_tangent_space = contextualizer.combined_r2e_tangent_space
-    mlflow.pytorch.log_model(combined_r2e_tangent_space, "combined_r2e_tangent_space", signature=R2E_SIGNATURE)
+    mlflow.log_dict(combined_r2e_tangent_space.state_dict(), artifact_file=f"combined_r2e_tangent_space_{step}.json")
+    '''
 
     combined_r2e_lin = contextualizer.combined_r2e_lin
-    mlflow.pytorch.log_model(combined_r2e_lin, "combined_r2e_lin", signature=R2E_LIN_SIGNATURE)
+    mlflow.log_dict(combined_r2e_lin.state_dict(), artifact_file=f"combined_r2e_lin_weights_{step}.json")
 
-TEMP_SIGNATURE = infer_signature(torch.zeros(1).numpy(), torch.zeros(1).numpy())
-MAE_MASK_SIGNATURE = infer_signature(torch.zeros(64, 760).numpy(), torch.zeros(64, 760).numpy())
-
-def logMENDRTrainerParams(temp1, band_mask):
-    mlflow.pytorch.log(temp1, "LOO Temperature 1", signature=TEMP_SIGNATURE)
+def logMENDRTrainerParams(temp1, band_mask, step):
+    mlflow.log_dict({"LOO Temperature 1": str(temp1.item())}, artifact_file=f"LOO_Temperature_{step}.json")
     for band, mask in band_mask.items():
-        mlflow.pytorch.log(mask, f"{band}_MAE_mask", signature=MAE_MASK_SIGNATURE)
+        mlflow.log_dict(mask, f"{band}_mask_{step}.json")

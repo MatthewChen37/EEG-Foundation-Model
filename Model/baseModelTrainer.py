@@ -9,8 +9,8 @@ from sys import gettrace
 from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
-from .loggingUtil import logEncoderParams, logContextualizerParams, logMENDRTrainerParams
-from Explainability import plotSPDEmbedding
+from Model.loggingUtil import logEncoderParams, logContextualizerParams, logMENDRTrainerParams
+from Explainability.embeddingVisualization import plotSPDEmbedding
 
 '''
 Based on:
@@ -137,7 +137,6 @@ class BaseModelTrainer(object):
         # Clamp temperature to non-negative values
         with torch.no_grad():
             self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
-            self.temp2.copy_(torch.clamp(self.temp2, min=0.0))
 
         # Gradient Clipping
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
@@ -243,7 +242,7 @@ class BaseModelTrainer(object):
                     wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16)
                     for band, wavelet_fig in wavelet_figs.items():
                         mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
-                    mlflow.log_figure(combined_fit, f"epoch_{self.epoch}_combined_embeddings")
+                    mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
 
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
                 recon_loss_agg += recon_loss.item()
@@ -364,9 +363,9 @@ class BaseModelTrainer(object):
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
-                logEncoderParams(self.encoder)
-                logContextualizerParams(self.contextualizer)
-                logMENDRTrainerParams(self.temp1, self.band_mask)
+                logEncoderParams(self.encoder, step=epoch)
+                logContextualizerParams(self.contextualizer, step=epoch)
+                logMENDRTrainerParams(self.temp1, self.band_mask, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])

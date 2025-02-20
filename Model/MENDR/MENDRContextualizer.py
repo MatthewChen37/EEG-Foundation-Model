@@ -47,7 +47,7 @@ class MENDRContextualizer(nn.Module):
 		self.combined_attention = AttentionManifold(19, 19, self.device)
 		self.ract = SPDRectified()
 		self.apply(self.init_params)
-		
+
 		self.position_encoder = nn.ParameterDict({
 			'delta': PositionalEncoding(19, 124, 0, 0.1, self.epochs),
 			'theta': PositionalEncoding(19, 124, 0, 0.1, self.epochs),
@@ -122,7 +122,7 @@ class PositionalEncoding(nn.Module):
 		conv = nn.Conv1d(self.len, self.len, self.channels, padding=self.channels // 2, groups=self.epochs)
 		nn.init.normal_(conv.weight, mean=0, std=1)
 		nn.init.constant_(conv.bias, 0)
-		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
+		conv = nn.utils.weight_norm(conv, dim=2)
 		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout))
 
 	def forward(self, x):
