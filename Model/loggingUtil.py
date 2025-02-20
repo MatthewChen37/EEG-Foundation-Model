@@ -1,14 +1,14 @@
 import torch
+import os
 import mlflow
 from mlflow.models import infer_signature
 
 def logEncoderParams(encoder, step):
     torch.set_printoptions(precision=5, threshold=1e6, linewidth=1e3)
 
-
     for band, encoder_decoder in encoder.encoder_decoders.items():
         patch_embedder = encoder_decoder.patch_embedder
-        mlflow.log_dict(patch_embedder.state_dict(), artifact_file=f"{band}_patch_embedder_weights_{step}.json")
+        mlflow.log_dict(patch_embedder.state_dict(), artifact_file="{band}_patch_embedder_weights_{step}.json")
 
         gnn_encoder = encoder_decoder.gnn_encoder
         mlflow.log_dict(gnn_encoder.state_dict(), artifact_file=f"{band}_gnn_encoder_weights_{step}.json")
@@ -58,14 +58,12 @@ def logContextualizerParams(contextualizer, step):
     torch.set_printoptions()
 
 def logMENDRTrainerParams(temp1, band_mask, step):
-    torch.set_printoptions(precision=9)
+    torch.set_printoptions(precision=7)
 
     mlflow.log_dict({"LOO Temperature 1": str(temp1.item())}, artifact_file=f"LOO_Temperature_{step}.json")
-
     mask_log_dict = dict()
     for band, mask in band_mask.items():
         mask_log_dict[band] = mask.data
-
     mlflow.log_dict(mask_log_dict, f"mask_{step}.json")
 
     torch.set_printoptions()
