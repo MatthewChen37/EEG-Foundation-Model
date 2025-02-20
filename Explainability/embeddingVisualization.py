@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output):
+def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16):
     B, N, N = combined_manifold_output.shape
-    MAX_FIGS = 16 
+    MAX_FIGS = max_figs
     NUM_FIGS_PER_ROW = 4
     num_cols = MAX_FIGS // NUM_FIGS_PER_ROW # Hopefully MAX_FIGS = NUM_FIGS_PER_ROW ** 2
 
