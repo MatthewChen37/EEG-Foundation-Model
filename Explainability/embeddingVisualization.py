@@ -6,18 +6,19 @@ import seaborn as sns
 
 def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output):
     B, N, N = combined_manifold_output.shape
-    NUM_FIGS_PER_ROW = 16
-    num_cols = B // NUM_FIGS_PER_ROW # Hopefully B = NUM_FIGS_PER_ROW ** 2
+    MAX_FIGS = 16 
+    NUM_FIGS_PER_ROW = 4
+    num_cols = MAX_FIGS // NUM_FIGS_PER_ROW # Hopefully MAX_FIGS = NUM_FIGS_PER_ROW ** 2
 
     wavelet_figs = dict()
     # Wavelet Manifold Embeddings
     for band, wavelet_batch in wavelet_manifold_output.items():
-        wavelet_fig = plt.figure(figsize=(NUM_FIGS_PER_ROW, num_cols))  # Square figure
+        wavelet_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
         _plotBatch(wavelet_fig, NUM_FIGS_PER_ROW, num_cols, wavelet_batch)
         wavelet_fig.suptitle(f"{band} SPD Embeddings")
         wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
-    combined_fig = plt.figure(figsize=(NUM_FIGS_PER_ROW, num_cols))  # Square figure
+    combined_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
     _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output)
     combined_fig.suptitle("Combined SPD Embeddings")
 
