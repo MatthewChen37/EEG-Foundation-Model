@@ -3,6 +3,10 @@ import os
 import mlflow
 from mlflow.models import infer_signature
 
+''' 
+We save state dicts as json files....
+Hopefully this is not TOO inefficient
+'''
 def logEncoderParams(encoder, step):
     torch.set_printoptions(precision=5, threshold=1e6, linewidth=1e3)
 
