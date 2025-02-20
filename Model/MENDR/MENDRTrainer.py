@@ -47,13 +47,13 @@ class MENDRTrainer(BaseModelTrainer):
 
 		encoder_output = self.encoder(data['graph'], inputs)
 
-		wavelet_manifold_output = self.WaveletContextualizer(encoder_output)
+		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(encoder_output)
 
 		# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		riemannian_loss = self.epochMaskedRecon(wavelet_manifold_output, self.contrastive_loss_fn_combined)
+		riemannian_loss = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
@@ -80,22 +80,48 @@ class MENDRTrainer(BaseModelTrainer):
 			'Recon Loss': recon_loss,
 		}
 
-	def epochMaskedRecon(self, wavelet_manifold_output, criterion):
-		frequency_bands = list(inputs.keys())
-		batch_size = wavelet_manifold_output['delta'].shape[0]
-		masked_epochs = torch.randint(self.contextualizer.epochs, (batch_size,))
+	def epochMaskedRecon(self, wavelet_manifold_output, epoched_shape, criterion):
+		frequency_bands = list(wavelet_manifold_output.keys())
+		batch_size = epoched_shape[0]
+		with torch.no_grad(): # Don't need gradients for random indices
+			masked_epochs = torch.randint(self.contextualizer.epochs, (batch_size,))
+
+		wavelet_manifold_output_masked = dict()
+		for band, spd_batch in wavelet_manifold_output.items():
+			#wavelet_manifold_output[band] = wavelet_manifold_output[band].view(epoched_shape[0], epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
+			wavelet_manifold_output_masked[band] = spd_batch.clone()
+			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(epoched_shape[0], epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
 
 		# We mask one epoch calculate the LEM and then compare it with the full LEM
+		# [B, E, C, C]
+		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
+			for band in wavelet_manifold_output_masked.keys():
+				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx, :, :] = self.mask
+
+		for band in wavelet_manifold_output_masked.keys():
+			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
+
+		
+		_, combined_manifold_output_masked = self.contextualizer.CombinedContextualizer(wavelet_manifold_output_masked, epoched_shape)
 
 		# Log Euclidean Mean
-		combined_manifold_output = torch.stack(list(x.values()), dim=1)
+		combined_manifold_output = torch.stack(list(wavelet_manifold_output.values()), dim=1)
 		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_log(combined_manifold_output)
+		combined_manifold_output = combined_manifold_output.sum(dim=1, keepdim=True) / combined_manifold_output.shape[1]
 		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_exp(combined_manifold_output)
+		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
-		transformed_r2e_embeddings, transformed_manifold_output, _ = self.contextualizer(masked_inputs)
+		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+
+		combined_manifold_output_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
+		combined_manifold_output_masked_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
+
+		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
+			combined_manifold_output_important_part[batch_idx, :, :] = combined_manifold_output[batch_idx, masked_epoch_idx, :, :]
+			combined_manifold_output_masked_important_part[batch_idx, :, :] = combined_manifold_output_masked[batch_idx, masked_epoch_idx, :, :]
 
 		# Reconstruction loss
-		riemannian_loss = criterion(transformed_manifold_output, combined_manifold_embedding)
+		riemannian_loss = criterion(combined_manifold_output_important_part, combined_manifold_output_masked_important_part)
 		return riemannian_loss
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
