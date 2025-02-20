@@ -10,6 +10,7 @@ from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
 from .loggingUtil import logEncoderParams, logContextualizerParams, logMENDRTrainerParams
+from Explainability import plotSPDEmbedding
 
 '''
 Based on:
@@ -224,7 +225,7 @@ class BaseModelTrainer(object):
         combined_acc_agg = 0
         wavelet_acc_agg = 0
         with torch.no_grad():
-            for iteration in pbar:
+            for idx, iteration in enumerate(pbar):
                 input_batch = self._get_batch(data_iterator)
                 outputs = self.forward(input_batch)
 
@@ -237,6 +238,12 @@ class BaseModelTrainer(object):
                 combined_loss_agg += (outputs['euclidean_loss'] + outputs['riemannian_loss']).item()
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 wavelet_acc_agg += outputs['wavelet_acc']
+
+                if idx == 0: # Log only the first 16 of the first batch in the validation set
+                    wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16)
+                    for band, wavelet_fig in wavelet_figs.items():
+                        mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+                    mlflow.log_figure(combined_fit, f"epoch_{self.epoch}_combined_embeddings")
 
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
                 recon_loss_agg += recon_loss.item()
