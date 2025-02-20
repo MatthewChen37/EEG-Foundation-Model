@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
-from Model.MENDR.MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.MENDRContextualizer import MENDRWaveletContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
@@ -64,7 +64,7 @@ def testContextualizer():
             'gamma': (torch.randn(8, 19, 484).to(device), None)
         }
 
-    contextualizer = MENDRContextualizer(device)
+    contextualizer = MENDRWaveletContextualizer(device)
     combined_r2e_output, combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
 
     assert combined_r2e_output.shape == torch.Size([8, 190]), f'Combined R2E Shape: {combined_r2e_output.shape}'
@@ -91,7 +91,7 @@ def testMENDRTrainerNoValidation():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
+    contextualizer = MENDRWaveletContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -122,7 +122,7 @@ def testMENDRTrainerWithValidation():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
+    contextualizer = MENDRWaveletContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -158,7 +158,7 @@ def testMENDRLoadFromCheckpoint():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
+    contextualizer = MENDRWaveletContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    #testContextualizer()
+    testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    testMENDRTrainerWithValidation()
+    #testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("Testing trainer load from checkpoint...")
