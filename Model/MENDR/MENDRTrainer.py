@@ -24,15 +24,10 @@ class MENDRTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.negatives_loo = 50
 
-		self.band_mask = {}
-		for band in BANDS:
-			num_channels = encoder.encoder_decoders[band].num_channels
-			encoded_seq_len = encoder.encoder_decoders[band].encoded_h
-			epoch_seq_len = encoded_seq_len // contextualizer.epochs
-			self.band_mask[band] = nn.Parameter(torch.normal(0.0, encoded_seq_len**(-0.5), size=(num_channels, epoch_seq_len)), requires_grad=True)
-
-		# Band mask is learnable
-		self.band_mask = nn.ParameterDict(self.band_mask)
+		# Mask is a learnable SPD matrix
+		self.mask = np.random.rand(contextualizer.channels)
+		self.mask = torch.Tensor(np.dot(self.mask, self.mask.transpose()))
+		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
 			temp1=self.temp1, band_mask=self.band_mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
@@ -146,8 +141,8 @@ class MENDRTrainer(BaseModelTrainer):
 				other_embeddings = torch.stack(other_embeddings, dim=1)
 
 				# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
-				other_embeddings_log = self.contextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_log(other_embeddings)
-				other_embeddings_mean = self.contextualizer.wavelet_attention_manifolds[frequency_bands[i]].exp(other_embeddings_log.sum(dim=1, keepdim=True) / other_embeddings_log.shape[1])
+				other_embeddings_log = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_log(other_embeddings)
+				other_embeddings_mean = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].exp(other_embeddings_log.sum(dim=1, keepdim=True) / other_embeddings_log.shape[1])
 
 				# trace normalization
 				'''
