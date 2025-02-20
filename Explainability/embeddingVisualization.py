@@ -5,27 +5,45 @@ import pandas as pd
 import seaborn as sns
 
 def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output):
-    B, E, N, N = combined_manifold_output.shape
+    B, N, N = combined_manifold_output.shape
+    NUM_FIGS_PER_ROW = 16
+    num_cols = B // NUM_FIGS_PER_ROW # Hopefully B = NUM_FIGS_PER_ROW ** 2
 
+    wavelet_figs = dict()
+    # Wavelet Manifold Embeddings
+    for band, wavelet_batch in wavelet_manifold_output.items():
+        wavelet_fig = plt.figure(figsize=(NUM_FIGS_PER_ROW, num_cols))  # Square figure
+        _plotBatch(wavelet_fig, NUM_FIGS_PER_ROW, num_cols, wavelet_batch)
+        wavelet_fig.suptitle(f"{band} SPD Embeddings")
+        wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
+    combined_fig = plt.figure(figsize=(NUM_FIGS_PER_ROW, num_cols))  # Square figure
+    _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output)
+    combined_fig.suptitle("Combined SPD Embeddings")
 
+    return wavelet_figs, combined_fig
 
+def _plotBatch(fig, num_figs_per_row, num_cols, spd_batch):
+    for row in range(num_figs_per_row):
+        for col in range(num_cols):
+            flattened_index = num_figs_per_row * row + col
+            spd_matrix = spd_batch[flattened_index, :, :]
+            ax = fig.add_subplot(num_figs_per_row, num_cols, flattened_index + 1, projection='3d')
+            ax.view_init(elev=45, azim=45, roll=45) # Always look through the view of positive octant
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+            _plot_ellipsoid_3D_PCA(spd_matrix, ax)
+            ax.set_title(f"{flattened_index + 1}")
 
-
-
-
-
-
-def _plot_ellipsoid_3D_PCA(spd_matrix):
-    if isinstance(spd_matrix, torch.tensor):
+def _plot_ellipsoid_3D_PCA(spd_matrix, ax):
+    if isinstance(spd_matrix, torch.Tensor):
         spd_matrix = spd_matrix.clone().cpu().numpy()
 
-    eigenvalues = np.linalg.eigvalsh(spd_matrix, UPLO='L')
+    eigenvalues, eigenvectors = np.linalg.eigh(spd_matrix, UPLO='L')
     descending_indices = np.argsort(eigenvalues)[::-1]
     top_eigenvalues = eigenvalues[descending_indices[:3]]
-
-    fig = plt.figure(figsize=plt.figaspect(1))  # Square figure
-    ax = fig.add_subplot(111, projection='3d')
+    top_eigenvectors = eigenvectors[:, descending_indices[:3]][:3]
 
     # From https://stackoverflow.com/questions/75796504/plotting-an-ellipse-with-eigenvectors-using-matplotlib-and-numpy
     coefs = top_eigenvalues # eigenvals = (a0/c, a1/c, a2/c)
@@ -34,7 +52,7 @@ def _plot_ellipsoid_3D_PCA(spd_matrix):
     rx, ry, rz = 1/np.sqrt(coefs)
 
     # Set of all spherical angles:
-    u = np.linspace(0, 2 * np.pi, 100) # We sample 100 points for plotting
+    u = np.linspace(0, 2 * np.pi, 100) # We sample 100^2 points for plotting
     v = np.linspace(0, np.pi, 100)
 
     # Cartesian coordinates that correspond to the spherical angles:
@@ -43,6 +61,14 @@ def _plot_ellipsoid_3D_PCA(spd_matrix):
     y = ry * np.outer(np.sin(u), np.sin(v))
     z = rz * np.outer(np.ones_like(u), np.cos(v))
 
+
+    points = np.stack([x.flatten(), y.flatten(), z.flatten()])
+    # Rotate the ellipsoid according to the eigenvectors
+    points_rotated = top_eigenvectors @ points
+    x = points_rotated[0, :].reshape(x.shape[0], x.shape[1])
+    y = points_rotated[1, :].reshape(y.shape[0], y.shape[1])
+    z = points_rotated[2, :].reshape(z.shape[0], z.shape[1])
+
     # Plot:
     ax.plot_surface(x, y, z,  rstride=4, cstride=4, color='b')
 
@@ -50,9 +76,6 @@ def _plot_ellipsoid_3D_PCA(spd_matrix):
     max_radius = max(rx, ry, rz)
     for axis in 'xyz':
         getattr(ax, 'set_{}lim'.format(axis))((-max_radius, max_radius))
-
-    return fig
-
 
 def _ellipsoid_sample(S, z_hat, m_FA, Gamma_Threshold=1.0):
     # Based on https://www.onera.fr/sites/default/files/297/C013_-_Dezert_-_YBSTributeMonterey2001.pdf
