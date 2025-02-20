@@ -14,7 +14,7 @@ import torch.optim as optim
 import torch.utils.data as torchdata
 
 from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
-from Model.MENDR.MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.MENDRContextualizer import MENDRWaveletContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 
@@ -61,7 +61,7 @@ def main(args):
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDRAutoEncoder(device=device)
-	contextualizer = MENDRContextualizer(device=device)
+	contextualizer = MENDRWaveletContextualizer(device=device)
 
 	print("Starting training.")
 	### Training ###

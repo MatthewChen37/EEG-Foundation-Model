@@ -144,9 +144,10 @@ class MENDRTrainer(BaseModelTrainer):
 					other_embeddings.append(embedding_tensor)
 				curr_target = embeddings[frequency_bands[i]][0][negative_indices]
 				other_embeddings = torch.stack(other_embeddings, dim=1)
+
 				# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
-				other_embeddings_log = self.contextualizer.combined_attention.tensor_log(other_embeddings)
-				other_embeddings_mean = torch.exp(other_embeddings_log.sum(dim=1) / other_embeddings_log.shape[1])
+				other_embeddings_log = self.contextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_log(other_embeddings)
+				other_embeddings_mean = self.contextualizer.wavelet_attention_manifolds[frequency_bands[i]].exp(other_embeddings_log.sum(dim=1, keepdim=True) / other_embeddings_log.shape[1])
 
 				# trace normalization
 				'''
