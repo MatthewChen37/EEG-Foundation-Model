@@ -174,6 +174,7 @@ class MENDRTrainer(BaseModelTrainer):
 			identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
 			other_embeddings = other_embeddings + (1e5 * identity)
 			'''
+			# TODO: Why does this fail when precision is greater than 7?
 			assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings} {other_embeddings.shape}"
 
 			# Compute logits
