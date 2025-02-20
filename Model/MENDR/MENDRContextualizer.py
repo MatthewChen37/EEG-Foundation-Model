@@ -16,12 +16,12 @@ class MENDRContextualizer(nn.Module):
 		self.epochs = epochs
 		self.channels = num_channels
 
-		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, epochs=self.epochs, channels=self.channels)
-		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, channels=self.channels)
+		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, epochs=self.epochs, num_channels=self.channels)
+		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, num_channels=self.channels)
 
 	def forward(self, x):
-		wavelet_manifold_output = self.WaveletContextualizer(x)
-		combined_r2e_output, combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output)
+		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
+		combined_r2e_output, combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
 		return combined_r2e_output, combined_manifold_output, wavelet_manifold_output
 
 	def freeze_features(self, unfreeze=False):
@@ -71,26 +71,28 @@ class MENDRWaveletContextualizer(nn.Module):
 	def forward(self, x):
 		assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
-		batch_size = x['delta'].shape[0]
+		batch_size = x['delta'][0].shape[0]
 		x_input = dict()
 		for band in x.keys():
 			if self.position_encoder:
 				x_input[band] = self.position_encoder[band](x[band][0])
 			else:
 				x_input[band] = x[band][0]
-				
+
+		epoched_shape = None
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
 			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band])
 			# Skip Connection
+			epoched_shape = shape
 			og_output_shape = output.shape
 			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
 			output = output.view(og_output_shape) 
 			wavelet_manifold_output[band] = self.ract(output)
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
 
-		return wavelet_manifold_output
+		return wavelet_manifold_output, epoched_shape
 
 class MENDRCombinedContextualizer(nn.Module):
 	def __init__(self, device, num_channels=19):
@@ -105,13 +107,15 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.ract = SPDRectified()
 		self.flatten = nn.Flatten()
 
-	def forward(self, x):
+	def forward(self, x, og_output_shape):
 		# Log Euclidean Mean
 		combined_manifold_output = torch.stack(list(x.values()), dim=1)
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
-		combined_manifold_output = self.combined_attention.tensor_exp(combined_manifold_output)
+		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], self.num_channels, self.num_channels)
 
 		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
+		assert shape == og_output_shape
 		combined_manifold_output = self.ract(combined_manifold_output)
 
 		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)

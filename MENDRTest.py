@@ -1,8 +1,9 @@
 import torch
+import numpy as np
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
-from Model.MENDR.MENDRContextualizer import MENDRWaveletContextualizer
+from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
@@ -13,6 +14,15 @@ import torch.nn as nn
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
+
+def random_spd_batch(batch_size, n):
+    return torch.tensor(np.array([
+        random_spd_matrix(n) for i in range(batch_size)
+    ]))
+
+def random_spd_matrix(n):
+    A = np.random.rand(n, n)
+    return np.dot(A, A.transpose())
 
 def check_sanity(m):
         if isinstance(m, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d, nn.GroupNorm)):
@@ -64,15 +74,54 @@ def testContextualizer():
             'gamma': (torch.randn(8, 19, 484).to(device), None)
         }
 
-    contextualizer = MENDRWaveletContextualizer(device)
+    contextualizer = MENDRContextualizer(device)
     combined_r2e_output, combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
 
-    assert combined_r2e_output.shape == torch.Size([8, 190]), f'Combined R2E Shape: {combined_r2e_output.shape}'
-    assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
     for band, v in example_input.items():
-        output, shape = wavelet_manifold_output[band]
+        output = wavelet_manifold_output[band]
         assert output.shape == torch.Size([32, 19, 19]), f'{band} Wavelet Manifold Shape: {wavelet_manifold_output[band].shape}'
-        assert shape == [8, 4, -1], f'{band} Shape: {shape}'
+
+
+    assert combined_r2e_output.shape == torch.Size([8, 760]), f'Combined R2E Shape: {combined_r2e_output.shape}'
+    assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
+    
+def testMENDRTrainerLOOLoss():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    mask_rate = 0.01,
+    mask_span = 5,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    encoder = MENDRAutoEncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    with torch.autograd.detect_anomaly():
+        embeddings = {
+            'delta': random_spd_batch(8, 19).to(device),
+            'theta': random_spd_batch(8, 19).to(device),
+            'alpha': random_spd_batch(8, 19).to(device),
+            'beta': random_spd_batch(8, 19).to(device),
+            'gamma': random_spd_batch(8, 19).to(device),
+        }
+
+        loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
+
+    assert pairs == 30, f"Pairs is not 30: {pairs}"
+    assert loss > 0, f"Loss is not greater than 0: {loss}"
+
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
@@ -91,7 +140,7 @@ def testMENDRTrainerNoValidation():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRWaveletContextualizer(device=device)
+    contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -122,7 +171,7 @@ def testMENDRTrainerWithValidation():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRWaveletContextualizer(device=device)
+    contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -158,7 +207,7 @@ def testMENDRLoadFromCheckpoint():
     )
 
     encoder = MENDRAutoEncoder(device=device)
-    contextualizer = MENDRWaveletContextualizer(device=device)
+    contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -170,12 +219,16 @@ def testMENDRLoadFromCheckpoint():
 
 if __name__ == "__main__":
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
     testContextualizer()
     print("Contextualizer test passed!")
+
+    print("Testing trainer LOO contrastive loss")
+    testMENDRTrainerLOOLoss()
+    print("Trainer LOO contrastive loss test passed! ")
 
     print("Testing trainer fit without validation...")
     #testMENDRTrainerNoValidation()
