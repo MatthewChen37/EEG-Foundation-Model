@@ -36,8 +36,8 @@ def _plotBatchCombined(fig, num_figs_per_row, num_cols, output, output_masked):
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_zticks([])
-            _plot_ellipsoid_3D_PCA(output_matrix, ax, color='b', label='Original')
-            _plot_ellipsoid_3D_PCA(output_masked_matrix, ax, color='r', label='Reconstruction')
+            _plot_ellipsoid_3D_PCA(output_matrix, ax, color='b', label='Original', alpha=0.5)
+            _plot_ellipsoid_3D_PCA(output_masked_matrix, ax, color='r', label='Reconstruction', alpha=0.5)
             ax.set_title(f"{flattened_index + 1}")
             handles, labels = ax.get_legend_handles_labels()
 
@@ -56,7 +56,7 @@ def _plotBatchWavelet(fig, num_figs_per_row, num_cols, spd_batch):
             _plot_ellipsoid_3D_PCA(spd_matrix, ax)
             ax.set_title(f"{flattened_index + 1}")
 
-def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original'):
+def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original', alpha=1):
     if isinstance(spd_matrix, torch.Tensor):
         spd_matrix = spd_matrix.clone().cpu().numpy()
 
@@ -92,7 +92,7 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original'):
     z = points_rotated[2, :].reshape(z.shape[0], z.shape[1])
 
     # Plot:
-    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color=color, label=label)
+    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color=color, label=label, alpha=alpha)
 
     # Adjustment of the axes, so that they all have the same span:
     max_radius = max(rx, ry, rz)
