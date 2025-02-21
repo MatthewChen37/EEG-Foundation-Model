@@ -8,6 +8,7 @@ from ..baseModelTrainer import BaseModelTrainer
 from ..transforms import RandomTemporalCrop, RandomGaussianNoise, RandomFTSurrogate
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
+from .mAtt import StiefelParameter
 from .safeSVD import SVD, svdv2
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
@@ -27,7 +28,7 @@ class MENDRTrainer(BaseModelTrainer):
 		# Mask is a learnable SPD matrix
 		self.mask = np.random.rand(contextualizer.channels, contextualizer.channels)
 		self.mask = torch.from_numpy(np.dot(self.mask, self.mask.transpose()))
-		self.mask = nn.Parameter(self.mask, requires_grad=True)
+		self.mask = StiefelParameter(self.mask, requires_grad=True)
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
 			temp1=self.temp1, mask=self.mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
