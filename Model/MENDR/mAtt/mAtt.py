@@ -58,8 +58,6 @@ class E2R(nn.Module):
         return x
 
 
-
-
 class AttentionManifold(nn.Module):
     def __init__(self, in_embed_size, out_embed_size, device):
         super(AttentionManifold, self).__init__()
@@ -72,7 +70,6 @@ class AttentionManifold(nn.Module):
         self.v_trans = SPDTransform(self.d_in, self.d_out, self.device)
 
         self.svd = SVD.apply
-
 
     def tensor_log(self, t):#4dim
         '''

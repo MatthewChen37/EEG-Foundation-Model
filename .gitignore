@@ -13,3 +13,4 @@ model.pkl
 runs/
 checkpoint/
 Model/mlruns
+tensorboard_runs/*

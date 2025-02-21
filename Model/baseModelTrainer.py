@@ -9,7 +9,7 @@ from sys import gettrace
 from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
-from Model.loggingUtil import logEncoderParams, logContextualizerParams, logMENDRTrainerParams
+from Model.loggingUtil import MENDRLogger
 from Explainability.embeddingVisualization import plotSPDEmbedding
 
 '''
@@ -59,6 +59,7 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self.ckpt_dir = ckpt_dir
         self.best_metric = float("Inf")
+
 
     def set_optimizer(self, optimizer):
         # assert isinstance(optimizer, torch.optim.Optimizer)
@@ -231,8 +232,8 @@ class BaseModelTrainer(object):
                 combined_manifold_output = outputs['combined_manifold_output']
                 combined_manifold_output_masked = outputs['combined_manifold_output_masked']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg +=  outputs['riemannian_loss'].item() 
-                wavelet_loss_agg += outputs['wavelet_loss'].item()
+                combined_loss_agg +=  outputs['riemannian_loss'] 
+                wavelet_loss_agg += outputs['wavelet_loss']
                 wavelet_acc_agg += outputs['wavelet_acc']
 
                 if idx == 0: # Log only the first 16 of the first batch in the validation set
@@ -242,11 +243,11 @@ class BaseModelTrainer(object):
                     mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
 
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
-                recon_loss_agg += recon_loss.item()
+                recon_loss_agg += recon_loss
 
             total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
-            val_metrics = self.calculate_metrics(total_loss_agg, combined_loss_agg, wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg)
-            val_metrics.setdefault('loss', total_loss_agg)
+            val_metrics = self.calculate_metrics(total_loss_agg.item(), combined_loss_agg.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg.item())
+            val_metrics.setdefault('loss', total_loss_agg.item())
             return val_metrics
 
     @classmethod
@@ -323,6 +324,9 @@ class BaseModelTrainer(object):
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
         mlflow.start_run()
+
+        self.logger = MENDRLogger()
+
         signature = None
         self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
@@ -360,9 +364,9 @@ class BaseModelTrainer(object):
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
-                logEncoderParams(self.encoder, step=epoch)
-                logContextualizerParams(self.contextualizer, step=epoch)
-                logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
+                self.logger.logEncoderParams(self.encoder, step=epoch)
+                self.logger.logContextualizerParams(self.contextualizer, step=epoch)
+                self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
@@ -372,3 +376,4 @@ class BaseModelTrainer(object):
             print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}")
 
         mlflow.end_run()
+        self.logger.closeWriter()

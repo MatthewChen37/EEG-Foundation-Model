@@ -95,7 +95,7 @@ class MENDRTrainer(BaseModelTrainer):
 		# [B, E, C, C]
 		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
 			for band in wavelet_manifold_output_masked.keys():
-				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx, :, :] = self.mask
+				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx.item(), :, :] = self.mask
 
 		for band in wavelet_manifold_output_masked.keys():
 			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
@@ -103,7 +103,7 @@ class MENDRTrainer(BaseModelTrainer):
 		
 		_, combined_manifold_output_masked = self.contextualizer.CombinedContextualizer(wavelet_manifold_output_masked, epoched_shape)
 
-		# Log Euclidean Mean
+		# Log Euclidean Mean - TODO: This could be made cleaner
 		combined_manifold_output_og = torch.stack(list(wavelet_manifold_output.values()), dim=1)
 		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_log(combined_manifold_output_og)
 		combined_manifold_output = combined_manifold_output.sum(dim=1, keepdim=True) / combined_manifold_output.shape[1]

@@ -154,11 +154,15 @@ def testMENDRTrainerMAEReconLoss():
             'gamma': random_spd_batch(8, 19).to(device),
         }
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
     assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
     assert combined_manifold_output.shape == torch.Size([8, 19, 19]), f"Combined Manifold Shape does not match{combined_manifold_output.shape}"
     assert combined_manifold_output_masked.shape == torch.Size([8, 19, 19]), f"Combined Manifold Masked Shape does not match{combined_manifold_output_masked.shape}"
+
+    for batch_index, epoch_index in enumerate(mask):
+        assert not torch.equal(combined_manifold_output[batch_index*4+epoch_index.item(), :, :], combined_manifold_output_masked[batch_index*4+epoch_index.item(),:,:])
+        
 
 
 def testMENDRTrainerNoValidation():
@@ -273,14 +277,14 @@ if __name__ == "__main__":
     print("Trainer MAE Recon loss test passed! ")
 
     print("Testing trainer fit without validation...")
-    #testMENDRTrainerNoValidation()
+    testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
 
     print("Testing trainer fit with validation...")
-    #testMENDRTrainerWithValidation()
+    testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("Testing trainer load from checkpoint...")
-    #testMENDRLoadFromCheckpoint()
+    testMENDRLoadFromCheckpoint()
     print("Trainer load from checkpoint test passed!")
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

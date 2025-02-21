@@ -19,8 +19,7 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined
         wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
     combined_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
-    _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output)
-    _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output_masked)
+    _plotBatchCombined(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output, combined_manifold_output_masked)
     combined_fig.suptitle("Combined SPD Embeddings")
 
     return wavelet_figs, combined_fig
