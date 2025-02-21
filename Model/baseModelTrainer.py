@@ -142,6 +142,7 @@ class BaseModelTrainer(object):
         # Gradient Clipping
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
+        assert loss.item() != 0, f"Loss is 0: {loss}"
 
     def train(self, mode=True):
         self._training = mode
