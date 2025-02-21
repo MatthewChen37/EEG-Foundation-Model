@@ -104,13 +104,14 @@ class MENDRTrainer(BaseModelTrainer):
 		_, combined_manifold_output_masked = self.contextualizer.CombinedContextualizer(wavelet_manifold_output_masked, epoched_shape)
 
 		# Log Euclidean Mean
-		combined_manifold_output = torch.stack(list(wavelet_manifold_output.values()), dim=1)
-		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_log(combined_manifold_output)
+		combined_manifold_output_og = torch.stack(list(wavelet_manifold_output.values()), dim=1)
+		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_log(combined_manifold_output_og)
 		combined_manifold_output = combined_manifold_output.sum(dim=1, keepdim=True) / combined_manifold_output.shape[1]
 		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_exp(combined_manifold_output)
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
 		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+
 
 		# MY BRIAN IS SO FRIED I RAN OUT OF GOOD NAMEs
 		combined_manifold_output_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)

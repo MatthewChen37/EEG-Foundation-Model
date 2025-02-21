@@ -231,13 +231,13 @@ class BaseModelTrainer(object):
                 combined_manifold_output = outputs['combined_manifold_output']
                 combined_manifold_output_masked = outputs['combined_manifold_output_masked']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg +=  outputs['riemannian_loss'].item() # TODO: Why is Riemannian Loss so low?
+                combined_loss_agg +=  outputs['riemannian_loss'].item() 
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 wavelet_acc_agg += outputs['wavelet_acc']
 
                 # TODO: Log decodings too + Log masked reconstruction
                 if idx == 0: # Log only the first 16 of the first batch in the validation set
-                    wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16)
+                    wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, max_figs=16)
                     for band, wavelet_fig in wavelet_figs.items():
                         mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
                     mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")

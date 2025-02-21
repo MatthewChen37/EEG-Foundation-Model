@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs=16):
+def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, max_figs=16):
     B, N, N = combined_manifold_output.shape
     MAX_FIGS = max_figs
     NUM_FIGS_PER_ROW = 4
@@ -14,17 +14,37 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, max_figs
     # Wavelet Manifold Embeddings
     for band, wavelet_batch in wavelet_manifold_output.items():
         wavelet_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
-        _plotBatch(wavelet_fig, NUM_FIGS_PER_ROW, num_cols, wavelet_batch)
+        _plotBatchWavelet(wavelet_fig, NUM_FIGS_PER_ROW, num_cols, wavelet_batch)
         wavelet_fig.suptitle(f"{band} SPD Embeddings")
         wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
     combined_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
     _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output)
+    _plotBatch(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output_masked)
     combined_fig.suptitle("Combined SPD Embeddings")
 
     return wavelet_figs, combined_fig
 
-def _plotBatch(fig, num_figs_per_row, num_cols, spd_batch):
+
+def _plotBatchCombined(fig, num_figs_per_row, num_cols, output, output_masked):
+    for row in range(num_figs_per_row):
+        for col in range(num_cols):
+            flattened_index = num_figs_per_row * row + col
+            output_matrix = output[flattened_index, :, :]
+            output_masked_matrix = output_masked[flattened_index, :, :]
+            ax = fig.add_subplot(num_figs_per_row, num_cols, flattened_index + 1, projection='3d')
+            ax.view_init(elev=45, azim=45, roll=45) # Always look through the view of positive octant
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+            _plot_ellipsoid_3D_PCA(output_matrix, ax, color='b', label='Original')
+            _plot_ellipsoid_3D_PCA(output_masked_matrix, ax, color='r', label='Reconstruction')
+            ax.set_title(f"{flattened_index + 1}")
+            handles, labels = ax.get_legend_handles_labels()
+
+    fig.legend(handles, labels, loc='upper left')
+
+def _plotBatchWavelet(fig, num_figs_per_row, num_cols, spd_batch):
     for row in range(num_figs_per_row):
         for col in range(num_cols):
             flattened_index = num_figs_per_row * row + col
@@ -37,7 +57,7 @@ def _plotBatch(fig, num_figs_per_row, num_cols, spd_batch):
             _plot_ellipsoid_3D_PCA(spd_matrix, ax)
             ax.set_title(f"{flattened_index + 1}")
 
-def _plot_ellipsoid_3D_PCA(spd_matrix, ax):
+def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original'):
     if isinstance(spd_matrix, torch.Tensor):
         spd_matrix = spd_matrix.clone().cpu().numpy()
 
@@ -73,7 +93,7 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax):
     z = points_rotated[2, :].reshape(z.shape[0], z.shape[1])
 
     # Plot:
-    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color='b')
+    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color=color, label=label)
 
     # Adjustment of the axes, so that they all have the same span:
     max_radius = max(rx, ry, rz)

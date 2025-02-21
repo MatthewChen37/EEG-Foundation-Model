@@ -82,7 +82,6 @@ class AttentionManifold(nn.Module):
                 u, s, v = self.svd(t[i, j, :, :])
                 output[i, j] = u @ torch.diag_embed(torch.log(s)) @ v.permute(1, 0)
         return output
-        '''
         batch = t.shape[0]
         epochs = t.shape[1]
         u, s, v = self.svd(t.view(batch * epochs, t.shape[2], t.shape[3]))
@@ -90,6 +89,18 @@ class AttentionManifold(nn.Module):
         s = s.view(batch, epochs, s.shape[1])
         v = v.view(batch, epochs, v.shape[1], v.shape[2])
         return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+        '''
+        # condition: t is symmetric!
+        s, u = torch.linalg.eigh(t)
+
+        #print(s, u)
+
+        #print(torch.linalg.norm(u[0, 0, :, :,], dim=0))
+        #print(u.shape)
+        return u @ torch.diag_embed(torch.log(s)) @ u.permute(0, 1, 3, 2)
+        #u, s, v = torch.svd(t)
+        #return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+        
     def tensor_exp(self, t):#4dim
         # condition: t is symmetric!
         s, u = torch.linalg.eigh(t)
