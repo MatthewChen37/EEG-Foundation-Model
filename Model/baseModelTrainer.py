@@ -94,6 +94,7 @@ class BaseModelTrainer(object):
         for key, value in batch.items():
             if isinstance(value, torch.Tensor):
                 # Perform batch normalization across channels 
+                # Note all data are float32!
                 batch[key] = self._std_norm(value.float().to(self.device))
         return batch
     
@@ -142,7 +143,9 @@ class BaseModelTrainer(object):
         # Gradient Clipping
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
+        # Sanity checks -- although computationally inefficient neccessary for the complexity of this model
         assert loss.item() != 0, f"Loss is 0: {loss}"
+        assert torch.allclose(self.mask, self.mask.T), f"Mask is not symmetric"
 
     def train(self, mode=True):
         self._training = mode
