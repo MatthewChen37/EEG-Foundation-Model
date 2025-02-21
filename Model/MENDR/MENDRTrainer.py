@@ -54,15 +54,15 @@ class MENDRTrainer(BaseModelTrainer):
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+		riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
 				'combined_manifold_output': combined_manifold_output,
 				'combined_manifold_output_masked': combined_manifold_output_masked,
+				'riemannian_loss': riemannian_loss,
 				'wavelet_manifold_output': wavelet_manifold_output,
 				'wavelet_loss': w_loss,
-				'riemannian_loss': riemannian_loss,
 				'wavelet_acc': w_correct / w_pairs
 		}
 	
@@ -126,7 +126,7 @@ class MENDRTrainer(BaseModelTrainer):
 
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output_masked.shape[2], combined_manifold_output_masked.shape[3])
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""

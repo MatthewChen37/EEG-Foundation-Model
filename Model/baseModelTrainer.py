@@ -235,7 +235,6 @@ class BaseModelTrainer(object):
                 wavelet_loss_agg += outputs['wavelet_loss'].item()
                 wavelet_acc_agg += outputs['wavelet_acc']
 
-                # TODO: Log decodings too + Log masked reconstruction
                 if idx == 0: # Log only the first 16 of the first batch in the validation set
                     wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, max_figs=16)
                     for band, wavelet_fig in wavelet_figs.items():
