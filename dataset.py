@@ -192,12 +192,14 @@ if __name__ == "__main__":
 
 	# dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
 
-	# dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=1.0)
+	dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
 
-	dataset = WaveletFinetuningDataset(root="/home/hice1/mchen439/scratch/downstreamTaskData/eval")
+	#dataset = WaveletFinetuningDataset(root="/home/hice1/mchen439/scratch/downstreamTaskData/eval")
 
 	print("Length of dataset: ", len(dataset))
 
 	data = dataset[0]
 
-	print("Data: ", len(data), data['graph'], data['wavelet_folder'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
+	#print("Data: ", len(data), data['graph'], data['wavelet_folder'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
+
+	print("Data: ", len(data), data['graph'], data['subject_name'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
