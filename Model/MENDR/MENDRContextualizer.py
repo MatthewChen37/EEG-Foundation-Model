@@ -117,7 +117,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		# Log Euclidean Mean
 		combined_manifold_output = torch.stack(list(x.values()), dim=1)
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
-		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])[:, 0, :, :]
 
 		combined_manifold_output, shape = self.combined_attention(combined_manifold_output, shape=og_output_shape)
 		combined_manifold_output = self.ract(combined_manifold_output)
