@@ -85,6 +85,11 @@ def testContextualizer():
 
     assert combined_r2e_output.shape == torch.Size([8, 760]), f'Combined R2E Shape: {combined_r2e_output.shape}'
     assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
+
+    assert not torch.any(torch.isnan(combined_r2e_output)), "Combined R2E contains NaN values"
+    assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+
+
     
 def testMENDRTrainerLOOLoss():
     args = SimpleNamespace(
@@ -122,6 +127,7 @@ def testMENDRTrainerLOOLoss():
 
     assert pairs == 30, f"Pairs is not 30: {pairs}"
     assert loss > 0, f"Loss is not greater than 0: {loss}"
+
 
 def testMENDRTrainerMAEReconLoss():
     args = SimpleNamespace(
@@ -164,10 +170,13 @@ def testMENDRTrainerMAEReconLoss():
     assert combined_manifold_output.shape == torch.Size([8, 19, 19]), f"Combined Manifold Shape does not match{combined_manifold_output.shape}"
     assert combined_manifold_output_masked.shape == torch.Size([8, 19, 19]), f"Combined Manifold Masked Shape does not match{combined_manifold_output_masked.shape}"
 
+    assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+    assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
+
+
     for batch_index, epoch_index in enumerate(mask):
         assert not torch.equal(combined_manifold_output[batch_index*4+epoch_index.item(), :, :], combined_manifold_output_masked[batch_index*4+epoch_index.item(),:,:])
         
-
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(

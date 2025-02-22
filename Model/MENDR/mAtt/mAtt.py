@@ -155,7 +155,6 @@ class AttentionManifold(nn.Module):
         atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
 
         # calculate outputs(v_i') of attention module
-        # For numerical stability and to guarantee symmetry reduce precision
         output = self.LogEuclideanMean(atten_prob, V)
 
         output = output.view(V.shape[0], V.shape[1], self.d_out, self.d_out)
