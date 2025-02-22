@@ -6,4 +6,3 @@ python pretrain.py --input_dir=/home/hice1/mchen439/scratch/eegfoundationmodelda
  --batch_size=256 \
  --training_epochs=30 \
  --ckpt_dir=./checkpoint
-#--load_from_ckpt=./checkpoint/TBD
