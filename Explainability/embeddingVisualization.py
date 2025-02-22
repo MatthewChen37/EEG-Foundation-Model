@@ -85,7 +85,6 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original', alpha=1)
     y = ry * np.outer(np.sin(u), np.sin(v))
     z = rz * np.outer(np.ones_like(u), np.cos(v))
 
-
     points = np.stack([x.flatten(), y.flatten(), z.flatten()])
     # Rotate the ellipsoid according to the eigenvectors
     points_rotated = top_eigenvectors @ points
