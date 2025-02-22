@@ -144,8 +144,8 @@ class BaseModelTrainer(object):
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
         # Sanity checks -- although computationally inefficient neccessary for the complexity of this model
-        #assert loss.item() != 0, f"Loss is 0: {loss}"
-        #assert torch.allclose(self.mask, self.mask.T), f"Mask is not symmetric"
+        assert loss.item() != 0, f"Loss is 0: {loss}"
+        assert torch.allclose(self.mask, self.mask.T), f"Mask is not symmetric"
 
     def train(self, mode=True):
         self._training = mode
