@@ -11,6 +11,7 @@ from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
 from Model.loggingUtil import MENDRLogger
 from Explainability.embeddingVisualization import plotSPDEmbedding
+import matplotlib.pyplot as plt
 
 '''
 Based on:
@@ -244,7 +245,9 @@ class BaseModelTrainer(object):
                     wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, max_figs=16)
                     for band, wavelet_fig in wavelet_figs.items():
                         mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+                        plt.close(wavelet_fig)
                     mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+                    plt.close(combined_fig)
 
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
                 recon_loss_agg += recon_loss

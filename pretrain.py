@@ -83,7 +83,6 @@ def main(args):
 		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
-	'''
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -107,7 +106,7 @@ def main(args):
 	if torch.cuda.is_available():
 		torch.cuda.synchronize()
 	print("Cleanup complete.")
-	'''
+
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()

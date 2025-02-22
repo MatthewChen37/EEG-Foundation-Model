@@ -136,8 +136,7 @@ class MENDRTrainer(BaseModelTrainer):
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output_masked.shape[2], combined_manifold_output_masked.shape[3])
 
-		# Scale loss since its really low
-		return 1e5 * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
+		return 1e2*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""
@@ -210,7 +209,7 @@ class MENDRTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return loss, correct, pairs
+		return 1e2*loss, correct, pairs
 
 	'''
 	Currently not being used
