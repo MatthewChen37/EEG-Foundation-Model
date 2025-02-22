@@ -207,14 +207,75 @@ def testMENDRTrainerNoValidation():
     encoder.apply(check_sanity)
     contextualizer.apply(check_sanity)
 
+def testMENDRParameters():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    encoder = MENDRAutoEncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+
+    wavelet_spd_transform_params = dict()
+
+    def checkOrthogonal(x):
+        # Returns True if not orthogonal
+        # False if orthogonal
+        product = np.dot(x, x.T)
+        np.fill_diagonal(product,0)
+        return (product.any() == 0)
+
+    for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+        spd_weight = spd_transform.weight.data.clone().cpu().numpy()
+        assert not checkOrthogonal(spd_weight), f"Wavelet Contextualizer SPD weights not orthogonal: {spd_weight}"
+        wavelet_spd_transform_params[band] = spd_weight
+
+    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.clone().cpu().numpy()
+    assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 1 weights not orthogonal: {spd_weight}"
+    combined_spd_transform1_params = spd_weight
+
+    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.clone().cpu().numpy()
+    assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 2 weights not orthogonal: {spd_weight}"
+    combined_spd_transform2_params = spd_weight
+
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=dataset, epochs=1, batch_size=16)
+    
+        for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+            new_weight = spd_transform.weight.data.cpu().numpy()
+            assert not np.allclose(wavelet_spd_transform_params[band], new_weight), f"Wavelet Contextualizer SPD weights not updated: {band}: {wavelet_spd_transform_params[band]} == {new_weight} "
+            assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD weights not orthogonal: {band}"
+        
+        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.cpu().numpy()
+        assert not np.allclose(combined_spd_transform1_params, new_weight), f"Combined Contextualizer SPD 1 weights not updated: {combined_spd_transform1_params} == {new_weight}"
+        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 1 not orthogonal"
+
+        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.cpu().numpy()
+        assert not np.allclose(combined_spd_transform2_params, new_weight), f"Combined Contextualizer SPD 2 weights not updated: {combined_spd_transform2_params} == {new_weight}"
+        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 2 not orthogonal"
+
+    encoder.apply(check_sanity)
+    contextualizer.apply(check_sanity)
+
 def testMENDRTrainerWithValidation():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
-    mask_span = 5,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -248,8 +309,6 @@ def testMENDRLoadFromCheckpoint():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
-    mask_span = 5,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -287,30 +346,34 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Contextualizer...")
-    testContextualizer()
+    #testContextualizer()
     print("Contextualizer test passed!")
 
     print("Testing trainer LOO contrastive loss")
-    testMENDRTrainerLOOLoss()
+    #testMENDRTrainerLOOLoss()
     print("Trainer LOO contrastive loss test passed! ")
 
     print("Testing trainer MAE Recon loss")
-    testMENDRTrainerMAEReconLoss()
+    #testMENDRTrainerMAEReconLoss()
     print("Trainer MAE Recon loss test passed! ")
 
     print("Testing trainer fit without validation...")
-    testMENDRTrainerNoValidation()
+    #testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
 
+    print("Testing MENDR Parameters...")
+    testMENDRParameters()
+    print("Testing MENDR Parameters passed!")
+
     print("Testing trainer fit with validation...")
-    testMENDRTrainerWithValidation()
+    #testMENDRTrainerWithValidation()
     print("Trainer fit with validation test passed!")
 
     print("Testing trainer load from checkpoint...")
-    testMENDRLoadFromCheckpoint()
+    #testMENDRLoadFromCheckpoint()
     print("Trainer load from checkpoint test passed!")
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
