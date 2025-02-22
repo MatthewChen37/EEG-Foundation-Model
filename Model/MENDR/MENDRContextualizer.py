@@ -94,9 +94,11 @@ class MENDRWaveletContextualizer(nn.Module):
 			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
 			output = output.view(og_output_shape) 
 			#assert torch.allclose(output, output.mT, atol=(10 ** -10))
-			output = self.trace_normalization(output)
+			output = self.trace_normalization(output) # If I comment this out, then NaNs in output???
 			wavelet_manifold_output[band] = self.ract(output)
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
+
+
 
 		return wavelet_manifold_output, epoched_shape
 
