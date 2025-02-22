@@ -301,6 +301,7 @@ class BaseModelTrainer(object):
                 module_weight_path = os.path.join(ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(ckpt_path,"scheduler.pth")))
 
     def _retain_best(self, metrics_to_check: dict):
         if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
@@ -310,6 +311,9 @@ class BaseModelTrainer(object):
         else:
             tqdm.tqdm.write(f"Failed to beat best loss. Curr Loss: {metrics_to_check['loss']}. Best Loss: {self.best_metric}. Reverting to old checkpoint...")
             self.load_best()
+
+        # Always save scheduler 
+        torch.save(self.optimizer.scheduler.state_dict(), f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}/scheduler.pth')
 
     @staticmethod
     def _dataloader_args(dataset, training=False, **loader_kwargs):

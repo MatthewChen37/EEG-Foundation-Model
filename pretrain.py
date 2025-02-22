@@ -80,7 +80,6 @@ def main(args):
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
 
-
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
