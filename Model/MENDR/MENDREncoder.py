@@ -135,7 +135,7 @@ class MENDRAutoEncoder(nn.Module):
         })
 
     def forward(self, graph, data):
-        assert data.keys() == self.encoder_decoders.keys()
+        #assert data.keys() == self.encoder_decoders.keys()
         output = {}
         for band, band_decomposition in data.items():
             output[band] = self.encoder_decoders[band](graph, band_decomposition)

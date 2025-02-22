@@ -55,8 +55,10 @@ class MENDRWaveletContextualizer(nn.Module):
 			'theta': AttentionManifold(num_channels, num_channels, self.device),
 			'alpha': AttentionManifold(num_channels, num_channels, self.device),
 			'beta': AttentionManifold(num_channels, num_channels, self.device),
-			'gamma': AttentionManifold(num_channels, num_channels, self.device)
+			'gamma': AttentionManifold(num_channels, num_channels, self.device),
 		})
+
+		self.trace_normalization = BatchTraceNormalization(self.device)
 
 		self.wavelet_spd_transforms = nn.ParameterDict({
 			'delta': SPDTransform(num_channels, num_channels, self.device),
@@ -69,7 +71,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.ract = SPDRectified()
 
 	def forward(self, x):
-		assert x.keys() == self.wavelet_attention_manifolds.keys()
+		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
 		batch_size = x['delta'][0].shape[0]
 		x_input = dict()
@@ -83,12 +85,16 @@ class MENDRWaveletContextualizer(nn.Module):
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
+			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band])
+			#assert torch.allclose(output, output.mT, atol=(10 ** -10)), "Attention Manifold"
 			# Skip Connection
 			epoched_shape = shape
 			og_output_shape = output.shape
 			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
 			output = output.view(og_output_shape) 
+			#assert torch.allclose(output, output.mT, atol=(10 ** -10))
+			#output = self.trace_normalization(output)
 			wavelet_manifold_output[band] = self.ract(output)
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
 
@@ -101,7 +107,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.num_channels = num_channels
 
 		self.combined_attention = AttentionManifold(self.num_channels, self.num_channels, self.device)
-		self.combined_spd_transform1 = SPDTransform(self.num_channels, self.num_channels, self.device)
+		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.num_channels, self.num_channels, self.device), BatchTraceNormalization(self.device))
 		self.combined_r2e_tangent_space = SPDTangentSpace(self.num_channels, self.device)
 		self.combined_spd_transform2 = SPDTransform(self.num_channels, self.num_channels, self.device)
 		self.ract = SPDRectified()
@@ -112,10 +118,8 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = torch.stack(list(x.values()), dim=1)
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
 		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
-		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], self.num_channels, self.num_channels)
 
-		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
-		assert shape == og_output_shape
+		combined_manifold_output, shape = self.combined_attention(combined_manifold_output, shape=og_output_shape)
 		combined_manifold_output = self.ract(combined_manifold_output)
 
 		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)
@@ -125,6 +129,24 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_r2e_output = combined_r2e_output.view(shape[0], shape[1], -1)
 		combined_r2e_output = self.flatten(combined_r2e_output)
 		return combined_r2e_output, combined_manifold_output
+
+
+class BatchTraceNormalization(nn.Module):
+	def __init__(self, device, num_channels=19, epsilon=1E-5):
+		super().__init__()
+		self.num_channels = num_channels
+		self.epsilon = epsilon
+		self.device = device
+
+	def forward(self, x):
+		# Expects [B, C, C]
+		trace = x.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+		trace = trace.view(-1, 1, 1)
+		trace = trace + self.epsilon*torch.ones(trace.shape).to(self.device)
+		x /= trace
+		identity = torch.eye(x.shape[-1], x.shape[-1], device=self.device).to(self.device).repeat(x.shape[0], 1, 1)
+		x = x + (1e5 * identity)
+		return x
 
 
 # Based on BENDR's Convolutional Position Encoding Scheme
