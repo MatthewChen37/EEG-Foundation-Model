@@ -4,5 +4,5 @@ python pretrain.py --input_dir=/home/hice1/mchen439/scratch/eegfoundationmodelda
  --val_frac=0.001 \
  --learning_rate=0.001\
  --batch_size=256 \
- --training_epochs=5 \
+ --training_epochs=10 \
  --ckpt_dir=./checkpoint

@@ -87,14 +87,14 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
 			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band])
-			#assert torch.allclose(output, output.mT, atol=(10 ** -10)), "Attention Manifold"
+			#assert torch.allclose(output, output.mT, atol=(10 ** -7)), "Attention Manifold"
 			# Skip Connection
 			epoched_shape = shape
 			og_output_shape = output.shape
 			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
 			output = output.view(og_output_shape) 
-			#assert torch.allclose(output, output.mT, atol=(10 ** -10))
-			output = self.trace_normalization(output) # If I comment this out, then matrix is not SPD anymore???
+			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
+			output = self.trace_normalization(output)
 			wavelet_manifold_output[band] = self.ract(output)
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
 
@@ -113,13 +113,14 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.ract = SPDRectified()
 		self.flatten = nn.Flatten()
 
-	def forward(self, x, og_output_shape):
+	def forward(self, x, og_output_shape, mask=None):
 		# Log Euclidean Mean
 		combined_manifold_output = torch.stack(list(x.values()), dim=1)
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
-		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])[:, 0, :, :]
+		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
-		combined_manifold_output, shape = self.combined_attention(combined_manifold_output, shape=og_output_shape)
+		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
 		combined_manifold_output = self.ract(combined_manifold_output)
 
 		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)
@@ -132,7 +133,7 @@ class MENDRCombinedContextualizer(nn.Module):
 
 
 class BatchTraceNormalization(nn.Module):
-	def __init__(self, device, num_channels=19, epsilon=1E-5):
+	def __init__(self, device, num_channels=19, epsilon=1e-5):
 		super().__init__()
 		self.num_channels = num_channels
 		self.epsilon = epsilon
@@ -145,7 +146,7 @@ class BatchTraceNormalization(nn.Module):
 		trace = trace + self.epsilon*torch.ones(trace.shape).to(self.device)
 		x /= trace
 		identity = torch.eye(x.shape[-1], x.shape[-1], device=self.device).to(self.device).repeat(x.shape[0], 1, 1)
-		x = x + (1e5 * identity)
+		x = x + (self.epsilon * identity)
 		return x
 
 

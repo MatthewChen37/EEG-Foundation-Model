@@ -48,7 +48,7 @@ class BaseModelTrainer(object):
         # Names of trainable objects
         self._trainables = list()
         for member in new_members:
-            if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor)):
+            if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor, torch.nn.Parameter)):
                 if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
@@ -136,6 +136,9 @@ class BaseModelTrainer(object):
 
     def backward(self, loss):
         self.optimizer.zero_grad()
+
+        # Sanity checks -- although computationally inefficient neccessary for the complexity of this model/loss func
+        assert loss.item() != 0, f"Loss is 0: {loss}"
         loss.backward()
         # Clamp temperature to non-negative values
         with torch.no_grad():
@@ -144,10 +147,7 @@ class BaseModelTrainer(object):
         # Gradient Clipping
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
-        # Sanity checks -- although computationally inefficient neccessary for the complexity of this model
-        assert loss.item() != 0, f"Loss is 0: {loss}"
-        assert torch.allclose(self.mask, self.mask.T), f"Mask is not symmetric"
-
+        
     def train(self, mode=True):
         self._training = mode
         for member in self._trainables:
@@ -168,6 +168,8 @@ class BaseModelTrainer(object):
         wavelet_acc = outputs['wavelet_acc']
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
         total_loss = recon_loss +  riemannian_loss + wavelet_loss
+
+        
         self.backward(total_loss)
         self.optimizer.step()
         train_metrics = self.calculate_metrics(total_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
@@ -362,6 +364,12 @@ class BaseModelTrainer(object):
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
+                # Logging
+                self.logger.log_model_gradients(self.encoder, epoch=epoch * len(pbar) + iteration)
+                self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(pbar) + iteration)
+                self.logger.log_model_gradients(self.temp1, epoch=epoch * len(pbar) + iteration, name="Temperature")
+                self.logger.log_model_gradients(self.mask, epoch=epoch * len(pbar) + iteration, name="Mask")
+
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']

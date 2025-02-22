@@ -14,6 +14,18 @@ class MENDRLogger(object):
             for name, param in model.named_parameters():
                 self.writer.add_histogram(tag=f'{name}_weights', values=param, global_step=epoch)
 
+    def log_model_gradients(self, model, epoch, name=None):
+        if isinstance(model, torch.nn.Module):
+            for name, module in model.named_parameters():
+                grad = module.grad.cpu()
+                self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
+        elif isinstance(model, torch.nn.Parameter) and name != None:
+            grad = model.grad.cpu()
+            self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
+        else:
+            raise Exception("Unknown object")
+ 
+        
     ''' 
     MLFlow's Logging is extremely inconvenient for logging model weights
     Using Tensorboard instead

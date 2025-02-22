@@ -98,8 +98,9 @@ class AttentionManifold(nn.Module):
         
     def tensor_exp(self, t):#4dim
         # condition: t is symmetric!
-        #s, u = torch.linalg.eigh(t)
-        #return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+        s, u = torch.linalg.eigh(t)
+        return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+        '''
         batch = t.shape[0]
         epochs = t.shape[1]
         u, s, v = self.svd(t.view(batch * epochs, t.shape[2], t.shape[3]))
@@ -107,6 +108,7 @@ class AttentionManifold(nn.Module):
         s = s.view(batch, epochs, s.shape[1])
         v = v.view(batch, epochs, v.shape[1], v.shape[2])
         return u @ torch.diag_embed(torch.exp(s)) @ v.permute(0, 1, 3, 2)
+        '''
     def log_euclidean_distance(self, A, B):
         inner_term = self.tensor_log(A) - self.tensor_log(B)
         inner_multi = inner_term @ inner_term.permute(0, 1, 3, 2)

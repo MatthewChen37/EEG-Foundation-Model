@@ -13,7 +13,7 @@ from .safeSVD import SVD, svdv2
 from scipy.linalg import orth
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
-ABS_PRECISION = 2 # Number of decimal places to consider equal
+ABS_PRECISION = 3 # Number of decimal places to consider equal
 REL_PRECISION = 1 # Relative tolerance precision
 class MENDRTrainer(BaseModelTrainer):
 	'''
@@ -21,16 +21,16 @@ class MENDRTrainer(BaseModelTrainer):
 	'''
 	def __init__(self, encoder, contextualizer, config, **kwargs):
 		# Initialize temperature as a trainable parameter
-		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
+		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True), requires_grad=True)
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.negatives_loo = 50
 
 		# Mask is a learnable SPD matrix
-		self.mask = np.random.rand(contextualizer.channels, contextualizer.channels)
-		self.mask = torch.from_numpy(np.dot(self.mask, self.mask.transpose()))
+		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
+		# X * X.T is always SPD
+		self.mask = torch.from_numpy(np.random.rand(contextualizer.channels, contextualizer.channels))
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
-		# We don't need this to be a StiefelParameter because the mask doesn't need to be orthogonal
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
 			temp1=self.temp1, mask=self.mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
@@ -98,16 +98,18 @@ class MENDRTrainer(BaseModelTrainer):
 		with torch.no_grad(): # Don't need gradients for random indices
 			masked_epochs = torch.randint(num_epochs, (batch_size,))
 
+		# Construct the mask at runtime
+		spd_mask = torch.matmul(self.mask, self.mask.T)
+
 		wavelet_manifold_output_masked = dict()
 		for band, spd_batch in wavelet_manifold_output.items():
-			wavelet_manifold_output_masked[band] = spd_batch.clone()
-			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(batch_size, num_epochs, spd_batch.shape[1], spd_batch.shape[2])
-
+			wavelet_manifold_output_masked[band] = spd_batch.clone().view(batch_size, num_epochs, spd_batch.shape[1], spd_batch.shape[2])
+		
 		# We mask one epoch calculate the LEM and then compare it with the full LEM
 		# [B, E, C, C]
 		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
 			for band in wavelet_manifold_output_masked.keys():
-				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx.item(), :, :] = self.mask
+				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx.item(), :, :] = spd_mask
 				
 		for band in wavelet_manifold_output_masked.keys():
 			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
@@ -136,7 +138,7 @@ class MENDRTrainer(BaseModelTrainer):
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output_masked.shape[2], combined_manifold_output_masked.shape[3])
 
-		return 1e2*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
+		return 2e7*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""
@@ -155,7 +157,7 @@ class MENDRTrainer(BaseModelTrainer):
 		frequency_bands = list(embeddings.keys())
 		num_targets = len(frequency_bands)
 		batch_size = embeddings['delta'].shape[0]
-	
+
 		loss = 0.0
 		correct = 0
 		pairs = 0
@@ -187,8 +189,8 @@ class MENDRTrainer(BaseModelTrainer):
 			# https://stackoverflow.com/questions/56514892/how-many-digits-can-float8-float16-float32-float64-and-float128-contain
 			# assuming torch.float = np.float32
 			# Potential future direction is "Quantizing" SPD matrices
-			# assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
-			# assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
+			assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
+			assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
 
 			# Compute logits
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
@@ -209,7 +211,7 @@ class MENDRTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return 1e2*loss, correct, pairs
+		return 0.2 * loss, correct, pairs
 
 	'''
 	Currently not being used

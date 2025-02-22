@@ -62,7 +62,6 @@ def main(args):
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDRAutoEncoder(device=device)
 	contextualizer = MENDRContextualizer(device=device, epochs=4, num_channels=19)
-
 	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
@@ -72,9 +71,15 @@ def main(args):
 		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
 	print("Contextualizer parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=5e-4)
+
+
+	parameters = list(trainer.parameters())
+	parameters.append(trainer.temp1)
+	parameters.append(trainer.mask)
+	optimizer = torch.optim.AdamW(parameters, lr=args.learning_rate, weight_decay=5e-4)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
+
 
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
