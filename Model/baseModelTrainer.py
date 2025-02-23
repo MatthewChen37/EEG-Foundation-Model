@@ -60,6 +60,7 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self.ckpt_dir = ckpt_dir
         self.best_metric = float("Inf")
+        self.loaded_from_ckpt = False
 
 
     def set_optimizer(self, optimizer):
@@ -302,6 +303,7 @@ class BaseModelTrainer(object):
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
         self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(ckpt_path,"scheduler.pth")))
+        self.loaded_from_ckpt = True
 
     def _retain_best(self, metrics_to_check: dict):
         if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
@@ -341,7 +343,8 @@ class BaseModelTrainer(object):
         self.logger = MENDRLogger()
 
         signature = None
-        self.optimizer.set_scheduler_t0(len(training_dataloader))
+        if loaded_from_ckpt == False:
+            self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
             epoch_metrics = {
                 'total_epoch_training_loss': 0,

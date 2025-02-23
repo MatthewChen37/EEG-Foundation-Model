@@ -84,7 +84,7 @@ def main(args):
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
 			raise Exception(f"Checkpoint folder {args.load_from_ckpt} does not exist.")
-		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
+		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth', 'scheduler.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
 	# Split Dataset
