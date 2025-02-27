@@ -29,8 +29,10 @@ class MENDRTrainer(BaseModelTrainer):
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
+		np.random.seed(10)
 		self.mask = torch.from_numpy(np.random.rand(contextualizer.channels, contextualizer.channels))
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
+		np.random.seed(42)
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
 			temp1=self.temp1, mask=self.mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,

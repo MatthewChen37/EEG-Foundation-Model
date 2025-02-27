@@ -343,7 +343,7 @@ class BaseModelTrainer(object):
         self.logger = MENDRLogger()
 
         signature = None
-        if loaded_from_ckpt == False:
+        if self.loaded_from_ckpt == False:
             self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
             epoch_metrics = {
