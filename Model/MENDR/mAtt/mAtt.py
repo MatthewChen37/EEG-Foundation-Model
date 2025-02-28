@@ -58,8 +58,6 @@ class E2R(nn.Module):
         return x
 
 
-
-
 class AttentionManifold(nn.Module):
     def __init__(self, in_embed_size, out_embed_size, device):
         super(AttentionManifold, self).__init__()
@@ -72,7 +70,6 @@ class AttentionManifold(nn.Module):
         self.v_trans = SPDTransform(self.d_in, self.d_out, self.device)
 
         self.svd = SVD.apply
-
 
     def tensor_log(self, t):#4dim
         '''
@@ -90,10 +87,28 @@ class AttentionManifold(nn.Module):
         s = s.view(batch, epochs, s.shape[1])
         v = v.view(batch, epochs, v.shape[1], v.shape[2])
         return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+        # condition: t is symmetric!
+        #s, u = torch.linalg.eigh(t)
+        #print(s, u)
+        #print(torch.linalg.norm(u[0, 0, :, :,], dim=0))
+        #print(u.shape)
+        #return u @ torch.diag_embed(torch.log(s)) @ u.permute(0, 1, 3, 2)
+        #u, s, v = torch.svd(t)
+        #return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+        
     def tensor_exp(self, t):#4dim
         # condition: t is symmetric!
         s, u = torch.linalg.eigh(t)
         return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+        '''
+        batch = t.shape[0]
+        epochs = t.shape[1]
+        u, s, v = self.svd(t.view(batch * epochs, t.shape[2], t.shape[3]))
+        u = u.view(batch, epochs, u.shape[1], u.shape[2])
+        s = s.view(batch, epochs, s.shape[1])
+        v = v.view(batch, epochs, v.shape[1], v.shape[2])
+        return u @ torch.diag_embed(torch.exp(s)) @ v.permute(0, 1, 3, 2)
+        '''
     def log_euclidean_distance(self, A, B):
         inner_term = self.tensor_log(A) - self.tensor_log(B)
         inner_multi = inner_term @ inner_term.permute(0, 1, 3, 2)
@@ -127,6 +142,11 @@ class AttentionManifold(nn.Module):
         K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
         V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
 
+        # Don't need to be symmetric
+        #assert torch.allclose(Q, Q.mT, atol=(10 ** -10)), f"Q: {Q}"
+        #assert torch.allclose(K, K.mT, atol=(10 ** -10)), "K"
+        #assert torch.allclose(V, V.mT, atol=(10 ** -10)), "V"
+
         # calculate the attention score
         Q_expand = Q.repeat(1, V.shape[1], 1, 1)
     
@@ -135,7 +155,7 @@ class AttentionManifold(nn.Module):
         
         atten_energy = self.log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
         atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
-        
+
         # calculate outputs(v_i') of attention module
         output = self.LogEuclideanMean(atten_prob, V)
 

@@ -1,4 +1,6 @@
 import torch
+import numpy as np
+import random, os
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
@@ -13,6 +15,15 @@ import torch.nn as nn
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
+
+def random_spd_batch(batch_size, n):
+    return torch.tensor(np.array([
+        random_spd_matrix(n) for i in range(batch_size)
+    ]))
+
+def random_spd_matrix(n):
+    A = np.random.rand(n, n)
+    return np.dot(A, A.transpose())
 
 def check_sanity(m):
         if isinstance(m, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d, nn.GroupNorm)):
@@ -67,12 +78,105 @@ def testContextualizer():
     contextualizer = MENDRContextualizer(device)
     combined_r2e_output, combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
 
-    assert combined_r2e_output.shape == torch.Size([8, 190]), f'Combined R2E Shape: {combined_r2e_output.shape}'
-    assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
     for band, v in example_input.items():
-        output, shape = wavelet_manifold_output[band]
+        output = wavelet_manifold_output[band]
         assert output.shape == torch.Size([32, 19, 19]), f'{band} Wavelet Manifold Shape: {wavelet_manifold_output[band].shape}'
-        assert shape == [8, 4, -1], f'{band} Shape: {shape}'
+
+
+    assert combined_r2e_output.shape == torch.Size([8, 760]), f'Combined R2E Shape: {combined_r2e_output.shape}'
+    assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
+
+    assert not torch.any(torch.isnan(combined_r2e_output)), "Combined R2E contains NaN values"
+    assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+
+
+    
+def testMENDRTrainerLOOLoss():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    mask_rate = 0.01,
+    mask_span = 5,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    encoder = MENDRAutoEncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    with torch.autograd.detect_anomaly():
+        embeddings = {
+            'delta': random_spd_batch(8, 19).to(device),
+            'theta': random_spd_batch(8, 19).to(device),
+            'alpha': random_spd_batch(8, 19).to(device),
+            'beta': random_spd_batch(8, 19).to(device),
+            'gamma': random_spd_batch(8, 19).to(device),
+        }
+
+        loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
+
+    assert pairs == 30, f"Pairs is not 30: {pairs}"
+    assert loss > 0, f"Loss is not greater than 0: {loss}"
+
+
+def testMENDRTrainerMAEReconLoss():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    mask_rate = 0.01,
+    mask_span = 5,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    encoder = MENDRAutoEncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    with torch.autograd.detect_anomaly():
+        wavelet_manifold_output = {
+            'delta': random_spd_batch(8, 19).to(device),
+            'theta': random_spd_batch(8, 19).to(device),
+            'alpha': random_spd_batch(8, 19).to(device),
+            'beta': random_spd_batch(8, 19).to(device),
+            'gamma': random_spd_batch(8, 19).to(device),
+        }
+
+        for band, batch in wavelet_manifold_output.items():
+            assert torch.allclose(batch, batch.mT, atol=(10 ** -7)), f"{band}"
+
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
+    assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
+
+    assert combined_manifold_output.shape == torch.Size([8, 19, 19]), f"Combined Manifold Shape does not match{combined_manifold_output.shape}"
+    assert combined_manifold_output_masked.shape == torch.Size([8, 19, 19]), f"Combined Manifold Masked Shape does not match{combined_manifold_output_masked.shape}"
+
+    assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+    assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
+
+
+    for batch_index, epoch_index in enumerate(mask):
+        assert not torch.equal(combined_manifold_output[batch_index*4+epoch_index.item(), :, :], combined_manifold_output_masked[batch_index*4+epoch_index.item(),:,:])
+        
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
@@ -103,14 +207,75 @@ def testMENDRTrainerNoValidation():
     encoder.apply(check_sanity)
     contextualizer.apply(check_sanity)
 
+def testMENDRParameters():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    encoder = MENDRAutoEncoder(device=device)
+    contextualizer = MENDRContextualizer(device=device)
+    trainer = MENDRTrainer(encoder, contextualizer, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+
+    wavelet_spd_transform_params = dict()
+
+    def checkOrthogonal(x):
+        # Returns True if not orthogonal
+        # False if orthogonal
+        product = np.dot(x, x.T)
+        np.fill_diagonal(product,0)
+        return (product.any() == 0)
+
+    for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+        spd_weight = spd_transform.weight.data.clone().cpu().numpy()
+        assert not checkOrthogonal(spd_weight), f"Wavelet Contextualizer SPD weights not orthogonal: {spd_weight}"
+        wavelet_spd_transform_params[band] = spd_weight
+
+    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.clone().cpu().numpy()
+    assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 1 weights not orthogonal: {spd_weight}"
+    combined_spd_transform1_params = spd_weight
+
+    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.clone().cpu().numpy()
+    assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 2 weights not orthogonal: {spd_weight}"
+    combined_spd_transform2_params = spd_weight
+
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=dataset, epochs=1, batch_size=16)
+    
+        for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+            new_weight = spd_transform.weight.data.cpu().numpy()
+            assert not np.allclose(wavelet_spd_transform_params[band], new_weight), f"Wavelet Contextualizer SPD weights not updated: {band}: {wavelet_spd_transform_params[band]} == {new_weight} "
+            assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD weights not orthogonal: {band}"
+        
+        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.cpu().numpy()
+        assert not np.allclose(combined_spd_transform1_params, new_weight), f"Combined Contextualizer SPD 1 weights not updated: {combined_spd_transform1_params} == {new_weight}"
+        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 1 not orthogonal"
+
+        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.cpu().numpy()
+        assert not np.allclose(combined_spd_transform2_params, new_weight), f"Combined Contextualizer SPD 2 weights not updated: {combined_spd_transform2_params} == {new_weight}"
+        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 2 not orthogonal"
+
+    encoder.apply(check_sanity)
+    contextualizer.apply(check_sanity)
+
 def testMENDRTrainerWithValidation():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
-    mask_span = 5,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -144,8 +309,6 @@ def testMENDRLoadFromCheckpoint():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
-    mask_span = 5,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -169,6 +332,19 @@ def testMENDRLoadFromCheckpoint():
     contextualizer.apply(check_sanity)
 
 if __name__ == "__main__":
+    ### Seed ###
+    torch.cuda.empty_cache()
+    random.seed(42)
+    os.environ['PYTHONHASHSEED'] = str(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
+    ## CUDNN ##
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
     print("Testing Encoder...")
     testEncoder()
     print("Encoder test passed!")
@@ -177,9 +353,21 @@ if __name__ == "__main__":
     testContextualizer()
     print("Contextualizer test passed!")
 
+    print("Testing trainer LOO contrastive loss")
+    testMENDRTrainerLOOLoss()
+    print("Trainer LOO contrastive loss test passed! ")
+
+    print("Testing trainer MAE Recon loss")
+    testMENDRTrainerMAEReconLoss()
+    print("Trainer MAE Recon loss test passed! ")
+
     print("Testing trainer fit without validation...")
     testMENDRTrainerNoValidation()
     print("Trainer fit without validation test passed!")
+
+    print("Testing MENDR Parameters...")
+    testMENDRParameters()
+    print("Testing MENDR Parameters passed!")
 
     print("Testing trainer fit with validation...")
     testMENDRTrainerWithValidation()

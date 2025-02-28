@@ -8,35 +8,34 @@ from ..baseModelTrainer import BaseModelTrainer
 from ..transforms import RandomTemporalCrop, RandomGaussianNoise, RandomFTSurrogate
 from .WaveletLoss import WaveletReconstructionLoss
 from torch_geometric.utils import unbatch
+from .mAtt import StiefelParameter
 from .safeSVD import SVD, svdv2
+from scipy.linalg import orth
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
-PRECISION = 7 # Number of decimal places to consider equal
-
+ABS_PRECISION = 3 # Number of decimal places to consider equal
+REL_PRECISION = 1 # Relative tolerance precision
 class MENDRTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, encoder, contextualizer, config, **kwargs):
 		# Initialize temperature as a trainable parameter
-		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
-		self.temp2 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True))
+		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True), requires_grad=True)
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.negatives_loo = 50
 
-		self.band_mask = {}
-		for band in BANDS:
-			num_channels = encoder.encoder_decoders[band].num_channels
-			encoded_seq_len = encoder.encoder_decoders[band].encoded_h
-			epoch_seq_len = encoded_seq_len // contextualizer.epochs
-			self.band_mask[band] = nn.Parameter(torch.normal(0.0, encoded_seq_len**(-0.5), size=(num_channels, epoch_seq_len)), requires_grad=True)
-
-		# Band mask is learnable
-		self.band_mask = nn.ParameterDict(self.band_mask)
+		# Mask is a learnable SPD matrix
+		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
+		# X * X.T is always SPD
+		np.random.seed(10)
+		self.mask = torch.from_numpy(np.random.rand(contextualizer.channels, contextualizer.channels))
+		self.mask = nn.Parameter(self.mask, requires_grad=True)
+		np.random.seed(42)
 
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
-			temp1=self.temp1, temp2=self.temp2, band_mask=self.band_mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+			temp1=self.temp1, mask=self.mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
@@ -48,27 +47,25 @@ class MENDRTrainer(BaseModelTrainer):
 		'''	
 	def forward(self, data):
 		relevant_bands = [data[band] for band in BANDS]
-
 		inputs = dict(zip(BANDS, relevant_bands))
 
 		encoder_output = self.encoder(data['graph'], inputs)
 
-		combined_r2e_output, combined_manifold_output, wavelet_manifold_output = self.contextualizer(encoder_output)
+		wavelet_manifold_output, epoched_shape = self.contextualizer.WaveletContextualizer(encoder_output)
 
 		# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 		# Combined contrastive loss
-		euclidean_loss, riemannian_loss = self.epochMaskedRecon(encoder_output, combined_r2e_output, combined_manifold_output, self.contrastive_loss_fn_combined)
+		riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 
 		return {
 				'encoder_output': encoder_output,
-				'combined_r2e_output': combined_r2e_output,
 				'combined_manifold_output': combined_manifold_output,
+				'combined_manifold_output_masked': combined_manifold_output_masked,
+				'riemannian_loss': riemannian_loss,
 				'wavelet_manifold_output': wavelet_manifold_output,
 				'wavelet_loss': w_loss,
-				'euclidean_loss': euclidean_loss,
-				'riemannian_loss': riemannian_loss,
 				'wavelet_acc': w_correct / w_pairs
 		}
 	
@@ -76,40 +73,74 @@ class MENDRTrainer(BaseModelTrainer):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}
 		return WaveletReconstructionLoss(inputs, decodings)
 				    
-	def calculate_metrics(self, combined_total_loss, combined_euclidean_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
+	def calculate_metrics(self, total_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
 		return {
-			'Combined Total Loss': combined_total_loss,
-			'Combined Euclidean Loss': combined_euclidean_loss,
+			'Total Loss': total_loss,
 			'Combined Riemannian Loss': combined_riemannian_loss,
 			'Wavelet Loss': wavelet_loss,
 			'Wavelet Acc': wavelet_acc,
 			'Recon Loss': recon_loss,
 		}
 
-	def epochMaskedRecon(self, inputs, combined_r2e_embedding, combined_manifold_embedding, criterion):
-		frequency_bands = list(inputs.keys())
-		batch_size = combined_r2e_embedding.shape[0]
-		masked_epochs = torch.randint(self.contextualizer.epochs, (batch_size,))
+	# Useful for debugging, only called on assertion error
+	def _findNonSymmetry(self, A):
+		torch.set_printoptions(precision=ABS_PRECISION + REL_PRECISION, threshold=200, linewidth=1e2)
+		if len(A.shape) == 2:
+			non_symmetries = torch.where(A != A.T)
+			output = f"Indices: {non_symmetries} OgVals: {A[non_symmetries]} TransposeVals: {A.T[non_symmetries]}, Num_indices: {non_symmetries[0].shape}"
+		else: # Batch of matrices
+			non_symmetries = torch.where(A != A.mT)
+			output = f"Indices: {non_symmetries} OgVals: {A[non_symmetries]} TransposeVals: {A.mT[non_symmetries]}, Num_indices: {non_symmetries[0].shape}"
+		return output
 
-		self.contextualizer.freeze_features(unfreeze=False)
+	def epochMaskedRecon(self, wavelet_manifold_output, epoched_shape, criterion):
+		frequency_bands = list(wavelet_manifold_output.keys())
+		batch_size = epoched_shape[0]
+		num_epochs = epoched_shape[1]
+		with torch.no_grad(): # Don't need gradients for random indices
+			masked_epochs = torch.randint(num_epochs, (batch_size,))
 
-		with torch.no_grad():
-			# We mask one epoch and try to reconstruct it from the other epochs in a patch
-			masked_inputs = dict()
-			for band in frequency_bands:
-				band_encoding, band_decoding = inputs[band]
-				epoch_length = band_encoding.shape[2] // self.contextualizer.epochs
-				masked_inputs[band] = (band_encoding.clone(), band_decoding)
-				for batch_idx in range(batch_size):
-					masked_inputs[band][0][batch_idx,:, epoch_length * masked_epochs[batch_idx]:epoch_length * (masked_epochs[batch_idx] + 1)] = self.band_mask[band]
+		# Construct the mask at runtime
+		spd_mask = torch.matmul(self.mask, self.mask.T)
 
-			transformed_r2e_embeddings, transformed_manifold_output, _ = self.contextualizer(masked_inputs)
+		wavelet_manifold_output_masked = dict()
+		for band, spd_batch in wavelet_manifold_output.items():
+			wavelet_manifold_output_masked[band] = spd_batch.clone().view(batch_size, num_epochs, spd_batch.shape[1], spd_batch.shape[2])
+		
+		# We mask one epoch calculate the LEM and then compare it with the full LEM
+		# [B, E, C, C]
+		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
+			for band in wavelet_manifold_output_masked.keys():
+				wavelet_manifold_output_masked[band][batch_idx, masked_epoch_idx.item(), :, :] = spd_mask
+				
+		for band in wavelet_manifold_output_masked.keys():
+			wavelet_manifold_output_masked[band] = wavelet_manifold_output_masked[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
 
-			# Reconstruction loss
-			euclidean_loss = criterion(transformed_r2e_embeddings, combined_r2e_embedding)
-			riemannian_loss = criterion(transformed_manifold_output, combined_manifold_embedding)
-		self.contextualizer.freeze_features(unfreeze=True)
-		return euclidean_loss, riemannian_loss
+		_, combined_manifold_output_masked = self.contextualizer.CombinedContextualizer(wavelet_manifold_output_masked, epoched_shape)
+
+		# Log Euclidean Mean
+		combined_manifold_output = torch.stack(list(wavelet_manifold_output.values()), dim=1)
+		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_log(combined_manifold_output)
+		combined_manifold_output = combined_manifold_output.sum(dim=1, keepdim=True) / combined_manifold_output.shape[1]
+		combined_manifold_output = self.contextualizer.CombinedContextualizer.combined_attention.tensor_exp(combined_manifold_output)
+		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+
+		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+		# MY BRIAN IS SO FRIED I RAN OUT OF GOOD NAMEs
+		combined_manifold_output_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
+		combined_manifold_output_masked_important_part = torch.empty(epoched_shape[0], combined_manifold_output.shape[2], combined_manifold_output.shape[3]).to(self.device)
+
+		for batch_idx, masked_epoch_idx in enumerate(masked_epochs):
+			combined_manifold_output_important_part[batch_idx, :, :] = combined_manifold_output[batch_idx, masked_epoch_idx, :, :]
+			combined_manifold_output_masked_important_part[batch_idx, :, :] = combined_manifold_output_masked[batch_idx, masked_epoch_idx, :, :]
+		
+		# Reconstruction loss
+		riemannian_loss = criterion(combined_manifold_output_important_part, combined_manifold_output_masked_important_part)
+
+		combined_manifold_output = combined_manifold_output.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0]*epoched_shape[1], combined_manifold_output_masked.shape[2], combined_manifold_output_masked.shape[3])
+
+		return 3e7*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
 	def leave_one_out(self, embeddings, criterion, negatives=50):
 		"""
@@ -127,58 +158,62 @@ class MENDRTrainer(BaseModelTrainer):
 		"""
 		frequency_bands = list(embeddings.keys())
 		num_targets = len(frequency_bands)
-		batch_size = embeddings['delta'][0].shape[0]
-	
+		batch_size = embeddings['delta'].shape[0]
+
 		loss = 0.0
 		correct = 0
 		pairs = 0
-		with torch.no_grad():
-			for i in range(num_targets):
-				# Average embeddings of all other modalities
-				other_embeddings = []
+		for i in range(num_targets):
+			# Average embeddings of all other modalities
+			other_embeddings = []
+
+			with torch.no_grad(): # Gradients don't need to be calculated for indices
 				negative_selection = torch.randperm(batch_size)
 				negative_indices = negative_selection[:negatives]
 
-				for j in list(range(i)) + list(range(i + 1, num_targets)):
-					embedding_tensor = embeddings[frequency_bands[j]][0] # [Batch * epochs, C, C]
-					embedding_tensor = embedding_tensor[negative_indices]
-					other_embeddings.append(embedding_tensor)
-				curr_target = embeddings[frequency_bands[i]][0][negative_indices]
-				other_embeddings = torch.stack(other_embeddings, dim=1)
-				# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
-				other_embeddings_log = self.contextualizer.combined_attention.tensor_log(other_embeddings)
-				other_embeddings_mean = torch.exp(other_embeddings_log.sum(dim=1) / other_embeddings_log.shape[1])
+			for j in list(range(i)) + list(range(i + 1, num_targets)):
+				embedding_tensor = embeddings[frequency_bands[j]] # [Batch * epochs, C, C]
+				embedding_tensor = embedding_tensor[negative_indices]
+				other_embeddings.append(embedding_tensor)
+			curr_target = embeddings[frequency_bands[i]][negative_indices]
+			other_embeddings = torch.stack(other_embeddings, dim=1)
 
-				# trace normalization
-				'''
-				trace = other_embeddings.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
-				trace = trace.view(-1, 1, 1)
-				other_embeddings /= trace
-				identity = torch.eye(other_embeddings.shape[-1], other_embeddings.shape[-1], device=self.device).to(self.device).repeat(other_embeddings.shape[0], 1, 1)
-				other_embeddings = other_embeddings + (1e5 * identity)
-				'''
-				assert torch.allclose(other_embeddings, other_embeddings.mT, atol=(10 ** -PRECISION)), f"Input Matrix Not Symmetric, {other_embeddings}"
+			# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
+			other_embeddings_log = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_log(other_embeddings)
+			other_embeddings_mean = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_exp(other_embeddings_log.sum(dim=1, keepdim=True) / other_embeddings_log.shape[1])[:, 0, :, :]
 
-				# Compute logits
-				logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
-				#print(curr_target.shape, other_embeddings.shape)
-				#logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
-				labels = torch.arange(logits.shape[0], device=self.device)
+			# Why does this fail for higher precisions?
+			# Answer: AttenionManifold's forward and SPDTransforms Forward are numerically unstable for FloatingPoint Precision calculations
+			# I.E. it will create attention values that are approximately symmetric matrices up to a certain precision.
+			# If we change the tensor's values to Double rather than float this assertion passes for PRECISION=16
+			# However, to accelerate training at scale we need to keep everything as Floats
+			# Note that the total number of digits a Float32 can store is around 6 to 9:
+			# https://stackoverflow.com/questions/56514892/how-many-digits-can-float8-float16-float32-float64-and-float128-contain
+			# assuming torch.float = np.float32
+			# Potential future direction is "Quantizing" SPD matrices
+			assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
+			assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
 
-				# Forward loss
-				forward_logits = logits
-				l = criterion(forward_logits, labels)
-				loss += l
-				correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
-				pairs += forward_logits.size(0)
+			# Compute logits
+			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
+			#print(curr_target.shape, other_embeddings.shape)
+			#logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
+			labels = torch.arange(logits.shape[0], device=self.device)
 
-				# Reverse loss - Ensure logits are symmetric
-				reverse_logits = logits.T
-				l = criterion(reverse_logits, labels)
-				loss += l
-				correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
-				pairs += reverse_logits.size(0)
-		return loss, correct, pairs
+			# Forward loss
+			forward_logits = logits
+			l = criterion(forward_logits, labels)
+			loss += l
+			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
+			pairs += forward_logits.size(0)
+
+			# Reverse loss - Ensure logits are symmetric
+			reverse_logits = logits.T
+			l = criterion(reverse_logits, labels)
+			loss += l
+			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
+			pairs += reverse_logits.size(0)
+		return 0.2 * loss, correct, pairs
 
 	'''
 	Currently not being used

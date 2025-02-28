@@ -9,6 +9,9 @@ from sys import gettrace
 from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
+from Model.loggingUtil import MENDRLogger
+from Explainability.embeddingVisualization import plotSPDEmbedding
+import matplotlib.pyplot as plt
 
 '''
 Based on:
@@ -45,7 +48,7 @@ class BaseModelTrainer(object):
         # Names of trainable objects
         self._trainables = list()
         for member in new_members:
-            if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor)):
+            if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor, torch.nn.Parameter)):
                 if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
@@ -57,6 +60,8 @@ class BaseModelTrainer(object):
         self.weight_decay = l2_weight_decay
         self.ckpt_dir = ckpt_dir
         self.best_metric = float("Inf")
+        self.loaded_from_ckpt = False
+
 
     def set_optimizer(self, optimizer):
         # assert isinstance(optimizer, torch.optim.Optimizer)
@@ -91,6 +96,7 @@ class BaseModelTrainer(object):
         for key, value in batch.items():
             if isinstance(value, torch.Tensor):
                 # Perform batch normalization across channels 
+                # Note all data are float32!
                 batch[key] = self._std_norm(value.float().to(self.device))
         return batch
     
@@ -131,16 +137,18 @@ class BaseModelTrainer(object):
 
     def backward(self, loss):
         self.optimizer.zero_grad()
+
+        # Sanity checks -- although computationally inefficient neccessary for the complexity of this model/loss func
+        assert loss.item() != 0, f"Loss is 0: {loss}"
         loss.backward()
         # Clamp temperature to non-negative values
         with torch.no_grad():
             self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
-            self.temp2.copy_(torch.clamp(self.temp2, min=0.0))
 
         # Gradient Clipping
         nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
 
-
+        
     def train(self, mode=True):
         self._training = mode
         for member in self._trainables:
@@ -153,18 +161,19 @@ class BaseModelTrainer(object):
         outputs = self.forward(inputs)
 
         encoder_output = outputs['encoder_output']
-        combined_r2e_output = outputs['combined_r2e_output']
-        combined_manifold_output = outputs['combined_manifold_output']
+        #combined_r2e_output = outputs['combined_r2e_output']
+        #combined_manifold_output = outputs['combined_manifold_output']
         wavelet_manifold_output = outputs['wavelet_manifold_output']
-        euclidean_loss = outputs['euclidean_loss']
         riemannian_loss = outputs['riemannian_loss']
         wavelet_loss = outputs['wavelet_loss']
         wavelet_acc = outputs['wavelet_acc']
         recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
-        total_loss = recon_loss + euclidean_loss + riemannian_loss + wavelet_loss
+        total_loss = recon_loss +  riemannian_loss + wavelet_loss
+
+        
         self.backward(total_loss)
         self.optimizer.step()
-        train_metrics = self.calculate_metrics((euclidean_loss + riemannian_loss).item(), euclidean_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
+        train_metrics = self.calculate_metrics(total_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
         train_metrics.setdefault('loss', total_loss.item())
         train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
         for band, loss in loss_dict.items():
@@ -223,26 +232,32 @@ class BaseModelTrainer(object):
         combined_acc_agg = 0
         wavelet_acc_agg = 0
         with torch.no_grad():
-            for iteration in pbar:
+            for idx, iteration in enumerate(pbar):
                 input_batch = self._get_batch(data_iterator)
                 outputs = self.forward(input_batch)
 
                 encoder_output = outputs['encoder_output']
-                combined_r2e_output = outputs['combined_r2e_output']
                 combined_manifold_output = outputs['combined_manifold_output']
+                combined_manifold_output_masked = outputs['combined_manifold_output_masked']
                 wavelet_manifold_output = outputs['wavelet_manifold_output']
-                euclidean_loss = outputs['euclidean_loss']
-                riemannian_loss = outputs['riemannian_loss']
-                combined_loss_agg += (outputs['euclidean_loss'] + outputs['riemannian_loss']).item()
-                wavelet_loss_agg += outputs['wavelet_loss'].item()
+                combined_loss_agg +=  outputs['riemannian_loss'] 
+                wavelet_loss_agg += outputs['wavelet_loss']
                 wavelet_acc_agg += outputs['wavelet_acc']
 
+                if idx == 0: # Log only the first 16 of the first batch in the validation set
+                    wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, input_batch['subject_name'], max_figs=16)
+                    for band, wavelet_fig in wavelet_figs.items():
+                        mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+                        plt.close(wavelet_fig)
+                    mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+                    plt.close(combined_fig)
+
                 recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
-                recon_loss_agg += recon_loss.item()
+                recon_loss_agg += recon_loss
 
             total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
-            val_metrics = self.calculate_metrics(combined_loss_agg, euclidean_loss.item(), riemannian_loss.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg)
-            val_metrics.setdefault('loss', total_loss_agg)
+            val_metrics = self.calculate_metrics(total_loss_agg.item(), combined_loss_agg.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg.item())
+            val_metrics.setdefault('loss', total_loss_agg.item())
             return val_metrics
 
     @classmethod
@@ -287,6 +302,8 @@ class BaseModelTrainer(object):
                 module_weight_path = os.path.join(ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(ckpt_path,"scheduler.pth")))
+        self.loaded_from_ckpt = True
 
     def _retain_best(self, metrics_to_check: dict):
         if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
@@ -296,6 +313,9 @@ class BaseModelTrainer(object):
         else:
             tqdm.tqdm.write(f"Failed to beat best loss. Curr Loss: {metrics_to_check['loss']}. Best Loss: {self.best_metric}. Reverting to old checkpoint...")
             self.load_best()
+
+        # Always save scheduler 
+        torch.save(self.optimizer.scheduler.state_dict(), f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}/scheduler.pth')
 
     @staticmethod
     def _dataloader_args(dataset, training=False, **loader_kwargs):
@@ -319,9 +339,12 @@ class BaseModelTrainer(object):
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
         mlflow.start_run()
-        mlflow.autolog()
+
+        self.logger = MENDRLogger()
+
         signature = None
-        self.optimizer.set_scheduler_t0(len(training_dataloader))
+        if self.loaded_from_ckpt == False:
+            self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
             epoch_metrics = {
                 'total_epoch_training_loss': 0,
@@ -341,22 +364,31 @@ class BaseModelTrainer(object):
                 input_batch = self._get_batch(data_iterator)
                 train_metrics = self.train_step(input_batch)
                 epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
-                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Total Loss']
+                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Riemannian Loss']
                 epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
+                # Logging
+                self.logger.log_model_gradients(self.encoder, epoch=epoch * len(pbar) + iteration)
+                self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(pbar) + iteration)
+                self.logger.log_model_gradients(self.temp1, epoch=epoch * len(pbar) + iteration, name="Temperature")
+                self.logger.log_model_gradients(self.mask, epoch=epoch * len(pbar) + iteration, name="Mask")
+
             if validation_dataset is not None:
                 val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
                 epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
-                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Total Loss']
+                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Riemannian Loss']
                 epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
                 epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
                 self.standard_logging(val_metrics, "End of Epoch")
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
+                self.logger.logEncoderParams(self.encoder, step=epoch)
+                self.logger.logContextualizerParams(self.contextualizer, step=epoch)
+                self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
@@ -364,4 +396,6 @@ class BaseModelTrainer(object):
 
         if self.ckpt_dir != None:
             print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}")
+
         mlflow.end_run()
+        self.logger.closeWriter()

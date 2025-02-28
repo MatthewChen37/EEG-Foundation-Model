@@ -30,7 +30,6 @@ class SPDTransform(nn.Module):
         weight = self.weight.unsqueeze(0)
         weight = weight.expand(input.size(0), -1, -1)
         output = torch.bmm(weight.transpose(1,2), torch.bmm(output, weight))
-
         return output
 
 

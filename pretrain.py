@@ -61,8 +61,7 @@ def main(args):
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	encoder = MENDRAutoEncoder(device=device)
-	contextualizer = MENDRContextualizer(device=device)
-
+	contextualizer = MENDRContextualizer(device=device, epochs=4, num_channels=19)
 	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
@@ -72,7 +71,12 @@ def main(args):
 		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
 	print("Contextualizer parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=5e-4)
+
+
+	parameters = list(trainer.parameters())
+	parameters.append(trainer.temp1)
+	parameters.append(trainer.mask)
+	optimizer = torch.optim.AdamW(parameters, lr=args.learning_rate, weight_decay=5e-4)
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
 
@@ -80,10 +84,9 @@ def main(args):
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
 			raise Exception(f"Checkpoint folder {args.load_from_ckpt} does not exist.")
-		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth'}
+		assert set(os.listdir(args.load_from_ckpt)) == {'encoder_weights.pth', 'contextualizer_weights.pth', 'scheduler.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
-	'''
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -107,7 +110,7 @@ def main(args):
 	if torch.cuda.is_available():
 		torch.cuda.synchronize()
 	print("Cleanup complete.")
-	'''
+
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()

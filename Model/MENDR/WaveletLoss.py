@@ -3,6 +3,7 @@ import torch
 loss_fn = torch.nn.MSELoss()
 
 def WaveletReconstructionLoss(inputs, outputs):
+    '''
     for band, input_data in inputs.items():
         if isinstance(input_data, torch.Tensor):
             inputs[band] = input_data.float()
@@ -10,7 +11,6 @@ def WaveletReconstructionLoss(inputs, outputs):
         if isinstance(output_data, torch.Tensor):
             outputs[band] = output_data.float()
 
-    '''
     assert inputs['delta'].shape == outputs['delta'].shape, f"Input Shape {inputs['delta'].shape} Output Shape {outputs['delta'].shape}"
     assert inputs['theta'].shape == outputs['theta'].shape, f"Input Shape {inputs['theta'].shape} Output Shape {outputs['theta'].shape}"
     assert inputs['alpha'].shape == outputs['alpha'].shape, f"Input Shape {inputs['alpha'].shape} Output Shape {outputs['alpha'].shape}"
