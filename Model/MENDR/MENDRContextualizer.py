@@ -152,9 +152,6 @@ class MENDRCombinedContextualizer(nn.Module):
 		return combined_manifold_output
 
 
-
-
-
 class BatchTraceNormalization(nn.Module):
 	def __init__(self, device, num_channels=19, epsilon=1e-5):
 		super().__init__()

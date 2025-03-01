@@ -92,7 +92,7 @@ class MENDRTrainer(BaseModelTrainer):
 
 		return 3e7*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
-	def leave_one_out(self, embeddings, criterion, negatives=50):
+	def leave_one_out(self, embeddings, criterion, negatives=20):
 		"""
 		Compute leave-one-out loss for wavelet embeddings.
 
