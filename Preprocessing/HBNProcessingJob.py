@@ -26,8 +26,8 @@ def main(args):
 		for future in futures:
 			future.result()
 
-	failed_files = pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"])
-	_write_csv(failed_files, os.path.join(args.output_dir, "failed_files.csv"))
+	failed_files_df = pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"])
+	_write_csv(failed_files_df, os.path.join(args.output_dir, "failed_files.csv"))
 
 def _process_dataset_release(dataset_release, args):
 	bids_path = BIDSPath(root=os.path.join(args.input_directory, dataset_release),
