@@ -10,9 +10,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import warnings
 import traceback
 from convertTUHtoBIDS import _rename_channels, CHANNELS_TO_KEEP
-
-def group_list(data, size):
-    return [data[i:i + size] for i in range(0, len(data), size)]
+from ..utils import group_list
 
 failed_files = []
 

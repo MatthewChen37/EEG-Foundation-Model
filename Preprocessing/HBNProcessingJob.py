@@ -8,43 +8,46 @@ from readEEG import HBN_ELECTRODE_MAP
 from mne_bids import BIDSPath, read_raw_bids
 from tqdm import tqdm
 from preprocessingPipeline import simplePipeline
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import warnings
 import traceback
 import pickle as pkl
+from util import group_list
 
 ELECTRODES = [f'E{i}' for i in range(1, 129)]
 TO_DROP = [electrode for electrode in ELECTRODES if electrode not in HBN_ELECTRODE_MAP.values()]
 HBN_ELECTRODE_MAP_REVERSED = dict((v,k) for k,v in HBN_ELECTRODE_MAP.items())
 
+failed_files = []
 def main(args):
 	dataset_releases = os.listdir(args.input_directory)
-
 	with ProcessPoolExecutor() as executor:
 		futures = [executor.submit(_process_dataset_release, dataset_release, args) for dataset_release in dataset_releases]
 		for future in futures:
 			future.result()
+
+	failed_files = pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"])
+	_write_csv(failed_files, os.path.join(args.output_dir, "failed_files.csv"))
 
 def _process_dataset_release(dataset_release, args):
 	bids_path = BIDSPath(root=os.path.join(args.input_directory, dataset_release),
 					    datatype="eeg", suffix="eeg", extension=".set")
 		
 	subjects = sorted(set([bp.subject for bp in bids_path.match()]))
-	#print(f"Found {len(subjects)} subjects for dataset release: {dataset_release}")
 
+	# Group subjects into groups of 10
+	subjects_grouped = group_list(subjects, 30)
+	with ThreadPoolExecutor() as executor:
+		futures = [executor.submit(_process_dataset_release_thread, subject_group, dataset_release, bids_path.copy(), args) for subject_group in subjects_grouped]
+		for future in futures:
+			future.result()
+
+def _process_dataset_release_thread(subject_group, dataset_release, bids_path, args):
 	indices = None
-	means = pd.DataFrame()
-	stds = pd.DataFrame()
-
-	failed_files = []
-
-	for subject in subjects:
-		print(f"Processing subject: {subject} in dataset release: {dataset_release}")
+	for subject in subject_group:
 		Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
 		Path(os.path.join(args.output_dir, subject, "epochs")).mkdir(parents=True, exist_ok=True)
-		subject_all_data = []
 		bids_path.update(subject=subject)
-
 		for bp in bids_path.match():
 			if bp.run:
 				file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}-{bp.run}.fif")
@@ -57,37 +60,13 @@ def _process_dataset_release(dataset_release, args):
 					raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
 					if indices is None:
 						indices = raw.ch_names
-					subject_all_data.append(raw.get_data())
-
 					epochs = simplePipeline(raw)
 					epochs.save(file_path, overwrite=False)
 				except Exception as e:
 					failed_files.append((subject, e, file_path, traceback.format_exc()))
 					print(f"Failed to process subject: {subject} in dataset release: {dataset_release}")
-
-		if subject_all_data:
-			subject_all_data = np.concatenate(subject_all_data, axis=1)
-
-			# Z-score Transform By Channel
-			mean = np.mean(subject_all_data, axis=1)
-			std = np.std(subject_all_data, axis=1)
-
-			means[subject] = mean
-			stds[subject] = std
-	
-	if not means.empty:
-		means.set_index(pd.Index(indices), inplace=True)
-		_write_csv(means, os.path.join(args.output_dir, f"{dataset_release}_mean.csv"))
-	if not stds.empty:
-		stds.set_index(pd.Index(indices), inplace=True)
-		_write_csv(stds, os.path.join(args.output_dir, f"{dataset_release}_std.csv"))
-
-	if failed_files:
-		pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"]).to_csv(
-			os.path.join(args.output_dir, f"{dataset_release}_failed_files.csv"), index=False
-		)
-
 	gc.collect()
+
 
 def _write_csv(df, filename):
 	# if file does not exist write header 
@@ -96,8 +75,7 @@ def _write_csv(df, filename):
 	else: # else it exists so append without writing the header
 		df.to_csv(filename, mode='a', header=True)
 
-
-
+'''
 def main2(args):
 	bids_path = BIDSPath(root=args.input_directory, datatype="eeg", suffix="eeg", extension=".set")
 
@@ -248,7 +226,7 @@ def _process_missing(dataset_release, args, patient_means, patient_stds, missing
 
 	gc.collect()
 
-
+'''
 def parse_args():
 	# setup arg parser
 	parser = argparse.ArgumentParser()
@@ -270,4 +248,4 @@ def parse_args():
 
 if __name__ == "__main__":
 	args = parse_args()
-	main3(args)
+	main(args)

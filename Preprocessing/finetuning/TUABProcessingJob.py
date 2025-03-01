@@ -11,6 +11,7 @@ import warnings
 import traceback
 from collections import OrderedDict
 from convertTUHtoBIDS import _rename_channels, CHANNELS_TO_KEEP
+from ..utils import group_list
 
 INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
 		    'O1', 'O2', 'F7', 'F8', 'T3', 'T4', 'T5', 'T6',
@@ -18,8 +19,6 @@ INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
 
 failed_files = []
 
-def group_list(data, size):
-    return [data[i:i + size] for i in range(0, len(data), size)]
 
 def main(args):
 	classes = os.listdir(args.input_directory)
