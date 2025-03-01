@@ -25,7 +25,7 @@ class WaveletEncoderDecoder(nn.Module):
         L_out = self.seq_len + 2 * (self.conv_kernel_size//2) - 1 * (self.conv_kernel_size - 1) - 1
         L_out = floor(L_out / self.conv_kernel_stride) + 1
 
-        self.patch_embedder = nn.Sequential(
+        self.window_embedder = nn.Sequential(
             nn.Conv1d(self.num_channels, self.num_channels, 
             self.conv_kernel_size, stride=self.conv_kernel_stride,
             padding=self.conv_kernel_size//2),
@@ -55,7 +55,7 @@ class WaveletEncoderDecoder(nn.Module):
         return transformer_decoder1_count + transformer_decoder2_count
 
     def forward(self, graph, x):
-        patch_embedding = self.act(self.patch_embedder(x))
+        patch_embedding = self.act(self.window_embedder(x))
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
         gnn_encoder_input = patch_embedding.view(-1, patch_embedding.shape[-1])
@@ -79,9 +79,9 @@ class WaveletEncoderDecoder(nn.Module):
 Initialize Encoders for each wavelet band and 
 put them into a single object.
 '''
-class MENDRAutoEncoder(nn.Module):
+class MENDRWindowEncoder(nn.Module):
     def __init__(self, device):
-        super(MENDRAutoEncoder, self).__init__()
+        super(MENDRWindowEncoder, self).__init__()
         self.device = device
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(

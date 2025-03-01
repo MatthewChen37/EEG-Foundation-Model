@@ -108,16 +108,33 @@ class MENDRCombinedContextualizer(nn.Module):
 
 		self.combined_attention = AttentionManifold(self.num_channels, self.num_channels, self.device)
 		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.num_channels, self.num_channels, self.device), BatchTraceNormalization(self.device))
-		self.combined_r2e_tangent_space = SPDTangentSpace(self.num_channels, self.device)
 		self.combined_spd_transform2 = SPDTransform(self.num_channels, self.num_channels, self.device)
 		self.ract = SPDRectified()
-		self.flatten = nn.Flatten()
+
+		# Mask is a learnable SPD matrix
+		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
+		# X * X.T is always SPD
+		self.mask = torch.from_numpy(np.random.rand(num_channels, num_channels))
+		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask=None):
+		if mask:
+			# Construct the mask at runtime
+			spd_mask = torch.matmul(self.mask, self.mask.T)
+			for band, spd_batch in x.items():
+				x[band] = spd_batch.clone().view(batch_size, num_epochs, spd_batch.shape[1], spd_batch.shape[2])
+
+			# We mask one epoch calculate the LEM and then compare it with the full LEM
+			# [B, E, C, C]
+			for batch_idx, masked_epoch_idx in enumerate(mask):
+				for band in x.keys():
+					x[band][batch_idx, masked_epoch_idx.item(), :, :] = spd_mask
+
+			for band in x.keys():
+				x[band] = x[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
+
 		# Log Euclidean Mean
-		combined_manifold_output = torch.stack(list(x.values()), dim=1)
-		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
-		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
 		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
 		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
@@ -126,10 +143,13 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)
 		combined_manifold_output = self.ract(combined_manifold_output)
 		combined_manifold_output = self.combined_spd_transform2(combined_manifold_output)
-		combined_r2e_output = self.combined_r2e_tangent_space(combined_manifold_output)
-		combined_r2e_output = combined_r2e_output.view(shape[0], shape[1], -1)
-		combined_r2e_output = self.flatten(combined_r2e_output)
-		return combined_r2e_output, combined_manifold_output
+		return combined_manifold_output
+
+	def _wavelet_LogEuclideanMean(self, x):
+		combined_manifold_output = torch.stack(list(x.values()), dim=1)
+		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
+		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+		return combined_manifold_output
 
 
 class BatchTraceNormalization(nn.Module):

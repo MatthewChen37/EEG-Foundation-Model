@@ -3,7 +3,7 @@ import numpy as np
 import random, os
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
-from Model.MENDR.MENDREncoder import MENDRAutoEncoder, WaveletEncoderDecoder
+from Model.MENDR.MENDREncoder import MENDRWindowEncoder, WaveletEncoderDecoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
@@ -52,7 +52,7 @@ def testEncoder():
     batch_edge_attributes = torch.cat(edge_attributes, dim=0)
 
     example_graph = Data(edge_index=batch_edge_index, edge_attr=batch_edge_attributes)
-    encoder = MENDRAutoEncoder(device)
+    encoder = MENDRWindowEncoder(device)
 
     output = encoder(example_graph, example_input)
 
@@ -107,7 +107,7 @@ def testMENDRTrainerLOOLoss():
     random_state=42
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -145,7 +145,7 @@ def testMENDRTrainerMAEReconLoss():
     random_state=42
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -194,7 +194,7 @@ def testMENDRTrainerNoValidation():
     random_state=42
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -221,7 +221,7 @@ def testMENDRParameters():
     random_state=42
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -286,7 +286,7 @@ def testMENDRTrainerWithValidation():
     random_state=42
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
@@ -320,7 +320,7 @@ def testMENDRLoadFromCheckpoint():
     load_from_ckpt="./checkpoint/MockCkpt"
     )
 
-    encoder = MENDRAutoEncoder(device=device)
+    encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
     trainer = MENDRTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
