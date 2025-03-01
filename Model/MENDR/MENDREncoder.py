@@ -79,9 +79,9 @@ class WaveletEncoderDecoder(nn.Module):
 Initialize Encoders for each wavelet band and 
 put them into a single object.
 '''
-class MENDRAutoEncoder(nn.Module):
+class MENDRWindowEncoder(nn.Module):
     def __init__(self, device):
-        super(MENDRAutoEncoder, self).__init__()
+        super(MENDRWindowEncoder, self).__init__()
         self.device = device
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(

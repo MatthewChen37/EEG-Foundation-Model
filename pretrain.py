@@ -58,8 +58,8 @@ def main(args):
 
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	encoder = MENDRAutoEncoder(device=device)
-	contextualizer = 	print("Starting training.")
+
+	print("Starting training.")
 	### Training ###
 	trainer = MENDRTrainer(encoder, contextualizer, args)
 
