@@ -63,7 +63,7 @@ class WaveletDataset(Dataset):
 		wavelet_path = os.path.join(self.root, subject, "wavelet_decompositions")
 		if os.path.exists(subject_graph_folder) and len(os.listdir(subject_graph_folder)) > 0 and os.path.exists(wavelet_path) and len(os.listdir(wavelet_path)) > 0:
 			subject_graph_path = os.listdir(subject_graph_folder)[0]
-			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(subject_graph_folder, subject_graph_path))
+			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(subject_graph_folder, subject_graph_path), weights_only=False)
 			wavelet_files = os.listdir(wavelet_path)
 			subject_epochs = dict()
 			for file_name in wavelet_files:
@@ -73,7 +73,7 @@ class WaveletDataset(Dataset):
 				if epoch_idx not in subject_epochs:
 					subject_epochs[epoch_idx] = dict()
 					subject_epochs[epoch_idx]['graph_name'] = attributes[0]
-				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name))
+				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name), weights_only=False)
 			for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
 				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx, epoch_wavelet_dict['delta'],
 								epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],

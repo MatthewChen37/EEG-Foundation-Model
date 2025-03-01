@@ -20,20 +20,7 @@ class MENDRTrainer(BaseModelTrainer):
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, encoder, contextualizer, config, **kwargs):
-		# Initialize temperature as a trainable parameter
-		self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True), requires_grad=True)
-		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
-		self.contrastive_loss_fn_combined = nn.MSELoss()
-		self.negatives_loo = 50
-
-		# Mask is a learnable SPD matrix
-		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
-		# X * X.T is always SPD
-		np.random.seed(10)
-		self.mask = torch.from_numpy(np.random.rand(contextualizer.channels, contextualizer.channels))
-		self.mask = nn.Parameter(self.mask, requires_grad=True)
-		np.random.seed(42)
-
+		
 		super(MENDRTrainer, self).__init__(encoder=encoder, contextualizer=contextualizer, 
 			temp1=self.temp1, mask=self.mask, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
