@@ -88,7 +88,7 @@ class MENDRWindowEncoder(nn.Module):
                     num_channels = 19,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 124,
+                    encoded_h = 126,
                     encoder_conv_kernel_size = 2,
                     encoder_conv_kernel_stride = 2,
                     device = device
@@ -98,7 +98,7 @@ class MENDRWindowEncoder(nn.Module):
                     num_channels = 19,
                     seq_len = 246,
                     heads = 4,
-                    encoded_h = 124,
+                    encoded_h = 126,
                     encoder_conv_kernel_size = 2,
                     encoder_conv_kernel_stride = 2,
                     device = device
@@ -107,7 +107,7 @@ class MENDRWindowEncoder(nn.Module):
                     num_channels = 19,
                     seq_len = 486,
                     heads = 4,
-                    encoded_h = 244,
+                    encoded_h = 246,
                     encoder_conv_kernel_size = 2,
                     encoder_conv_kernel_stride = 2,
                     device = device 
@@ -117,7 +117,7 @@ class MENDRWindowEncoder(nn.Module):
                     num_channels = 19,
                     seq_len = 966,
                     heads = 4,
-                    encoded_h = 484,
+                    encoded_h = 246,
                     encoder_conv_kernel_size = 2,
                     encoder_conv_kernel_stride = 2,
                     device = device
@@ -127,7 +127,7 @@ class MENDRWindowEncoder(nn.Module):
                     num_channels = 19,
                     seq_len = 1925,
                     heads = 4,
-                    encoded_h = 484,
+                    encoded_h = 492,
                     encoder_conv_kernel_size = 4,
                     encoder_conv_kernel_stride = 4,
                     device = device

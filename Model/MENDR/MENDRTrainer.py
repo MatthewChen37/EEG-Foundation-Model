@@ -22,7 +22,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.negatives_loo = 20
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
-        self.contrastive_loss_fn_combined = nn.MSELoss()
+		self.contrastive_loss_fn_combined = nn.MSELoss()
 
 		super(MENDRTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
@@ -225,5 +225,3 @@ class MENDRTrainer(BaseModelTrainer):
 		inner_term = tensor_log_A[:, None, ...] - tensor_log_B[None, ...]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.temp1)
 		return output
-
-

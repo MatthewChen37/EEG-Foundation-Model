@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from MENDREncoder import MENDRWindowEncoder
-from MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.MENDREncoder import MENDRWindowEncoder
+from Model.MENDR.MENDRContextualizer import MENDRContextualizer
 
-class MENDR(nn.Module):
+class MENDR_model(nn.Module):
     def __init__(self, device, epochs=6, num_channels=19):
+        super(MENDR_model, self).__init__()
         self.mendr_encoder = MENDRWindowEncoder(device=device)
         self.mendr_contextualizer = MENDRContextualizer(device=device, epochs=epochs, num_channels=num_channels)
         

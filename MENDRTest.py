@@ -3,8 +3,9 @@ import numpy as np
 import random, os
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
-from Model.MENDR.MENDREncoder import MENDRWindowEncoder, WaveletEncoderDecoder
+from Model.MENDR.MENDREncoder import MENDRWindowEncoder
 from Model.MENDR.MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.MENDRTrainer import MENDRTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
@@ -157,9 +158,8 @@ def testMENDRTrainerLOOLoss():
     random_state=42
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -412,7 +412,7 @@ if __name__ == "__main__":
     print("Contextualizer test passed!")
 
     print("Testing trainer LOO contrastive loss")
-    #testMENDRTrainerLOOLoss()
+    testMENDRTrainerLOOLoss()
     print("Trainer LOO contrastive loss test passed! ")
 
     print("Testing trainer MAE Recon loss")
