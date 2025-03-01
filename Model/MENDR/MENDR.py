@@ -6,7 +6,6 @@ from MENDREncoder import MENDRWindowEncoder
 from MENDRContextualizer import MENDRContextualizer
 
 class MENDR(nn.Module):
-
     def __init__(self, device, epochs=6, num_channels=19):
         self.mendr_encoder = MENDRWindowEncoder(device=device)
         self.mendr_contextualizer = MENDRContextualizer(device=device, epochs=epochs, num_channels=num_channels)

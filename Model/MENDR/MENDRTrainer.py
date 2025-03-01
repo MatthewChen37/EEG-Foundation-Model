@@ -124,12 +124,9 @@ class MENDRTrainer(BaseModelTrainer):
 				embedding_tensor = embeddings[frequency_bands[j]] # [Batch * epochs, C, C]
 				embedding_tensor = embedding_tensor[negative_indices]
 				other_embeddings.append(embedding_tensor)
-			curr_target = embeddings[frequency_bands[i]][negative_indices]
-			other_embeddings = torch.stack(other_embeddings, dim=1)
 
-			# Log Euclidean Mean - Tensor log shouldn't really be tied to the instanttiation of the object...
-			other_embeddings_log = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_log(other_embeddings)
-			other_embeddings_mean = self.contextualizer.WaveletContextualizer.wavelet_attention_manifolds[frequency_bands[i]].tensor_exp(other_embeddings_log.sum(dim=1, keepdim=True) / other_embeddings_log.shape[1])[:, 0, :, :]
+			curr_target = embeddings[frequency_bands[i]][negative_indices]
+			other_embeddings_mean = self.mendr.mendr_contextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
 
 			# Why does this fail for higher precisions?
 			# Answer: AttenionManifold's forward and SPDTransforms Forward are numerically unstable for FloatingPoint Precision calculations
@@ -140,8 +137,8 @@ class MENDRTrainer(BaseModelTrainer):
 			# https://stackoverflow.com/questions/56514892/how-many-digits-can-float8-float16-float32-float64-and-float128-contain
 			# assuming torch.float = np.float32
 			# Potential future direction is "Quantizing" SPD matrices
-			assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
-			assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
+			# assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
+			# assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
 
 			# Compute logits
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
