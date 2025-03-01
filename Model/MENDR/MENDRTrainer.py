@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import sys
-import ptwt
 from ..baseModelTrainer import BaseModelTrainer
 from ..transforms import RandomTemporalCrop, RandomGaussianNoise, RandomFTSurrogate
 from .WaveletLoss import WaveletReconstructionLoss

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
 from ..layers import Permute, Flatten
@@ -21,13 +22,10 @@ class MENDRContextualizer(nn.Module):
 
 	def forward(self, x):
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_r2e_output, combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
-		return combined_r2e_output, combined_manifold_output, wavelet_manifold_output
+		combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
+		return combined_manifold_output, wavelet_manifold_output
 
-	def freeze_features(self, unfreeze=False):
-		for param in self.parameters():
-			param.requires_grad = unfreeze
-
+	
 class MENDRWaveletContextualizer(nn.Module):
 	def __init__(self, device, epochs=4, num_channels=19):
 		super(MENDRWaveletContextualizer, self).__init__()
@@ -99,6 +97,13 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
 
 		return wavelet_manifold_output, epoched_shape
+
+	def _batch_LogEuclideanMean(self, x, band):
+		# X is list of [Batch_Size * epochs, C, C]
+		x = torch.stack(x, dim=1)
+		x_log = self.wavelet_attention_manifolds[band].tensor_log(x)
+		x_mean = self.wavelet_attention_manifolds[band].tensor_exp(x_log.sum(dim=1, keepdim=True) / x.shape[1])[:, 0, :, :]
+		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
 	def __init__(self, device, num_channels=19):
