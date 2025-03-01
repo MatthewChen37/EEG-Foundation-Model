@@ -12,8 +12,6 @@ class MENDR(nn.Module):
         
         # Initialize temperature as a trainable parameter
         self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True), requires_grad=True)
-        self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
-        self.contrastive_loss_fn_combined = nn.MSELoss()
 
     def forward(self, data):
         relevant_bands = [data[band] for band in BANDS]

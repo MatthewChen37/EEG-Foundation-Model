@@ -21,6 +21,8 @@ class MENDRTrainer(BaseModelTrainer):
 	def __init__(self, MENDR, config, **kwargs):
 		self.negatives_loo = 20
 		self.svd = SVD.apply
+		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
+        self.contrastive_loss_fn_combined = nn.MSELoss()
 
 		super(MENDRTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
