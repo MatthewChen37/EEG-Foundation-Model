@@ -98,9 +98,10 @@ class WaveletDataset(Dataset):
 		return data
 
 
-class WaveletFinetuningDataset(Dataset):
+class WaveletTUABDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
-		super(WaveletFinetuningDataset, self).__init__(root, transform)
+		super(WaveletTUABDataset, self).__init__(root, transform)
+
 		self.frac = frac
 
 		# Prevents the FutureWarning: from loading without setting weights_only to True
@@ -132,17 +133,31 @@ class WaveletFinetuningDataset(Dataset):
 				folder_epochs[epoch_idx]['graph_name'] = attributes[0]
 			folder_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_folder, file_name))
 		for epoch_idx, epoch_wavelet_dict in folder_epochs.items():
-			epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, epoch_idx, epoch_wavelet_dict['delta'],
-							epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],
-							epoch_wavelet_dict['beta'], epoch_wavelet_dict['gamma'])
-			self.epochs.append(epoch_tuple)
+			epoch_wavelet_dict['gamma'] = epoch_wavelet_dict['gamma'][:, :1920]
+			split_length_delta = epoch_wavelet_dict['delta'].shape[1] // 6
+			split_length_theta = epoch_wavelet_dict['theta'].shape[1] // 6
+			split_length_beta = epoch_wavelet_dict['beta'].shape[1] // 6
+			split_length_alpha = epoch_wavelet_dict['alpha'].shape[1] // 6
+			split_length_gamma = epoch_wavelet_dict['gamma'].shape[1] // 6
+			for split_idx in range(6):
+				epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, (epoch_idx, split_idx),
+				epoch_wavelet_dict['delta'][:, split_length_delta*split_idx: split_length_delta*(split_idx + 1)],
+				epoch_wavelet_dict['theta'][:, split_length_theta*split_idx: split_length_theta*(split_idx + 1)], 
+				epoch_wavelet_dict['alpha'][:, split_length_alpha*split_idx: split_length_alpha*(split_idx+1)],
+				epoch_wavelet_dict['beta'][:, split_length_beta*split_idx: split_length_beta*(split_idx+1)],
+				epoch_wavelet_dict['gamma'][:, split_length_gamma*split_idx: split_length_gamma*(split_idx+1)])
+
+				self.epochs.append(epoch_tuple)
 
 	def len(self):
 		return self.length
 
 	def get(self, idx):
 		epoch_tuple = self.epochs[idx]
-		graph = self.graphs[epoch_tuple[0]]
+		graph = self.graphs[epoch_tuple[0]].clone()
+		split_idx = epoch_tuple[2][1]
+		split_length = graph.x.shape[1] // 6
+		graph.x = graph.x[:, split_length * split_idx: split_length * (split_idx + 1)]
 		data = {
 			"graph": graph, # Labels should be stored in the graph.y 
 			"wavelet_folder": epoch_tuple[1],

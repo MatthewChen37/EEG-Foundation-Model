@@ -112,3 +112,23 @@ def geometric_approximation(s):
 		p_app += p_hat
 	a1 = a1 * p_app
 	return a1
+
+# Correction of numerically imprecise SPD matrices in a batch
+# PyTorch port of: https://github.com/pyRiemann/pyRiemann/blob/f94d993a4fdf3c9e0865fe8e4d2a36895567dfeb/pyriemann/utils/base.py#L160
+# Based on https://www.mathworks.com/matlabcentral/fileexchange/42885-nearestspd
+
+def _nearest_sym_pos_def(S, reg=1e-6):
+    """Find the nearest SPD matrix.
+
+    Parameters
+    ----------
+    S : ndarray, shape (n, n)
+        Square matrix.
+    reg : float, default=1e-6
+        Regularization parameter.
+
+    Returns
+    -------
+    P : ndarray, shape (n, n)
+        Nearest SPD matrix.
+    """
