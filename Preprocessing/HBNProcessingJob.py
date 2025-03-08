@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import os, argparse
 from pathlib import Path
-from readEEG import HBN_ELECTRODE_MAP
+from Preprocessing.Deprecated.readEEG import HBN_ELECTRODE_MAP
 from mne_bids import BIDSPath, read_raw_bids
 from tqdm import tqdm
 from preprocessingPipeline import simplePipeline

@@ -31,8 +31,11 @@ def simplePipeline(raw):
 	epochs = epochs.load_data()
 	if len(epochs) <= 3:
 		raise ValueError("Not enough epochs")
-	#epochs.drop([0, len(epochs) - 1], verbose=False)
+	epochs.drop([0, len(epochs) - 1], verbose=False)
 	epochs.drop_bad(verbose=False)
 	epochs.resample(128, verbose=False)
 	epochs.apply_function(lambda x: x * 1e5, verbose=False)
 	return epochs
+
+def group_list(data, size):
+    return [data[i:i + size] for i in range(0, len(data), size)]
