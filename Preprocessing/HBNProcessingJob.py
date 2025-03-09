@@ -24,35 +24,39 @@ def main(args):
 	with ProcessPoolExecutor() as executor:
 		futures = [executor.submit(_process_dataset_release, dataset_release, args) for dataset_release in dataset_releases]
 		for future in futures:
-			future.result()
+			result = future.result()
+			failed_files.extend(result)
 
-	failed_files_df = pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"])
-	_write_csv(failed_files_df, os.path.join(args.output_dir, "failed_files.csv"))
+	if failed_files:
+		print(f"Failed to process {len(failed_files)} files")
+		failed_files_df = pd.DataFrame(failed_files, columns=["subject", "error", "file_path", "traceback"])
+		_write_csv(failed_files_df, os.path.join(args.output_dir, f"failed_files_v{args.version}.csv"))
 
 def _process_dataset_release(dataset_release, args):
 	bids_path = BIDSPath(root=os.path.join(args.input_directory, dataset_release),
 					    datatype="eeg", suffix="eeg", extension=".set")
-		
 	subjects = sorted(set([bp.subject for bp in bids_path.match()]))
+	failed_release_files = []
 
 	# Group subjects into groups of 10
 	subjects_grouped = group_list(subjects, 30)
 	with ThreadPoolExecutor() as executor:
-		futures = [executor.submit(_process_dataset_release_thread, subject_group, dataset_release, bids_path.copy(), args) for subject_group in subjects_grouped]
+		futures = [executor.submit(_process_dataset_release_thread, subject_group, dataset_release, bids_path.copy(), args, failed_release_files) for subject_group in subjects_grouped]
 		for future in futures:
 			future.result()
+	return failed_release_files
 
-def _process_dataset_release_thread(subject_group, dataset_release, bids_path, args):
+def _process_dataset_release_thread(subject_group, dataset_release, bids_path, args, failed_release_files):
 	indices = None
 	for subject in subject_group:
 		Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
-		Path(os.path.join(args.output_dir, subject, "epochs")).mkdir(parents=True, exist_ok=True)
+		Path(os.path.join(args.output_dir, subject, f"epochs_v{args.verison}")).mkdir(parents=True, exist_ok=True)
 		bids_path.update(subject=subject)
 		for bp in bids_path.match():
 			if bp.run:
-				file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}-{bp.run}.fif")
+				file_path = os.path.join(args.output_dir, subject, f"epochs_v{args.version}", f"{bp.task}-{bp.run}.fif")
 			else:
-				file_path = os.path.join(args.output_dir, subject, "epochs", f"{bp.task}.fif")
+				file_path = os.path.join(args.output_dir, subject, f"epochs_v{args.version}", f"{bp.task}.fif")
 			if not os.path.exists(file_path):
 				try:		
 					raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
@@ -60,10 +64,10 @@ def _process_dataset_release_thread(subject_group, dataset_release, bids_path, a
 					raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
 					if indices is None:
 						indices = raw.ch_names
-					epochs = simplePipeline(raw)
+					epochs = simplePipeline(raw, sample_rate=128, low_pass=75)
 					epochs.save(file_path, overwrite=False)
 				except Exception as e:
-					failed_files.append((subject, e, file_path, traceback.format_exc()))
+					failed_release_files.append((subject, e, file_path, traceback.format_exc()))
 					print(f"Failed to process subject: {subject} in dataset release: {dataset_release}")
 	gc.collect()
 
@@ -238,6 +242,10 @@ def parse_args():
 
 	parser.add_argument(
 		"--output_dir", type=str, help="Output directory", required=True
+	)
+
+	parser.add_argument(
+		"--version", type=str, help="Version of the preprocessing"
 	)
 
 	# Ignore warnings

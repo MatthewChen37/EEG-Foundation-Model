@@ -37,8 +37,9 @@ def main(args):
 			failed_files.extend(result)
 
 	if len(failed_files) > 0:
+		print(f"Failed to process {len(failed_files)} files")
 		failed_files_df = pd.DataFrame(failed_files, columns=columns)
-		failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files_preprocessingv3.csv"), index=False)
+		failed_files_df.to_csv(os.path.join(args.output_dir, f"failed_files_preprocessing_v{args.version}.csv"), index=False)
 
 def _process_subject_group(args, subject_group):
 	failed_subjects = []
@@ -52,14 +53,14 @@ def _process_subject_group(args, subject_group):
 
 def _process_subject(args, subject):
 	Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
-	Path(os.path.join(args.output_dir, subject, "epochs_v3")).mkdir(parents=True, exist_ok=True)
+	Path(os.path.join(args.output_dir, subject, f"epochs_v{args.version}")).mkdir(parents=True, exist_ok=True)
 
 	bids_path = BIDSPath(root=os.path.join(args.input_directory + f"/sub-{subject}"),
 					   datatype="eeg", suffix="eeg", extension=".edf")
 	
 	for bp in bids_path.match():
 		bp = _correct_path(bp)
-		file_path = os.path.join(args.output_dir, subject, "epochs_v2", f"{bp.session}-{bp.processing}-{bp.recording}_epo.fif")
+		file_path = os.path.join(args.output_dir, subject, f"epochs_v{args.version}", f"{bp.session}-{bp.processing}-{bp.recording}_epo.fif")
 		if not os.path.exists(file_path):
 			try:
 				raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False).copy()
@@ -67,8 +68,8 @@ def _process_subject(args, subject):
 				if 'A1' and 'A2' in ch_names:
 					raw = raw.drop_channels(['A1', 'A2'])
 				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
-				epochs = simplePipeline(raw, sample_rate=256, low_pass=120)
-				epochs.save(file_path, overwrite=True)
+				epochs = simplePipeline(raw, sample_rate=256, low_pass=128)
+				epochs.save(file_path, overwrite=False)
 				return None
 			except Exception as e:
 				print(f"Failed to process {bp}, error: {e}")
@@ -88,6 +89,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description='Preprocess TUH EEG data')
 	parser.add_argument('--input_directory', type=str, help='Path to the directory containing the TUH EEG data')
 	parser.add_argument('--output_dir', type=str, help='Path to the directory where the preprocessed data will be stored')
+	parser.add_argument('--version', type=str, help='Version of the preprocessing')
 
 	args = parser.parse_args()
 	return args
@@ -99,4 +101,3 @@ if __name__ == '__main__':
 
 	args = parse_args()
 	main(args)
-
