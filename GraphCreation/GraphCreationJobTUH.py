@@ -55,7 +55,7 @@ def _process_subject(args, subject):
 
             for epoch_file in os.listdir(base_path):
                 raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
-                raw_data = raw_epoch.get_data(copy=True)
+                raw_data = raw_epoch.get_data(copy=True, verbose=False)
 
                 # Wavelet decomposition
                 if args.version == "128Hz":
@@ -80,7 +80,6 @@ def _process_subject(args, subject):
                         'high_freq': dbt['ad'].data # 64 - 128 Hz
                     }
 
-
                 for band, data in relevant_bands.items():
                     epoch_data = torch.tensor(data)
                     if epoch_data.shape[0] > 60:
@@ -101,6 +100,7 @@ def _process_subject(args, subject):
                 torch.save(data, os.path.join(args.input_directory, subject, f"graphs_v{args.version}", f"{epoch_file[:-4]}_graph.pt"))
                 return None
         except Exception as e:
+            print(f"Error processing {subject} Error: {e}")
             return (subject, e, traceback.format_exc())
     else:
         return None

@@ -15,4 +15,4 @@ code: .
 command: |
   python GraphCreationJobTUH.py \
     --input_directory ${{outputs.data_dir}} \
-    --version 128Hz 
+    --version 256Hz 
