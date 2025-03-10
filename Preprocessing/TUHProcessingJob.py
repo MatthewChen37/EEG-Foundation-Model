@@ -68,8 +68,8 @@ def _process_subject(args, subject):
 				if 'A1' and 'A2' in ch_names:
 					raw = raw.drop_channels(['A1', 'A2'])
 				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
-				epochs = simplePipeline(raw, sample_rate=256, low_pass=128)
-				epochs.save(file_path, overwrite=False)
+				epochs = simplePipeline(raw, sample_rate=256, low_pass=120)
+				epochs.save(file_path, overwrite=True)
 				return None
 			except Exception as e:
 				print(f"Failed to process {bp}, error: {e}")
