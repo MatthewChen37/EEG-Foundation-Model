@@ -1,0 +1,22 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: tuhuploadtopacejob
+display_name: tuhguploadtopacejob
+description: Compress and upload TUH EEG data to Azure Blob Storage
+tags:
+  project: EEGFoundationModel
+version: 1
+inputs:
+  data_dir:
+    type: uri_folder
+outputs:
+  output_dir:
+    type: uri_folder  
+environment: azureml:PreprocessingEnvironment:29
+code: .
+command: |
+  python UploadToPACE.py \
+    --input_directory ${{inputs.data_dir}} \
+    --output_directory ${{outputs.output_dir}} \
+    --version 256Hz 
