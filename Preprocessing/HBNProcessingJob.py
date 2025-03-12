@@ -4,17 +4,36 @@ import numpy as np
 import pandas as pd
 import os, argparse
 from pathlib import Path
-from Preprocessing.Deprecated.readEEG import HBN_ELECTRODE_MAP
 from mne_bids import BIDSPath, read_raw_bids
 from tqdm import tqdm
-from preprocessingPipeline import simplePipeline
+from preprocessingPipeline import simplePipeline, group_list
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import warnings
 import traceback
 import pickle as pkl
-from util import group_list
 
 ELECTRODES = [f'E{i}' for i in range(1, 129)]
+HBN_ELECTRODE_MAP = {
+	'Fp1': 'E22',
+	'Fp2': 'E9',
+	'F7': 'E33',
+	'F3': 'E24',
+	'Fz': 'E11',
+	'F4': 'E124',
+	'F8': 'E122',
+	'T3': 'E45',
+	'C3': 'E36',
+	'Cz': 'Cz',
+	'C4': 'E104',
+	'T4': 'E108',
+	'T5': 'E58',
+	'P3': 'E52',
+	'Pz': 'E62',
+	'P4': 'E92',
+	'T6': 'E96',
+	'O1': 'E70',
+	'O2': 'E83',
+}
 TO_DROP = [electrode for electrode in ELECTRODES if electrode not in HBN_ELECTRODE_MAP.values()]
 HBN_ELECTRODE_MAP_REVERSED = dict((v,k) for k,v in HBN_ELECTRODE_MAP.items())
 
@@ -23,7 +42,7 @@ def main(args):
 	dataset_releases = os.listdir(args.input_directory)
 	with ProcessPoolExecutor() as executor:
 		futures = [executor.submit(_process_dataset_release, dataset_release, args) for dataset_release in dataset_releases]
-		for future in futures:
+		for future in tqdm(futures):
 			result = future.result()
 			failed_files.extend(result)
 
@@ -38,7 +57,7 @@ def _process_dataset_release(dataset_release, args):
 	subjects = sorted(set([bp.subject for bp in bids_path.match()]))
 	failed_release_files = []
 
-	# Group subjects into groups of 10
+	# Group subjects into groups of 30
 	subjects_grouped = group_list(subjects, 30)
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_dataset_release_thread, subject_group, dataset_release, bids_path.copy(), args, failed_release_files) for subject_group in subjects_grouped]
@@ -50,7 +69,7 @@ def _process_dataset_release_thread(subject_group, dataset_release, bids_path, a
 	indices = None
 	for subject in subject_group:
 		Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
-		Path(os.path.join(args.output_dir, subject, f"epochs_v{args.verison}")).mkdir(parents=True, exist_ok=True)
+		Path(os.path.join(args.output_dir, subject, f"epochs_v{args.version}")).mkdir(parents=True, exist_ok=True)
 		bids_path.update(subject=subject)
 		for bp in bids_path.match():
 			if bp.run:

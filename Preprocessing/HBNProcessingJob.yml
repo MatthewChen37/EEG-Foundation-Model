@@ -19,4 +19,4 @@ command: |
   python HBNProcessingJob.py \
     --input_dir ${{inputs.input_dir}} \
     --output_dir ${{outputs.output_dir}} \
-    --version 256Hz
+    --version 128Hz

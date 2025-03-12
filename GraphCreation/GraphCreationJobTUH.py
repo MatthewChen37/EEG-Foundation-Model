@@ -10,9 +10,9 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
 import pywt
-import sys
-sys.path.append("../Preprocessing")
-from preprocessingPipeline import group_list
+
+def group_list(data, size):
+    return [data[i:i + size] for i in range(0, len(data), size)]
 
 def main(args):
     subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
@@ -49,27 +49,44 @@ def _process_subject(args, subject):
     if os.path.exists(base_path):
         try:
             # Create the output directory
-            Path(os.path.join(args.input_directory, subject, f"wavelet_decompositions_v{args.version}")).mkdir(parents=True, exist_ok=True)
+            wavelet_path = os.path.join(args.input_directory, subject, f"wavelet_decompositions_v{args.version}")
+            Path(wavelet_path).mkdir(parents=True, exist_ok=True)
             Path(os.path.join(args.input_directory, subject, f"graphs_v{args.version}")).mkdir(parents=True, exist_ok=True)
 
-            
             for epoch_file in os.listdir(base_path):
                 raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
-                raw_data = raw_epoch.get_data(copy=True)
+                raw_data = raw_epoch.get_data(copy=True, verbose=False)
 
-                dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=5, axis=-1)
-                relevant_bands = {
-                    'delta': dbt['aaaaa'].data,
-                    'theta': dbt['aaaad'].data,
-                    'alpha': dbt['aaad'].data,
-                    'beta': dbt['aad'].data,
-                    'gamma': dbt['ad'].data,
-                    'high_freq': dbt['d'].data
-                }
+                # Wavelet decomposition
+                if args.version == "128Hz":
+                    dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=5, axis=-1)
+                    relevant_bands = {
+                        'delta': dbt['aaaaa'].data, # 0 - 4 Hz
+                        'theta': dbt['aaaad'].data, # 4 - 8 Hz
+                        'alpha': dbt['aaad'].data, # 8 - 16 Hz
+                        'beta': dbt['aad'].data, # 16 - 32 Hz
+                        'gamma': dbt['ad'].data, # 32 - 64 Hz
+                        'high_freq': dbt['d'].data # 64 - 128 Hz
+                    }
+
+                elif args.version == "256Hz":
+                    dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=6, axis=-1)
+                    relevant_bands = {
+                        'delta': dbt['aaaaaa'].data, # 0 - 4 Hz
+                        'theta': dbt['aaaaad'].data, # 4 - 8 Hz
+                        'alpha': dbt['aaaad'].data, # 8 - 16 Hz
+                        'beta': dbt['aaad'].data, # 16 - 32 Hz
+                        'gamma': dbt['aad'].data, # 32 - 64 Hz
+                        'high_freq': dbt['ad'].data # 64 - 128 Hz
+                    }
 
                 for band, data in relevant_bands.items():
-                    data = torch.tensor(data)
-                    torch.save(data, os.path.join(args.input_directory, subject, f"wavelet_decompositions_v{args.verison}", f"{epoch_file[:-4]}_{band}_band.pt"))
+                    epoch_data = torch.tensor(data)
+                    if epoch_data.shape[0] > 60:
+                        epoch_data = epoch_data[:60] # Limit to 60 minutes
+                    for i in range(epoch_data.shape[0]):
+                        curr_epoch = torch.tensor(epoch_data[i])
+                        torch.save(curr_epoch, os.path.join(wavelet_path, f"{epoch_file[:-4]}_{band}_band_epoch_{10 + i}.pt"))
 
                 # TODO: Add support for multiple features
                 dist_feat = createDistanceMatrix(raw_epoch.info)
@@ -79,10 +96,11 @@ def _process_subject(args, subject):
                 edge_indices, edge_weights = createEdges([dist_feat])
 
                 # Create graph
-                data = Data(x=raw_data[0], edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos)
+                data = Data(x=raw_data, edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos)
                 torch.save(data, os.path.join(args.input_directory, subject, f"graphs_v{args.version}", f"{epoch_file[:-4]}_graph.pt"))
                 return None
         except Exception as e:
+            print(f"Error processing {subject} Error: {e}")
             return (subject, e, traceback.format_exc())
     else:
         return None
