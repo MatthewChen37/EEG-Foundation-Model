@@ -11,7 +11,7 @@ class MixOptimizer(object):
 
     def __init__(self, optimizer):
         self.optimizer = optimizer
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=700, T_mult=2, eta_min=1e-6)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=700, T_mult=2, eta_min=1e-7)
         self.state = {}
 
     def zero_grad(self):
@@ -19,7 +19,7 @@ class MixOptimizer(object):
 
     def set_scheduler_t0(self, T_0):
         print(f'Set Cosine Annealing with Warm Restarts optimizer T_0 to: {T_0}')
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=T_0, T_mult=2, eta_min=1e-6)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=T_0, T_mult=2, eta_min=1e-7)
 
     def scheduler_step(self, iteration):
         self.scheduler.step(iteration)
