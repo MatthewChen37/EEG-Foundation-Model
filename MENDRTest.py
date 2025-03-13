@@ -105,18 +105,21 @@ def testEncoder():
         high_super_patch_seq_len=640,
         device=device)
 
-    output = encoder(example_graph, example_input)
-    assert output.keys() == BANDS
+    encodings, decodings = encoder(example_graph, example_input)
+    assert encodings.keys() == BANDS
+    assert decodings.keys() == BANDS
 
+    assert decodings['delta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['delta'].shape}" 
+    assert decodings['theta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['theta'].shape}" 
+    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decodin['alpha'].shape}" 
+    assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
+    assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
 
-    for band, (encoding, decoding) in output.items():
-        assert decoding.shape == example_input[band].shape, f"Actual Shape: {decoding.shape}"
-
-    assert output['delta'][0].shape == torch.Size([4, 11, 38, 18]), f"Actual Shape: {output['delta'][0].shape}" 
-    assert output['theta'][0].shape == torch.Size([4, 11, 38, 18]), f"Actual Shape: {output['theta'][0].shape}" 
-    assert output['alpha'][0].shape == torch.Size([4, 11, 38, 18]), f"Actual Shape: {output['alpha'][0].shape}" 
-    assert output['beta'][0].shape == torch.Size([4, 11, 38, 18]), f"Actual Shape: {output['beta'][0].shape}" 
-    assert output['gamma'][0].shape == torch.Size([4, 11, 76, 18]), f"Actual Shape: {output['gamma'][0].shape}"
+    assert encodings['delta'].shape == torch.Size([44, 38, 18]), f"Actual Shape: {encodings['delta'].shape}" 
+    assert encodings['theta'].shape == torch.Size([44, 38, 18]), f"Actual Shape: {encodings['theta'].shape}" 
+    assert encodings['alpha'].shape == torch.Size([44, 38, 18]), f"Actual Shape: {encodings['alpha'].shape}" 
+    assert encodings['beta'].shape == torch.Size([44, 38, 18]), f"Actual Shape: {encodings['beta'].shape}" 
+    assert encodings['gamma'].shape == torch.Size([44, 76, 18]), f"Actual Shape: {encodings['gamma'].shape}"
 
 def testContextualizerBatchLEM():
     # Eigenvalues are 1, 3
