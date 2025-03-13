@@ -4,7 +4,6 @@ from torch_geometric.nn.conv import GATConv
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
-from torch.geometric.util import to_dense_batch
 from math import floor
 
 
@@ -30,26 +29,26 @@ class WaveletEncoderDecoder(nn.Module):
         self.L_out_1 = self.seq_len + 2 * (0) - 1 * ((self.patch_size) - 1) - 1
         self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
         self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1))
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
 
         #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
         self.gnn_channel_encoder = GATConv(self.L_out_1, self.L_out_1, heads=1, concat=False).to(self.device)
-        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1))
+        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
 
-        self.layer_norm1 = nn.LayerNorm((19, L_out))
-        self.layer_norm2 = nn.LayerNorm((19, L_out))
+        self.layer_norm1 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
+        self.layer_norm2 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
 
         self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
-        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0)
-        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2))
+        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up1 = nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 4, kernel_size=1, stride=self.stride, groups=1)
+        self.up1 = nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 4, kernel_size=1, stride=self.stride, groups=1).to(self.device)
         self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=19, kernel_size=1, stride=1, groups=19)
-        self.up3 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len))
+        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=19, kernel_size=1, stride=1, groups=19).to(self.device)
+        self.up3 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len)).to(self.device)
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
@@ -80,27 +79,34 @@ class WaveletEncoderDecoder(nn.Module):
         # x: [Batch Size, Patches, Channels, self.L_out_1]
 
         for patch_idx in range(x.shape[1]):
-            gnn_channel_encoder_input = x[:, patch_idx, :, :]
-            # gnn_channel_encoder_input: [Batch Size, Channels, self.L_out_1]
+            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.L_out_1)
+            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
             channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
             # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
             channel_encoding = channel_encoding
-            x[:, patch_idx, :, :] = gnn_channel_encoder_input + channel_encoding.view(gnn_channel_encoder_input.shape[0], -1, channel_encoding.shape[-1])
+            x[:, patch_idx, :, :] += channel_encoding.reshape(B, C, self.L_out_1)
 
-        x = x.view(B*P, C, T)
+        x = x.view(B*P, C, self.L_out_1)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         x = self.layer_norm2(x)
         x = self.gnn_lin1(x)
         x = self.patch_embedder2(x)
         x = self.patch_embedder2_lin(x)
-        # x: [Batch Size * Patches, Channels, self.L_out_2]
+        # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
 
         decoding = self.up1(x)
         decoding = self.channel_dropout(decoding)
         decoding = self.up2(decoding)
         decoding = self.up3(decoding)
-        # decoding: [Batch Size * Patches, Channels, self.decode_L_out]
+        # decoding: [Batch Size * Patches, Channels, self.seq_len]
+
+        '''
+        # Reshape is differentiable, which screws up TorchJDs computations
+        # Reshape before returning
+        x = x.reshape(B, P, self.encoded_h, self.L_out_2)
+        decoding = decoding.reshape(B, P, C, self.seq_len)
+        '''
         return x, decoding
 
 '''
@@ -122,6 +128,12 @@ class MENDRPatchEncoder(nn.Module):
                 beta_encoded_h,
                 gamma_encoded_h,
                 high_encoded_h,
+                delta_super_patch_seq_len,
+                theta_super_patch_seq_len,
+                alpha_super_patch_seq_len,
+                beta_super_patch_seq_len,
+                gamma_super_patch_seq_len,
+                high_super_patch_seq_len,
                 device):
         super(MENDRPatchEncoder, self).__init__()
         self.device = device
@@ -130,45 +142,48 @@ class MENDRPatchEncoder(nn.Module):
                     num_channels = num_channels,
                     sub_patch_size=delta_sub_patch_size,
                     encoded_h=delta_encoded_h,
-                    super_patch_seq_len=41,
+                    super_patch_seq_len=delta_super_patch_seq_len,
                     device = device
                     ),
             'theta': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=theta_sub_patch_size,
                     encoded_h=theta_encoded_h,
-                    super_patch_seq_len=41,
+                    super_patch_seq_len=theta_super_patch_seq_len,
                     device = device
                     ),
             'alpha': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=alpha_sub_patch_size,
                     encoded_h=alpha_encoded_h,
-                    super_patch_seq_len=81,
+                    super_patch_seq_len=alpha_super_patch_seq_len,
                     device = device 
                     ),
             'beta': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=beta_sub_patch_size,
                     encoded_h=beta_encoded_h,
-                    super_patch_seq_len = 161,
+                    super_patch_seq_len = beta_super_patch_seq_len,
                     device = device
                     ),
             'gamma': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size = gamma_sub_patch_size,
                     encoded_h = gamma_encoded_h,
-                    super_patch_seq_len=320,
+                    super_patch_seq_len=gamma_super_patch_seq_len,
                     device = device
                     ),
         })
 
     def forward(self, graph, data):
         assert data.keys() == self.encoder_decoders.keys()
-        output = {}
+        encodings = {}
+        decodings = {}
         for band, band_decomposition in data.items():
-            output[band] = self.encoder_decoders[band](graph, band_decomposition)
-        return output
+            encoding, decoding = self.encoder_decoders[band](graph, band_decomposition)
+            encodings[band] = encoding
+            decodings[band] = decoding
+        return encodings, decodings
 
     def freeze_features(self, unfreeze=False, finetuning=False):
         for param in self.parameters():
@@ -177,6 +192,9 @@ class MENDRPatchEncoder(nn.Module):
             self.mask_replacement.requires_grad = False
 
 
+
+
+# DEPRECATED
 '''
 Wavelet Encoder for MENDR with a decoder (only used for training)
 Each frequency band has its own embedder, GAT, and decoder

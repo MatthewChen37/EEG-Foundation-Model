@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from Model.MENDR.MENDREncoder import MENDRPatchEncoder
-from Model.MENDR.MENDRContextualizer import MENDRContextualizer
+from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
+
+
+BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
 class MENDR_model(nn.Module):
     def __init__(self, device, epochs=6, num_channels=19, 
@@ -14,7 +17,8 @@ class MENDR_model(nn.Module):
                 beta_encoded_h=38,
                 gamma_encoded_h=76,
                 high_encoded_h=76,
-                super_patch_seconds=10):
+                super_patch_seconds=10,
+                temp=10.0):
         '''
         Sampling rate is in Hertz
         Hop Length analogous to BIOT's hop length parameter but is specified in seconds.
@@ -24,8 +28,9 @@ class MENDR_model(nn.Module):
         self.sampling_rate = sampling_rate
         self.hop_length = 0.5
         self.super_patch_seconds = 10
+        self.device = device
 
-        self.WAVELET_LENGTHS = {
+        self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {
                 'delta': 4, # 0-4Hz, 1/32 
                 'theta': 4, # 4-8Hz, 1/32
@@ -39,11 +44,13 @@ class MENDR_model(nn.Module):
             }
         }
 
+        self.WAVELET_LENGTHS = self.SUPPORTED_WAVELET_LENGTHS[self.sampling_rate]
+
         self.WAVELET_SUPER_PATCH_LENGTHS = dict()
         self.WAVELET_SUPER_PATCH_HOP_LENGTHS = dict()
         for band, second_length in self.WAVELET_LENGTHS.items():
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
-            self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = self.WAVELET_SUPER_PATCH_HOP_LENGTHS * self.hop_length
+            self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
             
         self.mendr_encoder = MENDRPatchEncoder(
             num_channels=19,
@@ -66,36 +73,35 @@ class MENDR_model(nn.Module):
             gamma_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
             high_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['high'],
             device=device)
-        self.mendr_contextualizer = MENDRContextualizer(device=device, epochs=epochs, num_channels=num_channels)
+        #self.mendr_contextualizer = MENDRContextualizer(device=device, epochs=epochs, num_channels=num_channels)
         
         # Initialize temperature as a trainable parameter
-        self.temp1 = torch.nn.Parameter(torch.tensor(config.temp, requires_grad=True), requires_grad=True)
+        self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
 
 
-    def forward(self, data):
-        relevant_bands = [data[band] for band in BANDS]
-        inputs = dict(zip(BANDS, relevant_bands))
-        patchified_inputs = self._super_patchify(inputs)
-        encoder_output = self.encoder(data['graph'], patchified_inputs)
+    def forward(self, graphs, data):
+        patchified_inputs = self._super_patchify(data)
+        encodings, decodings = self.mendr_encoder(graphs, patchified_inputs)
+        return patchified_inputs, encodings, decodings
+        '''
         combined_manifold_output, wavelet_manifold_output = self.contextualizer(encoder_output)
         return encoder_output, wavelet_manifold_output, combined_manifold_output
+        '''
 
     def _super_patchify(self, data):
         patchified_data = dict()
-        patch_batch_idx_to_batch_idx = []
         for band, second_length in self.WAVELET_LENGTHS.items():
             if band in data: # Sometimes we exclude HIGH
                 wavelet_data = data[band] # [Batches, Channels, Time Steps]
                 patched_wavelet_data = []
                 wavelet_super_patch_length = self.WAVELET_SUPER_PATCH_LENGTHS[band]
                 wavelet_super_patch_hop_length = self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band]
-                for i in range(0, len(wavelet_data.shape[-1], wavelet_super_patch_hop_length)):
-                    if i + wavelet_super_patch_hop_length <= wavelet_data.shape[-1]:
+                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_hop_length):
+                    if i + wavelet_super_patch_length <= wavelet_data.shape[-1]:
                         patched_wavelet_data.append(wavelet_data[:, :, i:i + wavelet_super_patch_length])
-
                 patched_wavelet_data = torch.stack(patched_wavelet_data, dim=1) # [Batch, Patches, C, T]
                 patchified_data[band] = patched_wavelet_data
-        return patchified_data, patch_batch_idx_to_batch_idx
+        return patchified_data
                 
     def freeze_features(self, unfreeze=False):
         for param in self.parameters():
