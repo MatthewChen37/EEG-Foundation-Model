@@ -78,7 +78,6 @@ class SVD(torch.autograd.Function):
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
 		return dA
 
-
 # From https://arxiv.org/abs/2104.03821
 class svdv2(torch.autograd.Function):
     @staticmethod
@@ -116,19 +115,89 @@ def geometric_approximation(s):
 # Correction of numerically imprecise SPD matrices in a batch
 # PyTorch port of: https://github.com/pyRiemann/pyRiemann/blob/f94d993a4fdf3c9e0865fe8e4d2a36895567dfeb/pyriemann/utils/base.py#L160
 # Based on https://www.mathworks.com/matlabcentral/fileexchange/42885-nearestspd
-
 def _nearest_sym_pos_def(S, reg=1e-6):
-    """Find the nearest SPD matrix.
+	"""Find the nearest SPD matrix.
+
+	Parameters
+	----------
+	S : torch.tensor, shape (n, n)
+		Square matrix.
+	reg : float, default=1e-6
+		Regularization parameter.
+
+	Returns
+	-------
+	P : torch.tensor, shape (n, n)
+		Nearest SPD matrix.
+	"""
+	svd = SVD.apply
+
+	def regularize(X, reg):
+		ei, ev = torch.linalg.eigh(X)
+		if torch.min(ei) / torch.max(ei) < reg:
+			X = ev @ torch.diag(ei + reg) @ ev.T
+		return X
+
+	A = (S + S.T) / 2
+	_, s, V = svd(A)
+	H = V.T @ (s[:, np.newaxis] * V) # np.newaxis works on torch tensors
+	B = (A + H) / 2
+	P = (B + B.T) / 2
+
+	if is_pos_def(P):
+		# Regularize if already PD
+		return regularize(P, reg)
+
+	spacing = torch.finfo(torch.linalg.norm(A).dtype).eps
+	I = torch.eye(S.shape[0])  # noqa
+	k = 1
+	while not is_pos_def(P):
+		mineig = torch.min(torch.real(torch.linalg.eigvals(P)))
+		P += I * (-mineig * k ** 2 + spacing)
+		k += 1
+
+	# Regularize
+	return regularize(P, reg)
+
+def is_pos_def(X, tol=0.0):
+	"""Check if all matrices are positive definite (PD).
+
+	Parameters
+	----------
+	X : torch.Tensor, shape (..., n, n)
+		The set of square matrices, at least 2D ndarray.
+	tol : float, default 0.0
+		Threshold below which eigen values are considered zero.
+	Returns
+	-------
+	ret : bool
+		True if all matrices are positive definite.
+	"""
+	square = is_square(X)
+	eig_vals = _get_eigenvals(X)
+	if not torch.isreal(eig_vals).all(): # Torch eigenvalues always returns a complex tensor 
+		return False
+	eig_vals = torch.real(eig_vals)
+	positive_eig = torch.all(torch.real(eig_vals) > tol)
+	return square and positive_eig
+
+def _get_eigenvals(X):
+	"""Private function to compute all eigen values."""
+	n = X.shape[-1]
+	X_reshaped = X.reshape((-1, n, n))
+	eigvals = torch.linalg.eigvals(X_reshaped)
+	return eigvals
+
+def is_square(X):
+    """Check if matrices are square.
 
     Parameters
     ----------
-    S : ndarray, shape (n, n)
-        Square matrix.
-    reg : float, default=1e-6
-        Regularization parameter.
-
+    X : torch.Tensor, shape (..., n, n)
+        The set of square matrices, at least 2D ndarray.
     Returns
     -------
-    P : ndarray, shape (n, n)
-        Nearest SPD matrix.
+    ret : bool
+        True if matrices are square.
     """
+    return X.ndim >= 2 and X.shape[-2] == X.shape[-1]

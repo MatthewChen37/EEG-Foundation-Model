@@ -20,7 +20,7 @@ class MENDRContextualizerTiny(nn.Module):
 		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, epochs=self.epochs, num_channels=self.channels)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, num_channels=self.channels)
 
+
+
 	def forward(self, x):
-		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
 		return combined_manifold_output, wavelet_manifold_output
