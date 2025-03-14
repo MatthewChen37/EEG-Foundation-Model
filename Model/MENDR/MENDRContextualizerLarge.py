@@ -3,20 +3,34 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from MENDRCommon import PositionalEncoding
+from MENDRCommon import PositionalEncoding, BatchTraceNormalization
 
 '''
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerLarge(nn.Module):
-	def __init__(self, device, epochs=4, num_channels=19):
+	def __init__(self, device,
+				delta_encoded_h=38,
+                theta_encoded_h=38,
+                alpha_encoded_h=38,
+                beta_encoded_h=38,
+                gamma_encoded_h=76,
+                high_encoded_h=76,
+				encoded_out = 38):
 		super(MENDRContextualizerLarge, self).__init__()
 		self.device = device
-		self.epochs = epochs
-		self.channels = num_channels
+		self.encoded_h = {
+			'delta': delta_encoded_h,
+			'theta': theta_encoded_h,
+			'alpha': alpha_encoded_h,
+			'beta': beta_encoded_h,
+			'gamma': gamma_encoded_h,
+			'high': high_encoded_h
+		}
+		self.encoded_out = encoded_out
 
-		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, epochs=self.epochs, num_channels=self.channels)
-		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, num_channels=self.channels)
+		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=18)
+		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
 	def forward(self, x):
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
@@ -25,51 +39,46 @@ class MENDRContextualizerLarge(nn.Module):
 
 	
 class MENDRWaveletContextualizer(nn.Module):
-	def __init__(self, device, epochs=4, num_channels=19):
+	def __init__(self, device, encoded_h, encoded_out, patch_len=18):
 		super(MENDRWaveletContextualizer, self).__init__()
 		self.device = device
-		self.epochs = epochs
+		self.encoded_h = encoded_h
+		self.encoded_out = encoded_out
+		self.patch_len = patch_len
 
-		self.position_encoder = nn.ParameterDict({
-			'delta': PositionalEncoding(num_channels, 124, 0, 0.1, self.epochs),
-			'theta': PositionalEncoding(num_channels, 124, 0, 0.1, self.epochs),
-			'alpha': PositionalEncoding(num_channels, 244, 0, 0.1, self.epochs),
-			'beta': PositionalEncoding(num_channels, 484, 0, 0.1, self.epochs),
-			'gamma': PositionalEncoding(num_channels, 484, 0, 0.1, self.epochs),
-		}).to(self.device)
+		# Positional Encoding
+		self.position_encoder = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.position_encoder[band] = PositionalEncoding(self.encoded_h[band], self.patch_len, dropout=0.1)
+		self.position_encoder = nn.ParameterDict(self.position_encoder).to(self.device)
 
-		self.wavelet_e2r = nn.ParameterDict({
-			'delta': E2R(epochs=self.epochs, device=self.device),
-			'theta': E2R(epochs=self.epochs, device=self.device),
-			'alpha': E2R(epochs=self.epochs, device=self.device),
-			'beta': E2R(epochs=self.epochs, device=self.device),
-			'gamma': E2R(epochs=self.epochs, device=self.device),
-		})
+		self.wavelet_e2r = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_e2r[band] = E2R(device=self.device)
+		self.wavelet_e2r = nn.ParameterDict(self.wavelet_e2r).to(self.device)
 
-		self.wavelet_attention_manifolds = nn.ParameterDict({
-			'delta': AttentionManifold(num_channels, num_channels, self.device),
-			'theta': AttentionManifold(num_channels, num_channels, self.device),
-			'alpha': AttentionManifold(num_channels, num_channels, self.device),
-			'beta': AttentionManifold(num_channels, num_channels, self.device),
-			'gamma': AttentionManifold(num_channels, num_channels, self.device),
-		})
+
+		self.wavelet_attention_manifolds = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_attention_manifolds[band] = AttentionManifold(self.encoded_h[band], self.encoded_h[band], self.device)
+		self.wavelet_attention_manifolds = nn.ParameterDict(self.wavelet_attention_manifolds).to(self.device)
 
 		self.trace_normalization = BatchTraceNormalization(self.device)
 
-		self.wavelet_spd_transforms = nn.ParameterDict({
-			'delta': SPDTransform(num_channels, num_channels, self.device),
-			'theta': SPDTransform(num_channels, num_channels, self.device),
-			'alpha': SPDTransform(num_channels, num_channels, self.device),
-			'beta': SPDTransform(num_channels, num_channels, self.device),
-			'gamma': SPDTransform(num_channels, num_channels, self.device)
-		})
-
+		# SPD Transformations
+		self.wavelet_spd_transforms = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_spd_transforms[band] = SPDTransform(self.encoded_h[band], self.encoded_out, self.device)
+		self.wavelet_spd_transforms = nn.ParameterDict(self.wavelet_spd_transforms).to(self.device)
 		self.ract = SPDRectified()
 
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
-		batch_size = x['delta'][0].shape[0]
 		x_input = dict()
 		for band in x.keys():
 			if self.position_encoder:
@@ -104,23 +113,24 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, num_channels=19):
+	def __init__(self, device, encoded_out):
 		super().__init__()
 		self.device = device
-		self.num_channels = num_channels
+		self.encoded_out = encoded_out
 
-		self.combined_attention = AttentionManifold(self.num_channels, self.num_channels, self.device)
-		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.num_channels, self.num_channels, self.device), BatchTraceNormalization(self.device))
-		self.combined_spd_transform2 = SPDTransform(self.num_channels, self.num_channels, self.device)
+		self.combined_attention = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
+		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.encoded_out, self.encoded_out, self.device), BatchTraceNormalization(self.device))
+		self.combined_spd_transform2 = SPDTransform(self.encoded_out, self.encoded_out, self.device)
 		self.ract = SPDRectified()
 
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
-		self.mask = torch.from_numpy(np.random.rand(num_channels, num_channels))
+		self.mask = torch.from_numpy(np.random.rand(encoded_out, encoded_out))
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask=None):
+		batch_size, num_epochs = x[list(x.keys())[0]].shape[0], x[list(x.keys())[0]].shape[1]
 		if mask:
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
@@ -134,7 +144,7 @@ class MENDRCombinedContextualizer(nn.Module):
 					x[band][batch_idx, masked_epoch_idx.item(), :, :] = spd_mask
 
 			for band in x.keys():
-				x[band] = x[band].view(epoched_shape[0] * epoched_shape[1], spd_batch.shape[1], spd_batch.shape[2])
+				x[band] = x[band].view(batch_size * num_epochs, spd_batch.shape[1], spd_batch.shape[2])
 
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
@@ -153,23 +163,3 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
 		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
 		return combined_manifold_output
-
-
-class BatchTraceNormalization(nn.Module):
-	def __init__(self, device, num_channels=19, epsilon=1e-5):
-		super().__init__()
-		self.num_channels = num_channels
-		self.epsilon = epsilon
-		self.device = device
-
-	def forward(self, x):
-		# Expects [B, C, C]
-		trace = x.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
-		trace = trace.view(-1, 1, 1)
-		trace = trace + self.epsilon*torch.ones(trace.shape).to(self.device)
-		x /= trace
-		identity = torch.eye(x.shape[-1], x.shape[-1], device=self.device).to(self.device).repeat(x.shape[0], 1, 1)
-		x = x + (self.epsilon * identity)
-		return x
-
-

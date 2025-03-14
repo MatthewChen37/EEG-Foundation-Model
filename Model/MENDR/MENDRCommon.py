@@ -43,6 +43,23 @@ class PositionalEncoding(nn.Module):
 		x = x.permute(0, 2, 3, 1)
 		return x
 	
+class BatchTraceNormalization(nn.Module):
+	def __init__(self, device, num_channels=19, epsilon=1e-5):
+		super().__init__()
+		self.num_channels = num_channels
+		self.epsilon = epsilon
+		self.device = device
+
+	def forward(self, x):
+		# Expects [B, C, C]
+		trace = x.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+		trace = trace.view(-1, 1, 1)
+		trace = trace + self.epsilon*torch.ones(trace.shape).to(self.device)
+		x /= trace
+		identity = torch.eye(x.shape[-1], x.shape[-1], device=self.device).to(self.device).repeat(x.shape[0], 1, 1)
+		x = x + (self.epsilon * identity)
+		return x
+
 
 if __name__ == "__main__":
 	# Test Positional Encoding

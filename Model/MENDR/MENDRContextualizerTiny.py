@@ -4,7 +4,6 @@ import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
 from MENDRCommon import PositionalEncoding
-import math
 
 '''
 BENDR-style Contextualizer using mATT module 
@@ -17,7 +16,7 @@ class MENDRContextualizerTiny(nn.Module):
 		self.encoded_ff = encoded_ff
 		self.patch_len = patch_len
 
-		self.position_encoder = PositionalEncoding(encoded_h, 190, self.patch_len, 0.1)
+		self.position_encoder = PositionalEncoding(self.encoded_h, self.patch_len, 0.1)
 		self.e2r = E2R(device=self.device)
 		self.Contextualizer = MENDRContextualizer(device=self.device, 
 											encoded_h=self.encoded_h, 

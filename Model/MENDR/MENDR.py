@@ -31,6 +31,7 @@ class MENDR_model(nn.Module):
         self.super_patch_seconds = super_patch_seconds
         self.device = device
 
+        # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {
                 'delta': 4, # 0-4Hz, 1/32 
@@ -78,7 +79,8 @@ class MENDR_model(nn.Module):
         if contextualizer_size == "LARGE":
             self.mendr_contextualizer = MENDRContextualizerLarge(device=device, num_channels=num_channels)
         elif contextualizer_size == "TINY":
-            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, epochs=epochs, num_channels=num_channels)
+            # TODO: Modify
+            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, epochs=epochs, encoded_h=190, patch_len=18, encoded_ff=380)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         
