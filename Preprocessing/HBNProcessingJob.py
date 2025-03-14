@@ -82,7 +82,7 @@ def _process_dataset_release_thread(subject_group, dataset_release, bids_path, a
 					raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
 					# For some reason some of the eeg is not marked as eeg
 					raw.set_channel_types({ch: 'eeg' for ch in raw.ch_names})
-					epochs = simplePipeline(raw, sample_rate=128, low_pass=75)
+					epochs = simplePipeline(raw, sample_rate=256, low_pass=120)
 					epochs.save(file_path, overwrite=False)
 				except Exception as e:
 					failed_release_files.append((subject, e, file_path, traceback.format_exc()))
