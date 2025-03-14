@@ -66,7 +66,6 @@ def _process_dataset_release(dataset_release, args):
 	return failed_release_files
 
 def _process_dataset_release_thread(subject_group, dataset_release, bids_path, args, failed_release_files):
-	indices = None
 	for subject in subject_group:
 		Path(os.path.join(args.output_dir, subject)).mkdir(parents=True, exist_ok=True)
 		Path(os.path.join(args.output_dir, subject, f"epochs_v{args.version}")).mkdir(parents=True, exist_ok=True)
@@ -81,13 +80,13 @@ def _process_dataset_release_thread(subject_group, dataset_release, bids_path, a
 					raw = read_raw_bids(bp, extra_params={'preload':True}, verbose=False)
 					raw.drop_channels(TO_DROP)
 					raw.rename_channels(HBN_ELECTRODE_MAP_REVERSED)
-					if indices is None:
-						indices = raw.ch_names
+					# For some reason some of the eeg is not marked as eeg
+					raw.set_channel_types({ch: 'eeg' for ch in raw.ch_names})
 					epochs = simplePipeline(raw, sample_rate=128, low_pass=75)
 					epochs.save(file_path, overwrite=False)
 				except Exception as e:
 					failed_release_files.append((subject, e, file_path, traceback.format_exc()))
-					print(f"Failed to process subject: {subject} in dataset release: {dataset_release}. Error: {e} Trace: {traceback.format_exc()}")
+					#print(f"Failed to process subject: {subject} in dataset release: {dataset_release}. Error: {e} Trace: {traceback.format_exc()}")
 	gc.collect()
 
 
