@@ -29,34 +29,18 @@ class signal2spd(nn.Module):
         return cov 
 
 class E2R(nn.Module):
-    def __init__(self, epochs, device):
+    def __init__(self, device):
         super().__init__()
-        self.epochs = epochs
         self.signal2spd = signal2spd()
         self.device = device
-    def patch_len(self, n, epochs):
-        list_len=[]
-        base = n//epochs
-        for i in range(epochs):
-            list_len.append(base)
-        for i in range(n - base*epochs):
-            list_len[i] += 1
-
-        if sum(list_len) == n:
-            return list_len
-        else:
-            return ValueError('check your epochs and axis should be split again')
-    
     def forward(self, x):
-        # x with shape[bs, ch, time]
-        list_patch = self.patch_len(x.shape[-1], int(self.epochs))
-        x_list = list(torch.split(x, list_patch, dim=-1))
+        # X is with shape [Batch, #patch, #encoded_h, #time_step]
+        x_list = list(x.unbind(1))
         for i, item in enumerate(x_list):
             x_list[i] = self.signal2spd(item)
         x = torch.stack(x_list).permute(1, 0, 2, 3)
         x = x.to(self.device)
         return x
-
 
 class AttentionManifold(nn.Module):
     def __init__(self, in_embed_size, out_embed_size, device):

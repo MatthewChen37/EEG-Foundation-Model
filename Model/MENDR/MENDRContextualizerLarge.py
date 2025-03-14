@@ -3,12 +3,10 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from ..layers import Permute, Flatten
-import math
+from MENDRCommon import PositionalEncoding
 
 '''
 BENDR-style Contextualizer using mATT module 
-augmented from https://github.com/CECNL/MAtt/blob/main/mAtt/mAtt.py
 '''
 class MENDRContextualizerLarge(nn.Module):
 	def __init__(self, device, epochs=4, num_channels=19):
@@ -175,37 +173,3 @@ class BatchTraceNormalization(nn.Module):
 		return x
 
 
-# Based on BENDR's Convolutional Position Encoding Scheme
-class PositionalEncoding(nn.Module):
-	def __init__(self, channels, seq_len, zero_padding=0, dropout=0.1, epochs=4):
-		super().__init__()
-		self.channels = channels
-		self.epochs = epochs
-		self.zero_padding = zero_padding
-
-		if seq_len % self.epochs != 0:
-			assert self.zero_padding != 0, f"Since seq len not divisible by epochs must add padding to make seq len divisible by epochs"
-			assert (seq_len + self.zero_padding) % self.epochs == 0, f"Zero padding does not make seq divisble by epochs"
-			self.len = seq_len + self.zero_padding
-		else:
-			self.len = seq_len
-
-		conv = nn.Conv1d(self.len, self.len, self.channels, padding=self.channels // 2, groups=self.epochs)
-		nn.init.normal_(conv.weight, mean=0, std=1)
-		nn.init.constant_(conv.bias, 0)
-		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
-		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout))
-
-	def forward(self, x):
-		"""
-		Arguments:
-			x: Tensor, shape ``[batch_size, channels, seq_len]``
-		"""
-		B, C, L = x.shape
-		if self.zero_padding:
-			x = torch.cat([x, torch.zeros(B, C, self.zero_padding).to(x.device)], dim=-1)
-		x = x.permute(0, 2, 1)
-		positional_encoding = self.conv(x)
-		x = x + positional_encoding
-		x = x.permute(0, 2, 1)
-		return x

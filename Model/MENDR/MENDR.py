@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from Model.MENDR.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
-
+from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
@@ -18,7 +18,8 @@ class MENDR_model(nn.Module):
                 gamma_encoded_h=76,
                 high_encoded_h=76,
                 super_patch_seconds=10,
-                temp=10.0):
+                temp=10.0,
+                contextualizer_size="LARGE"):
         '''
         Sampling rate is in Hertz
         Hop Length analogous to BIOT's hop length parameter but is specified in seconds.
@@ -26,8 +27,8 @@ class MENDR_model(nn.Module):
         '''
         super(MENDR_model, self).__init__()
         self.sampling_rate = sampling_rate
-        self.hop_length = 0.5
-        self.super_patch_seconds = 10
+        self.hop_length = hop_length
+        self.super_patch_seconds = super_patch_seconds
         self.device = device
 
         self.SUPPORTED_WAVELET_LENGTHS = {
@@ -73,7 +74,13 @@ class MENDR_model(nn.Module):
             gamma_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
             high_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['high'],
             device=device)
-        #self.mendr_contextualizer = MENDRContextualizer(device=device, epochs=epochs, num_channels=num_channels)
+        
+        if contextualizer_size == "LARGE":
+            self.mendr_contextualizer = MENDRContextualizerLarge(device=device, num_channels=num_channels)
+        elif contextualizer_size == "TINY":
+            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, epochs=epochs, num_channels=num_channels)
+        else:
+            raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         
         # Initialize temperature as a trainable parameter
         self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
@@ -82,11 +89,8 @@ class MENDR_model(nn.Module):
     def forward(self, graphs, data):
         patchified_inputs = self._super_patchify(data)
         encodings, decodings = self.mendr_encoder(graphs, patchified_inputs)
-        return patchified_inputs, encodings, decodings
-        '''
-        combined_manifold_output, wavelet_manifold_output = self.contextualizer(encoder_output)
-        return encoder_output, wavelet_manifold_output, combined_manifold_output
-        '''
+        combined_manifold_output, wavelet_manifold_output = self.mendr_contextualizer(encodings)
+        return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
     def _super_patchify(self, data):
         patchified_data = dict()
