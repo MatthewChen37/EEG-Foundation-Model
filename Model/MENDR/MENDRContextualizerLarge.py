@@ -10,9 +10,9 @@ import math
 BENDR-style Contextualizer using mATT module 
 augmented from https://github.com/CECNL/MAtt/blob/main/mAtt/mAtt.py
 '''
-class MENDRContextualizer(nn.Module):
+class MENDRContextualizerLarge(nn.Module):
 	def __init__(self, device, epochs=4, num_channels=19):
-		super(MENDRContextualizer, self).__init__()
+		super(MENDRContextualizerLarge, self).__init__()
 		self.device = device
 		self.epochs = epochs
 		self.channels = num_channels

@@ -4,6 +4,7 @@ from math import log
 
 from Model.MENDR.mAtt.spd import *
 from Model.MENDR.mAtt.mAtt import *
+import Model.MENDR.safeSVD as SVD
 # From https://github.com/adavoudi/spdnet/blob/master/tests/test_modules.py
 
 class CTX:
@@ -146,6 +147,19 @@ def check_CustomLogEuclideanMean():
 
     return lem_assert
 
+def check_NearestSymPosDef():
+
+    simple_non_spd = torch.from_numpy(np.array([[2, 1, 0.1],
+                                                [1, 3, 1],
+                                                [0, 1, 2]], np.float32)).float()
+
+    
+    output = SVD._nearest_sym_pos_def(simple_non_spd)
+
+    nearest_sym_pos_def_assert = torch.allclose(output, output.mT)
+
+    return nearest_sym_pos_def_assert
+
 
 units = {
     'Tangent space layer': check_TangentSpace,
@@ -154,8 +168,8 @@ units = {
     'Tensor Log': check_TensorLog,
     'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
+    'Nearest Sym Pos Def': check_NearestSymPosDef,
 }
-
 
 result = True
 

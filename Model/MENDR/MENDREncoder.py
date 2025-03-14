@@ -6,10 +6,198 @@ from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
 
+
+'''
+We break each Wavelet sequence into patches. There are two patch scales: Super-Patch and Sub-Patch. 
+By default super-patches represent 10 seconds and are what are first fed into the encoder.
+The encoder then breaks the data up into smaller Sub-Patches (approx 1 sec by default).
+Decoders are used for Super-Patch reconstruction to ensure embeddings have a real, physical
+intepretation. 
+'''
+class WaveletEncoderDecoder(nn.Module):
+    def __init__(self, num_channels, sub_patch_size, super_patch_seq_len, encoded_h, device):
+        super(WaveletEncoderDecoder, self).__init__()
+        self.num_channels = num_channels
+        self.channel_dropout = nn.Dropout1d(0.1)
+        self.patch_size = sub_patch_size
+        self.stride = self.patch_size // 2
+        self.device = device
+        self.encoded_h = encoded_h
+        self.seq_len = super_patch_seq_len
+
+        self.act = nn.GELU()
+        self.L_out_1 = self.seq_len + 2 * (0) - 1 * ((self.patch_size) - 1) - 1
+        self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
+        self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
+
+        #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
+        self.gnn_channel_encoder = GATConv(self.L_out_1, self.L_out_1, heads=1, concat=False).to(self.device)
+        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
+
+        self.layer_norm1 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
+        self.layer_norm2 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
+
+        self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
+        self.L_out_2 = floor(self.L_out_2 / 1) + 1
+        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
+
+        # Decoders
+        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (1 - 1) + 0 + 1
+        self.up1 = nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 4, kernel_size=1, stride=self.stride, groups=1).to(self.device)
+        self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
+        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=19, kernel_size=1, stride=1, groups=19).to(self.device)
+        self.up3 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len)).to(self.device)
+
+    def getEncoderParamCount(self):
+        patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
+        gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
+        return patch_embedder_count + gnn_encoder_count
+
+    def getDecoderParamCount(self):
+        up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
+        up2_count = sum(p.numel() for p in self.up2.parameters() if p.requires_grad)
+        up3_count = sum(p.numel() for p in self.up3.parameters() if p.requires_grad)
+        return up1_count + up2_count + up3_count
+
+    def forward(self, graph, x):
+        # x: [Batch Size, Patches, Channels, Time Steps]
+        B, P, C, T = x.shape
+        x = x.view(B*P, C, T)
+        # x: [Batch Size * Patches, Channels, Time Steps]
+        x = self.channel_dropout(x)
+        x = self.patch_embedder(x)
+        x = self.patch_embedder_lin(x)
+        x = self.layer_norm1(x)
+        # x: [Batch Size * Patches, Channels, self.L_out_1]
+
+        edge_index = graph.edge_index.to(self.device)
+        edge_dist = graph.edge_attr.to(self.device)
+
+        x = x.view(B, P, C, self.L_out_1)
+        # x: [Batch Size, Patches, Channels, self.L_out_1]
+
+        for patch_idx in range(x.shape[1]):
+            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.L_out_1)
+            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
+            channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
+            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
+            channel_encoding = channel_encoding
+            x[:, patch_idx, :, :] += channel_encoding.reshape(B, C, self.L_out_1)
+
+        x = x.view(B*P, C, self.L_out_1)
+        # x: [Batch Size * Patches, Channels, self.L_out_1]
+
+        x = self.layer_norm2(x)
+        x = self.gnn_lin1(x)
+        x = self.patch_embedder2(x)
+        x = self.patch_embedder2_lin(x)
+        # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
+
+        decoding = self.up1(x)
+        decoding = self.channel_dropout(decoding)
+        decoding = self.up2(decoding)
+        decoding = self.up3(decoding)
+        # decoding: [Batch Size * Patches, Channels, self.seq_len]
+
+        '''
+        # Reshape is differentiable, which screws up TorchJDs computations
+        # Reshape before returning
+        x = x.reshape(B, P, self.encoded_h, self.L_out_2)
+        decoding = decoding.reshape(B, P, C, self.seq_len)
+        '''
+        return x, decoding
+
+'''
+Initialize Encoders for each wavelet band and 
+put them into a single object.
+'''
+class MENDRPatchEncoder(nn.Module):
+    def __init__(self, 
+                num_channels, 
+                delta_sub_patch_size,
+                theta_sub_patch_size,
+                alpha_sub_patch_size,
+                beta_sub_patch_size,
+                gamma_sub_patch_size,
+                high_sub_patch_size,
+                delta_encoded_h,
+                theta_encoded_h,
+                alpha_encoded_h,
+                beta_encoded_h,
+                gamma_encoded_h,
+                high_encoded_h,
+                delta_super_patch_seq_len,
+                theta_super_patch_seq_len,
+                alpha_super_patch_seq_len,
+                beta_super_patch_seq_len,
+                gamma_super_patch_seq_len,
+                high_super_patch_seq_len,
+                device):
+        super(MENDRPatchEncoder, self).__init__()
+        self.device = device
+        self.encoder_decoders = nn.ParameterDict({
+            'delta': WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size=delta_sub_patch_size,
+                    encoded_h=delta_encoded_h,
+                    super_patch_seq_len=delta_super_patch_seq_len,
+                    device = device
+                    ),
+            'theta': WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size=theta_sub_patch_size,
+                    encoded_h=theta_encoded_h,
+                    super_patch_seq_len=theta_super_patch_seq_len,
+                    device = device
+                    ),
+            'alpha': WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size=alpha_sub_patch_size,
+                    encoded_h=alpha_encoded_h,
+                    super_patch_seq_len=alpha_super_patch_seq_len,
+                    device = device 
+                    ),
+            'beta': WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size=beta_sub_patch_size,
+                    encoded_h=beta_encoded_h,
+                    super_patch_seq_len = beta_super_patch_seq_len,
+                    device = device
+                    ),
+            'gamma': WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size = gamma_sub_patch_size,
+                    encoded_h = gamma_encoded_h,
+                    super_patch_seq_len=gamma_super_patch_seq_len,
+                    device = device
+                    ),
+        })
+
+    def forward(self, graph, data):
+        assert data.keys() == self.encoder_decoders.keys()
+        encodings = {}
+        decodings = {}
+        for band, band_decomposition in data.items():
+            encoding, decoding = self.encoder_decoders[band](graph, band_decomposition)
+            encodings[band] = encoding
+            decodings[band] = decoding
+        return encodings, decodings
+
+    def freeze_features(self, unfreeze=False, finetuning=False):
+        for param in self.parameters():
+            param.requires_grad = unfreeze
+        if finetuning:
+            self.mask_replacement.requires_grad = False
+
+
+
+
+# DEPRECATED
 '''
 Wavelet Encoder for MENDR with a decoder (only used for training)
 Each frequency band has its own embedder, GAT, and decoder
-'''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, seq_len, heads, encoder_conv_kernel_size, encoder_conv_kernel_stride, encoded_h, device):
         super(WaveletEncoderDecoder, self).__init__()
@@ -74,11 +262,8 @@ class WaveletEncoderDecoder(nn.Module):
         decoding = decoding_skip.permute([0, 2, 1]) + decoding
         return encoding, decoding
 
-
-'''
 Initialize Encoders for each wavelet band and 
 put them into a single object.
-'''
 class MENDRWindowEncoder(nn.Module):
     def __init__(self, device):
         super(MENDRWindowEncoder, self).__init__()
@@ -152,3 +337,4 @@ class MENDRWindowEncoder(nn.Module):
             nn.init.xavier_uniform_(module.weight.data)
             if module.bias is not None:
                 module.bias.data.zero_()
+'''
