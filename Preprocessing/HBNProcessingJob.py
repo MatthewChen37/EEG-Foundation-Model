@@ -56,9 +56,9 @@ def _process_dataset_release(dataset_release, args):
 					    datatype="eeg", suffix="eeg", extension=".set")
 	subjects = sorted(set([bp.subject for bp in bids_path.match()]))
 	failed_release_files = []
-
 	# Group subjects into groups of 30
 	subjects_grouped = group_list(subjects, 30)
+
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_dataset_release_thread, subject_group, dataset_release, bids_path.copy(), args, failed_release_files) for subject_group in subjects_grouped]
 		for future in futures:
@@ -87,7 +87,7 @@ def _process_dataset_release_thread(subject_group, dataset_release, bids_path, a
 					epochs.save(file_path, overwrite=False)
 				except Exception as e:
 					failed_release_files.append((subject, e, file_path, traceback.format_exc()))
-					print(f"Failed to process subject: {subject} in dataset release: {dataset_release}")
+					print(f"Failed to process subject: {subject} in dataset release: {dataset_release}. Error: {e} Trace: {traceback.format_exc()}")
 	gc.collect()
 
 

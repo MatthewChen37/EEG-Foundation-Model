@@ -3,86 +3,111 @@ import os, argparse
 import numpy as np
 import pandas as pd
 import warnings
+import traceback
 from pathlib import Path
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createGeodesicDistanceMatrix, createEdges, createPositionMatrix
+import pywt
+
+def group_list(data, size):
+    return [data[i:i + size] for i in range(0, len(data), size)]
 
 def main(args):
-	agg_mean = pd.read_csv(os.path.join(args.input_directory, 'agg_mean_combined.csv'), index_col=0).loc['Fp2':'Cz']
-	agg_std = pd.read_csv(os.path.join(args.input_directory, 'agg_std_combined.csv'), index_col=0).loc['Fp2':'Cz']
-	EOEC_mean = pd.read_csv(os.path.join(args.input_directory, 'EOEC_means.csv'), index_col=0).loc['Fp2':'Cz']
-	EOEC_std = pd.read_csv(os.path.join(args.input_directory, 'EOEC_std.csv'), index_col=0).loc['Fp2':'Cz']
-
-	assert agg_mean.shape[0] == agg_std.shape[0] == EOEC_mean.shape[0] == EOEC_std.shape[0] == 19
-
 	subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
 	print("Subjects: ", len(subjects))
 
-	'''
-	Although Pandas Dataframes are not thread-safe,
-	we are only reading from them in this function, so it is safe to use them in a ThreadPoolExecutor.
-	'''
-	with ThreadPoolExecutor() as executor:
-		futures = [executor.submit(_process_subject, args, subject, agg_mean, agg_std, EOEC_mean, EOEC_std) for subject in subjects]
+	subject_groups = group_list(subjects, 30)
+	errors = []
+	with ProcessPoolExecutor() as executor:
+		futures = [executor.submit(_process_subject_group, args, subject_group) for subject_group in subject_groups]
 		for future in tqdm(futures):
-			future.result()
+			result = future.result()
+			if result is not None:
+				errors.extend(result)
 
-def _process_subject(args, subject, agg_mean, agg_std, EOEC_mean, EOEC_std):
+	
+def _process_subject_group(args, subjects):
+	group_errors = []
+	with ThreadPoolExecutor() as executor:
+		futures = [executor.submit(_process_subject, args, subject) for subject in subjects]
+		for future in tqdm(futures):
+			result = future.result()
+			if result is not None:
+				group_errors.append(result)
+	return group_errors
+
+def _process_subject(args, subject):
 	# Create the output directory
-	Path(os.path.join(args.input_directory, subject, "normalized_epochs")).mkdir(parents=True, exist_ok=True)
-	Path(os.path.join(args.input_directory, subject, "graphs")).mkdir(parents=True, exist_ok=True)
+	base_path = os.path.join(args.input_directory, subject, f"epochs_v{args.version}")
 
-	base_path = os.path.join(args.input_directory, subject, "epochs")
+	if os.path.exists(base_path):
+		try:
+			wavelet_path = os.path.join(args.input_directory, subject, f"wavelet_decompositions_v{args.version}")
+			Path(wavelet_path).mkdir(parents=True, exist_ok=True)
+			Path(os.path.join(args.input_directory, subject, f"graphs_v{args.version}")).mkdir(parents=True, exist_ok=True)
 
-	for epoch_file in os.listdir(base_path):
-		raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
-		annotations = raw_epoch.get_annotations_per_epoch()
+			for epoch_file in os.listdir(base_path):
+				raw_epoch = mne.read_epochs(os.path.join(base_path, epoch_file), preload=True, verbose=False)
+				raw_data = raw_epoch.get_data(copy=True, verbose=False)
 
-		# Normalize EO/EC epochs differently than the rest
-		if epoch_file[:2] == "EO" or epoch_file[:2] == "EC":
-			raw_data = _normalize_data(raw_epoch.get_data(copy=True), subject, EOEC_mean, EOEC_std)
-		else:
-			raw_data = _normalize_data(raw_epoch.get_data(copy=True), subject, agg_mean, agg_std)
+				# Wavelet decomposition
+				if args.version == "128Hz":
+					dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=5, axis=-1)
+					relevant_bands = {
+                        'delta': dbt['aaaaa'].data, # 0 - 4 Hz
+                        'theta': dbt['aaaad'].data, # 4 - 8 Hz
+                        'alpha': dbt['aaad'].data, # 8 - 16 Hz
+                        'beta': dbt['aad'].data, # 16 - 32 Hz
+                        'gamma': dbt['ad'].data, # 32 - 64 Hz
+                        'high_freq': dbt['d'].data # 64 - 128 Hz
+                    }
 
-		# Replace all NaNs with 0
-		raw_data = np.nan_to_num(raw_epoch)
+				elif args.version == "256Hz":
+					dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=6, axis=-1)
+					relevant_bands = {
+                        'delta': dbt['aaaaaa'].data, # 0 - 4 Hz
+                        'theta': dbt['aaaaad'].data, # 4 - 8 Hz
+                        'alpha': dbt['aaaad'].data, # 8 - 16 Hz
+                        'beta': dbt['aaad'].data, # 16 - 32 Hz
+                        'gamma': dbt['aad'].data, # 32 - 64 Hz
+                        'high_freq': dbt['ad'].data # 64 - 128 Hz
+                    }
 
-		np.save(os.path.join(args.input_directory, subject, "normalized_epochs", epoch_file), raw_data)
+				for band, data in relevant_bands.items():
+					epoch_data = torch.tensor(data)
+					if epoch_data.shape[0] > 60:
+						epoch_data = epoch_data[:60] # Limit to 60 minutes
+					for i in range(epoch_data.shape[0]):
+						curr_epoch = torch.tensor(epoch_data[i])
+						torch.save(curr_epoch, os.path.join(wavelet_path, f"{epoch_file[:-4]}_{band}_band_epoch_{10 + i}.pt"))
 
-		# TODO: Add support for multiple features
-		dist_feat = createGeodesicDistanceMatrix(raw_epoch.info)
-		electrode_pos = createPositionMatrix(raw_epoch.info)
 
-		# Fully connected graph
-		edge_indices, edge_weights = createEdges([dist_feat])
+				# TODO: Add support for multiple features
+				dist_feat = createGeodesicDistanceMatrix(raw_epoch.info)
+				electrode_pos = createPositionMatrix(raw_epoch.info)
 
-		# Create graphs
-		graphs = []
+				# Fully connected graph
+				edge_indices, edge_weights = createEdges([dist_feat])
 
-		for i in range(raw_data.shape[0]):
-			data = Data(x=raw_data[i], edge_index=edge_indices, edge_attr=edge_weights, y=annotations[i], pos=electrode_pos)
-			graphs.append(data)
-
-		# Each epoch is saved as a separate graph
-		for idx, graph in enumerate(graphs):
-			torch.save(graph, os.path.join(args.input_directory, subject, "graphs", f"{epoch_file[:-4]}_epoch_{idx}.pt"))
-
-	return
-
-def _normalize_data(data, subject, mean, std):
-	return (data - mean[subject].to_numpy()[:, None]) / std[subject].to_numpy()[:, None]
-
+				# Create graph
+				data = Data(x=raw_data, edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos)
+				torch.save(data, os.path.join(args.input_directory, subject, f"graphs_v{args.version}", f"{epoch_file[:-4]}_graph.pt"))
+				return None
+		except Exception as e:
+			print(f"Failed to process subject: {subject}. Error: {e}")
+			return (subject, e, traceback.format_exc())
+	else:
+		return None
 
 def parse_args():
-	parser = argparse.ArgumentParser(description='Normalize based on mean/std and create graphs')
+	parser = argparse.ArgumentParser(description='Create Graphs and Wavelets')
 	parser.add_argument('--input_directory', type=str, required=True,
 					  help='Path to BIDS directory containing the preprocessed data. Processing will also write to this directory.')
-
+	parser.add_argument('--version', type=str, required=True, help='Version of the preprocessing')
 	args = parser.parse_args()
 	return args
-
 
 if __name__ == "__main__":
 	warnings.filterwarnings("ignore")
