@@ -9,7 +9,7 @@ from .MENDRCommon import PositionalEncoding
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, device, encoded_h=190, patch_len=18, encoded_ff=380):
+	def __init__(self, device, encoded_h=228, patch_len=18, encoded_ff=380):
 		super(MENDRContextualizerTiny, self).__init__()
 		self.device = device
 		self.encoded_h = encoded_h
