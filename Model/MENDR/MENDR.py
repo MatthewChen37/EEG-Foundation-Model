@@ -77,7 +77,7 @@ class MENDR_model(nn.Module):
             device=device)
         
         if contextualizer_size == "LARGE":
-            self.mendr_contextualizer = MENDRContextualizerLarge(device=device, num_channels=num_channels)
+            self.mendr_contextualizer = MENDRContextualizerLarge(device=device)
         elif contextualizer_size == "TINY":
             # TODO: Modify
             self.mendr_contextualizer = MENDRContextualizerTiny(device=device, epochs=epochs, encoded_h=190, patch_len=18, encoded_ff=380)

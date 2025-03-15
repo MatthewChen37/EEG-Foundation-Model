@@ -5,8 +5,9 @@ from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
 from Model.MENDR.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
-from Model.MENDR.MENDRTrainer import MENDRTrainer
+from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.transforms import RandomTemporalCrop
 from Datasets.datasetPretrain import WaveletPretrainDataset
@@ -111,7 +112,7 @@ def testEncoder():
 
     assert decodings['delta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['delta'].shape}" 
     assert decodings['theta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['theta'].shape}" 
-    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decodin['alpha'].shape}" 
+    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decoding['alpha'].shape}" 
     assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
     assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
 
@@ -121,7 +122,7 @@ def testEncoder():
     assert encodings['beta'].shape == torch.Size([44, 38, 18]), f"Actual Shape: {encodings['beta'].shape}" 
     assert encodings['gamma'].shape == torch.Size([44, 76, 18]), f"Actual Shape: {encodings['gamma'].shape}"
 
-def testContextualizerBatchLEM():
+def testLargeContextualizerBatchLEM():
     # Eigenvalues are 1, 3
     example_SPD = torch.tensor([
         [2, 1],
@@ -138,14 +139,14 @@ def testContextualizerBatchLEM():
         example_SPD_batch.clone().to(device)
     ]
 
-    contextualizer = MENDRContextualizer(device)
+    contextualizer = MENDRContextualizerLarge(device)
     batch_output = contextualizer.WaveletContextualizer._batch_LogEuclideanMean(example_input, 'delta')
 
     for batch_idx in range(batch_output.shape[0]):
         assert torch.allclose(batch_output[batch_idx], example_SPD), f"Batch LEM Not equal: \n Actual: {batch_output[batch_idx]} \n Expected: {example_SPD}"
 
 
-def testContextualizerWaveletLEM():
+def testLargeContextualizerWaveletLEM():
     # Eigenvalues are 1, 3
     example_SPD = torch.tensor([
         [2, 1],
@@ -168,7 +169,7 @@ def testContextualizerWaveletLEM():
             'gamma': example_SPD_batch.clone().to(device)
     }
 
-    contextualizer = MENDRContextualizer(device)
+    contextualizer = MENDRContextualizerLarge(device)
     combined_output = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
     for batch_idx in range(combined_output.shape[0]):
         assert torch.allclose(combined_output[batch_idx, 0], example_SPD), f"Combined LEM Not equal: \n Actual: {combined_output[batch_idx, 0]} \n Expected: {example_SPD}"
@@ -212,7 +213,7 @@ def testMENDRTrainerLOOLoss():
     )
 
     mendr = MENDR_model(device)
-    trainer = MENDRTrainer(mendr, args)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -250,7 +251,7 @@ def testMENDRTrainerMAEReconLoss():
 
     encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    trainer = MENDRPreTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -299,7 +300,7 @@ def testMENDRTrainerNoValidation():
 
     encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    trainer = MENDRPreTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -326,7 +327,7 @@ def testMENDRParameters():
 
     encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    trainer = MENDRPreTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -391,7 +392,7 @@ def testMENDRTrainerWithValidation():
 
     encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    trainer = MENDRPreTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -425,7 +426,7 @@ def testMENDRLoadFromCheckpoint():
 
     encoder = MENDRWindowEncoder(device=device)
     contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRTrainer(encoder, contextualizer, args)
+    trainer = MENDRPreTrainer(encoder, contextualizer, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
@@ -456,12 +457,12 @@ if __name__ == "__main__":
     testEncoder()
     print("Encoder test passed!")
 
-    print("Testing Contextualizer Batch LEM...")
-    #testContextualizerBatchLEM()
+    print("Testing Large Contextualizer Batch LEM...")
+    testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
-    print("Testing Contextualizer Wavelet LEM...")
-    #testContextualizerWaveletLEM()
+    print("Testing Large Contextualizer Wavelet LEM...")
+    testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Contextualizer...")
