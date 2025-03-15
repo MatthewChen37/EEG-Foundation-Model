@@ -18,14 +18,12 @@ INDICES = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4',
 
 failed_files = []
 
-
 def main(args):
 	classes = os.listdir(args.input_directory)
 	assert len(classes) == 2, "Only two classes should be found, normal and abnormal"
 	
 	# Define the columns for the empty DataFrame
 	columns = ['f_path', 'error', 'traceback'] 
-
 	for c in classes:
 		subclass_folder = os.path.join(args.input_directory, c)
 		session_folders = os.listdir(subclass_folder)
@@ -37,13 +35,14 @@ def main(args):
 				futures = [executor.submit(_process_file, args, c, session_folder, files_group) for files_group in files_grouped]
 				for future in tqdm(futures):
 					future.result()
+
 	failed_files_df = pd.DataFrame(failed_files, columns=columns)
-	failed_files_df.to_csv(os.path.join(args.output_directory, "failed_files.csv"), index=False)
+	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"), index=False)
 
 def _process_file(args, c, session_folder, files):
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_file_thread, args, c, session_folder, file) for file in files]
-		for future in tqdm(futures):
+		for future in futures:
 			result = future.result()
 			if result is not None:
 				failed_files.append(result)
@@ -53,7 +52,7 @@ def _process_file_thread(args, c, session_folder, file_name):
 	file_output_path = os.path.join(args.output_dir, c, f"{file_name}_epo.fif")
 	if not os.path.exists(file_output_path):
 		try:
-			raw = mne.io.read_raw_edf(os.path.join(args.input_directory, c, session_folder, file_name), preload=True).copy()
+			raw = mne.io.read_raw_edf(os.path.join(args.input_directory, c, session_folder, file_name), preload=True, verbose=False).copy()
 			_rename_channels(raw)
 			to_drop = [ch for ch in raw.ch_names if ch not in CHANNELS_TO_KEEP]
 			raw.drop_channels(to_drop)
@@ -64,8 +63,7 @@ def _process_file_thread(args, c, session_folder, file_name):
 			if 'A1' and 'A2' in ch_names:
 				raw = raw.drop_channels(['A1', 'A2'])
 			assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
-
-			epochs = simplePipeline(raw)
+			epochs = simplePipeline(raw, sample_rate=256, low_pass=120, exclude_epochs=[], exclude_short_epochs=False)
 			epochs.save(file_output_path, overwrite=False)
 			return None
 		except Exception as e:
@@ -86,4 +84,3 @@ if __name__ == '__main__':
 	args = parse_args()
 	Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 	main(args)
-

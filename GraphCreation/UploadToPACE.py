@@ -10,7 +10,6 @@ from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from torch_geometric.data import Data
 
-
 def group_list(data, size):
     return [data[i:i + size] for i in range(0, len(data), size)]
 
@@ -25,6 +24,7 @@ def main(args):
 			future.result()
 
 def _process_subject_group(args, subjects):
+
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_subject, args, subject) for subject in subjects]
 		for future in futures:
