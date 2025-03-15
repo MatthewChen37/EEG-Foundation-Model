@@ -28,10 +28,10 @@ def main(args):
 		files_grouped = group_list(files, 30)
 		print(f"Processing {len(files_grouped)} groups for class {c}")
 
-		with ProcessPoolExecutor() as executor:
+		with ProcessPoolExecutor(max_workers=4) as executor:
 			futures = [executor.submit(_process_file, args, c, files_group) for files_group in files_grouped]
 			for future in tqdm(futures):
-				future.result()
+				result = future.result()
 
 	failed_files_df = pd.DataFrame(failed_files, columns=columns)
 	failed_files_df.to_csv(os.path.join(args.output_directory, "failed_files.csv"), index=False)
