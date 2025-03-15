@@ -112,7 +112,7 @@ def testEncoder():
 
     assert decodings['delta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['delta'].shape}" 
     assert decodings['theta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['theta'].shape}" 
-    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decoding['alpha'].shape}" 
+    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decodings['alpha'].shape}" 
     assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
     assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
 
@@ -174,6 +174,19 @@ def testLargeContextualizerWaveletLEM():
     for batch_idx in range(combined_output.shape[0]):
         assert torch.allclose(combined_output[batch_idx, 0], example_SPD), f"Combined LEM Not equal: \n Actual: {combined_output[batch_idx, 0]} \n Expected: {example_SPD}"
 
+
+def testContextualizerTiny():
+    example_input = {
+            'delta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'theta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'alpha': torch.randn(4, 11, 38, 18).to(device).float(),
+            'beta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'gamma': torch.randn(4, 11, 76, 18).to(device).float()
+    }
+
+    contextualizer = MENDRContextualizerTiny(device)
+    print("Total parameters:", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
+    #combined_manifold_output, cov_matrices = contextualizer(example_input)
 
 def testContextualizer():
     example_input = {
@@ -464,6 +477,11 @@ if __name__ == "__main__":
     print("Testing Large Contextualizer Wavelet LEM...")
     testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
+
+    print("Testing Tiny Contextualizer...")
+    testContextualizerTiny()
+    print("Tiny Contextualizer test passed!")
+
 
     print("Testing Contextualizer...")
     #testContextualizer()

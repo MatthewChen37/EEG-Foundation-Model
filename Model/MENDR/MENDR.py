@@ -53,6 +53,16 @@ class MENDR_model(nn.Module):
         for band, second_length in self.WAVELET_LENGTHS.items():
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
             self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
+
+
+        self.encoded_h = {
+            'delta': delta_encoded_h,
+            'theta': theta_encoded_h,
+            'alpha': alpha_encoded_h,
+            'beta': beta_encoded_h,
+            'gamma': gamma_encoded_h,
+            'high': high_encoded_h
+        }
             
         self.mendr_encoder = MENDRPatchEncoder(
             num_channels=19,
@@ -62,12 +72,12 @@ class MENDR_model(nn.Module):
             beta_sub_patch_size=self.WAVELET_LENGTHS['beta'],
             gamma_sub_patch_size=self.WAVELET_LENGTHS['gamma'],
             high_sub_patch_size=self.WAVELET_LENGTHS['high'],
-            delta_encoded_h=delta_encoded_h,
-            theta_encoded_h=theta_encoded_h,
-            alpha_encoded_h=alpha_encoded_h,
-            beta_encoded_h=beta_encoded_h,
-            gamma_encoded_h=gamma_encoded_h,
-            high_encoded_h=high_encoded_h,
+            delta_encoded_h=self.encoded_h['delta'],
+            theta_encoded_h=self.encoded_h['theta'],
+            alpha_encoded_h=self.encoded_h['alpha'],
+            beta_encoded_h=self.encoded_h['beta'],
+            gamma_encoded_h=self.encoded_h['gamma'],
+            high_encoded_h=self.encoded_h['high'],
             delta_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['delta'],
             theta_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['theta'],
             alpha_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['alpha'],
@@ -89,8 +99,14 @@ class MENDR_model(nn.Module):
 
 
     def forward(self, graphs, data):
+        batch_size = data['delta'].shape[0]
         patchified_inputs = self._super_patchify(data)
         encodings, decodings = self.mendr_encoder(graphs, patchified_inputs)
+
+        # Reshape encodings before passing into contextualizer
+        for band in BANDS:
+            if band in encodings:
+                encodings[band] = encodings[band].reshape(batch_size, -1, self.encoded_h[band], self.WAVELET_SUPER_PATCH_LENGTHS[band])
         combined_manifold_output, wavelet_manifold_output = self.mendr_contextualizer(encodings)
         return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
