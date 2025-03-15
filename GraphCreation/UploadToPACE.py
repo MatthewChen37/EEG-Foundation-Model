@@ -17,9 +17,8 @@ def group_list(data, size):
 def main(args):
 	subjects = [f.path.split("/")[-1] for f in os.scandir(args.input_directory) if f.is_dir()]
 	print("Subjects: ", len(subjects))
-
-	subject_groups = group_list(subjects, 30)[300:]
-
+	subject_groups = group_list(subjects, 30)
+	print("Subject Groups: ", len(subject_groups))
 	with ProcessPoolExecutor() as executor:
 		futures = [executor.submit(_process_subject_group, args, subject_group) for subject_group in subject_groups]
 		for future in tqdm(futures):

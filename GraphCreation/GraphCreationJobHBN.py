@@ -27,12 +27,16 @@ def main(args):
 			if result is not None:
 				errors.extend(result)
 
-	
+	if len(errors) > 0:
+		print(f"Failed to process {len(errors)} subjects")
+		errors_df = pd.DataFrame(errors, columns=["subject", "error", "traceback"])
+		errors_df.to_csv(os.path.join(args.input_directory, f"graph_creation_errors_v{args.version}.csv"), index=False)
+
 def _process_subject_group(args, subjects):
 	group_errors = []
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(_process_subject, args, subject) for subject in subjects]
-		for future in tqdm(futures):
+		for future in futures:
 			result = future.result()
 			if result is not None:
 				group_errors.append(result)
@@ -82,7 +86,6 @@ def _process_subject(args, subject):
 					for i in range(epoch_data.shape[0]):
 						curr_epoch = torch.tensor(epoch_data[i])
 						torch.save(curr_epoch, os.path.join(wavelet_path, f"{epoch_file[:-4]}_{band}_band_epoch_{10 + i}.pt"))
-
 
 				# TODO: Add support for multiple features
 				dist_feat = createGeodesicDistanceMatrix(raw_epoch.info)
