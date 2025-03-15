@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
 
-from Model.MENDR.MENDRTrainer import MENDRTrainer
+from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 
 from dataset import WaveletDataset
@@ -61,7 +61,7 @@ def main(args):
 
 	print("Starting training.")
 	### Training ###
-	trainer = MENDRTrainer(encoder, contextualizer, args)
+	trainer = MENDRPreTrainer(encoder, contextualizer, args)
 
 	for band, encoder in encoder.encoder_decoders.items():
 		print(f"{band} Encoder Number of Params: {encoder.getEncoderParamCount()}")

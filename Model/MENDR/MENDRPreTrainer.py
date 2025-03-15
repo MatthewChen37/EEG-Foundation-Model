@@ -14,7 +14,7 @@ from scipy.linalg import orth
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
 REL_PRECISION = 1 # Relative tolerance precision
-class MENDRTrainer(BaseModelTrainer):
+class MENDRPreTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
@@ -24,7 +24,7 @@ class MENDRTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 
-		super(MENDRTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 

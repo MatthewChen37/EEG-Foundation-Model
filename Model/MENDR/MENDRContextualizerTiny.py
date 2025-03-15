@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from MENDRCommon import PositionalEncoding
+from .MENDRCommon import PositionalEncoding
 
 '''
 BENDR-style Contextualizer using mATT module 
