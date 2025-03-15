@@ -188,26 +188,23 @@ def testContextualizerTiny():
     print("Total parameters:", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
     #combined_manifold_output, cov_matrices = contextualizer(example_input)
 
-def testContextualizer():
+def testContextualizerLarge():
     example_input = {
-            'delta': (torch.randn(8, 19, 124).to(device), None),
-            'theta': (torch.randn(8, 19, 124).to(device), None),
-            'alpha': (torch.randn(8, 19, 244).to(device), None),
-            'beta': (torch.randn(8, 19, 484).to(device), None),
-            'gamma': (torch.randn(8, 19, 484).to(device), None)
-        }
+            'delta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'theta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'alpha': torch.randn(4, 11, 38, 18).to(device).float(),
+            'beta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'gamma': torch.randn(4, 11, 76, 18).to(device).float()
+    }
 
-    contextualizer = MENDRContextualizer(device)
+    contextualizer = MENDRContextualizerLarge(device)
     combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
-
     for band, v in example_input.items():
         output = wavelet_manifold_output[band]
         assert output.shape == torch.Size([32, 19, 19]), f'{band} Wavelet Manifold Shape: {wavelet_manifold_output[band].shape}'
 
     assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
-
-
     
 def testMENDRTrainerLOOLoss():
     args = SimpleNamespace(
@@ -482,10 +479,9 @@ if __name__ == "__main__":
     testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
-
-    print("Testing Contextualizer...")
-    #testContextualizer()
-    print("Contextualizer test passed!")
+    print("Testing Large Contextualizer...")
+    testContextualizerLarge()
+    print("Large Contextualizer test passed!")
 
     print("Testing trainer LOO contrastive loss")
     #testMENDRTrainerLOOLoss()
