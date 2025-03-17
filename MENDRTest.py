@@ -184,9 +184,17 @@ def testContextualizerTiny():
             'gamma': torch.randn(4, 11, 76, 18).to(device).float()
     }
 
-    contextualizer = MENDRContextualizerTiny(device)
-    print("Total parameters:", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-    #combined_manifold_output, cov_matrices = contextualizer(example_input)
+    with torch.no_grad():
+        contextualizer = MENDRContextualizerTiny(device)
+        combined_manifold_output, cov_matrices = contextualizer(example_input)
+        print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
+        assert combined_manifold_output.shape == torch.Size([4, 11, 228, 228]), f"Incorrect output shape: {combined_manifold_output.shape}"
+
+        assert cov_matrices['delta'].shape == torch.Size([4, 11, 38, 38])
+        assert cov_matrices['theta'].shape == torch.Size([4, 11, 38, 38])
+        assert cov_matrices['alpha'].shape == torch.Size([4, 11, 38, 38])
+        assert cov_matrices['beta'].shape == torch.Size([4, 11, 38, 38])
+        assert cov_matrices['gamma'].shape == torch.Size([4, 11, 76, 76])
 
 def testContextualizerLarge():
     example_input = {
@@ -197,14 +205,25 @@ def testContextualizerLarge():
             'gamma': torch.randn(4, 11, 76, 18).to(device).float()
     }
 
-    contextualizer = MENDRContextualizerLarge(device)
-    combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
-    for band, v in example_input.items():
-        output = wavelet_manifold_output[band]
-        assert output.shape == torch.Size([32, 19, 19]), f'{band} Wavelet Manifold Shape: {wavelet_manifold_output[band].shape}'
+    with torch.no_grad():
+        contextualizer = MENDRContextualizerLarge(device)
+        combined_manifold_output, wavelet_manifold_output = contextualizer(example_input)
+        print("Total number of Large parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
 
-    assert combined_manifold_output.shape == torch.Size([32, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
-    assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+        wavelet_manifold_output_delta = wavelet_manifold_output['delta']
+        wavelet_manifold_output_theta = wavelet_manifold_output['theta']
+        wavelet_manifold_output_alpha = wavelet_manifold_output['alpha']
+        wavelet_manifold_output_beta = wavelet_manifold_output['beta']
+        wavelet_manifold_output_gamma = wavelet_manifold_output['gamma']
+
+        assert wavelet_manifold_output_delta.shape == torch.Size([4, 11, 38, 38]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
+        assert wavelet_manifold_output_theta.shape == torch.Size([4, 11, 38, 38]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
+        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 11, 38, 38]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
+        assert wavelet_manifold_output_beta.shape == torch.Size([4, 11, 38, 38]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
+        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 11, 38, 38]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
+
+        assert combined_manifold_output.shape == torch.Size([4, 11, 38, 38]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
+        assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     
 def testMENDRTrainerLOOLoss():
     args = SimpleNamespace(

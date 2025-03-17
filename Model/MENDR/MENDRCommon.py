@@ -5,24 +5,26 @@ import math
 # Based on BENDR's Convolutional Position Encoding Scheme
 # Positional as in "Temporal"
 class PositionalEncoding(nn.Module):
-	def __init__(self, encoded_h, patch_len, dropout=0.1):
+	def __init__(self, device, encoded_h, patch_len, dropout=0.1):
 		super().__init__()
 		self.encoded_h = encoded_h
 		self.len = patch_len
+		self.device = device
 
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
 		conv = nn.Conv2d(self.len, self.len, kernel_size=(3, self.encoded_h), padding=(1, self.encoded_h // 2))
 		nn.init.normal_(conv.weight, mean=0, std=1)
 		nn.init.constant_(conv.bias, 0)
 		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
-		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout))
+		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout)).to(self.device)
 		self.W_out = self.encoded_h + 2 * (self.encoded_h // 2) - 1 * (self.encoded_h - 1) - 1
 		self.W_out = math.floor((self.W_out / 1) + 1)
+
 
 		self.conv_adj = None
 		if encoded_h != self.W_out: # Non centerable convolution, similar to how BENDR handles it
 			print(f"Modifying positional encoder to be centerable by adding an additional convolution layer {self.W_out} -> {self.encoded_h}")
-			self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=1)
+			self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=1).to(self.device)
 
 	def forward(self, x):
 		"""

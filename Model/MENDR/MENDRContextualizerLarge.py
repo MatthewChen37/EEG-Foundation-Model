@@ -35,6 +35,13 @@ class MENDRContextualizerLarge(nn.Module):
 	def forward(self, x):
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
 		combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
+
+		for band in wavelet_manifold_output.keys():
+			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(epoched_shape[0], epoched_shape[1],
+			wavelet_manifold_output[band].shape[1], wavelet_manifold_output[band].shape[2])
+		combined_manifold_output = combined_manifold_output.reshape(epoched_shape[0], epoched_shape[1],
+		combined_manifold_output.shape[1], combined_manifold_output.shape[2])
+
 		return combined_manifold_output, wavelet_manifold_output
 
 	
@@ -50,7 +57,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.position_encoder = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
-				self.position_encoder[band] = PositionalEncoding(self.encoded_h[band], self.patch_len, dropout=0.1)
+				self.position_encoder[band] = PositionalEncoding(self.device, self.encoded_h[band], self.patch_len, dropout=0.1)
 		self.position_encoder = nn.ParameterDict(self.position_encoder).to(self.device)
 
 		self.wavelet_e2r = dict()
@@ -58,7 +65,6 @@ class MENDRWaveletContextualizer(nn.Module):
 			if self.encoded_h[band]:
 				self.wavelet_e2r[band] = E2R(device=self.device)
 		self.wavelet_e2r = nn.ParameterDict(self.wavelet_e2r).to(self.device)
-
 
 		self.wavelet_attention_manifolds = dict()
 		for band in self.encoded_h:
@@ -80,11 +86,9 @@ class MENDRWaveletContextualizer(nn.Module):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
 		x_input = dict()
-		for band in x.keys():
-			if self.position_encoder:
-				x_input[band] = self.position_encoder[band](x[band][0])
-			else:
-				x_input[band] = x[band][0]
+		if self.position_encoder:
+			for band in x.keys():
+					x_input[band] = self.position_encoder[band](x[band])
 
 		epoched_shape = None
 		wavelet_manifold_output = dict()
@@ -156,6 +160,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)
 		combined_manifold_output = self.ract(combined_manifold_output)
 		combined_manifold_output = self.combined_spd_transform2(combined_manifold_output)
+
 		return combined_manifold_output
 
 	def _wavelet_LogEuclideanMean(self, x):

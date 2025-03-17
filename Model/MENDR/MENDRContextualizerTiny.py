@@ -16,7 +16,7 @@ class MENDRContextualizerTiny(nn.Module):
 		self.encoded_ff = encoded_ff
 		self.patch_len = patch_len
 
-		self.position_encoder = PositionalEncoding(self.encoded_h, self.patch_len, 0.1)
+		self.position_encoder = PositionalEncoding(self.device, self.encoded_h, self.patch_len, 0.1)
 		self.e2r = E2R(device=self.device)
 		self.Contextualizer = MENDRContextualizer(device=self.device, 
 											encoded_h=self.encoded_h, 
@@ -57,4 +57,5 @@ class MENDRContextualizer(nn.Module):
 		x = self.spd_transform1(x)
 		x = self.ract(x)
 		x = self.spd_transform2(x)
+		x = x.reshape(shape[0], shape[1], self.encoded_h, self.encoded_h)
 		return x 
