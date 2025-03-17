@@ -19,4 +19,4 @@ command: |
   python UploadToPACE.py \
     --input_directory ${{inputs.data_dir}} \
     --output_directory ${{outputs.output_dir}} \
-    --version 256Hz 
+    --version 128Hz 

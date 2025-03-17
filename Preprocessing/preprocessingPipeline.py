@@ -10,7 +10,7 @@ def simplePipelineOld(raw):
 	epochs = epochs.resample(256)
 	return epochs
 
-def simplePipeline(raw, sample_rate=128, low_pass=75):
+def simplePipeline(raw, sample_rate=128, low_pass=75, exclude_epochs=[0, -1], exclude_short_epochs=True):
 	'''
 	Version 2
 	1. Currently data is in volts where data is around 1e-5
@@ -23,14 +23,16 @@ def simplePipeline(raw, sample_rate=128, low_pass=75):
 
 	4. Notch filter 60 Hz power line noise and its harmonics
 
+	5. Exclude first and last epoch of TUH like CBraMod
 	'''
 	raw.filter(0.1, low_pass, verbose=False)
 	raw.notch_filter((60, 120), verbose=False)
 	epochs = make_fixed_length_epochs(raw, duration=60, preload=True)
 	epochs = epochs.load_data()
-	if len(epochs) <= 3:
+	if exclude_short_epochs and len(epochs) <= 3:
 		raise ValueError("Not enough epochs")
-	epochs.drop([0, len(epochs) - 1], verbose=False)
+	if len(exclude_epochs) > 0:
+		epochs.drop(exclude_epochs, verbose=False)
 	epochs.drop_bad(verbose=False)
 	# Although downsampling after epoching causes spectral leakage,
 	# https://gist.github.com/larsoner/01642cb3789992fbca59
