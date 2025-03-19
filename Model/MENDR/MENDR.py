@@ -9,7 +9,7 @@ from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
 class MENDR_model(nn.Module):
-    def __init__(self, device, epochs=6, num_channels=19, 
+    def __init__(self, device, num_channels=19, 
                 sampling_rate=128, hop_length=0.5,
                 delta_encoded_h=38,
                 theta_encoded_h=38,
@@ -86,11 +86,11 @@ class MENDR_model(nn.Module):
             high_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['high'],
             device=device)
         
-        if contextualizer_size == "LARGE":
+        if contextualizer_size.upper() == "LARGE":
             self.mendr_contextualizer = MENDRContextualizerLarge(device=device)
-        elif contextualizer_size == "TINY":
+        elif contextualizer_size.upper() == "TINY":
             # TODO: Modify
-            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, epochs=epochs, encoded_h=190, patch_len=18, encoded_ff=380)
+            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, encoded_h=190, patch_len=18, encoded_ff=380)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         

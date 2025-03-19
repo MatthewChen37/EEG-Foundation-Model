@@ -302,15 +302,30 @@ def testMENDRTrainerMAEReconLoss():
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
-
     for batch_index, epoch_index in enumerate(mask):
         assert not torch.equal(combined_manifold_output[batch_index, epoch_index.item(), :, :], combined_manifold_output_masked[batch_index, epoch_index.item(),:,:])
 
 def testMENDRTrainerWithTiny():
-    def testMENDRTrainerNoValidation():
-        args = SimpleNamespace(
+    args = SimpleNamespace(
+        encoder_grad_frac = 0.5,
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        mask_rate = 0.01,
+        mask_span = 5,
+        temp = 0.01,
+        num_negatives=10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42
+    )
 
-
+    mendr = MENDR_model(device, contextualizer_size="TINY")
+    trainer = MENDRPreTrainer(mendr, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
 
 
 def testMENDRTrainerNoValidation():
