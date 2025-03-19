@@ -97,16 +97,9 @@ class BaseModelTrainer(object):
             if isinstance(value, torch.Tensor):
                 # Perform batch normalization across channels 
                 # Note all data are float32!
-                batch[key] = self._std_norm(value.float().to(self.device))
+                batch[key] = value.float().to(self.device)
         return batch
     
-    def _std_norm(self, x):
-        mean = torch.mean(x, dim=(0, 1), keepdim=True)
-        std = torch.std(x, dim=(0, 1), keepdim=True)
-        x = (x - mean) / std
-        return x
-
-
     def parameters(self):
         """
         All the trainable parameters in the Trainable. This includes any architecture parameters and meta-parameters.

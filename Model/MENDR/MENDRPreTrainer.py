@@ -35,8 +35,13 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.2, random_state=config.random_state)
 		'''	
 	def forward(self, data):
-		patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output = self.mendr_model(data)
-
+		'''
+		Looks similar to MENDR_model forward
+		but is modified for the contrastive learning task(s)
+		'''
+		graphs = data['graphs']
+		patchified_inputs = self.mendr_model._super_patchify(data)
+		encodings, decodings = self.mendr_model.mendr_encoder(graphs, patchified_inputs)
 		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge): 
 			# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
 			w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)

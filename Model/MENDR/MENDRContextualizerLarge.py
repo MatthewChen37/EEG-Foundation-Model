@@ -134,6 +134,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask=None):
+
 		batch_size = og_output_shape[0]
 		num_epochs = og_output_shape[1]
 		if mask != None:
