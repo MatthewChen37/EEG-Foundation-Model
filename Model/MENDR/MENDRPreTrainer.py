@@ -10,6 +10,8 @@ from torch_geometric.utils import unbatch
 from .mAtt import StiefelParameter
 from .safeSVD import SVD, svdv2
 from scipy.linalg import orth
+from .MENDRContextualizerLarge import MENDRContextualizerLarge
+from .MENDRContextualizerTiny import MENDRContextualizerTiny
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
@@ -33,23 +35,36 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.RandomFTSurrogate = RandomFTSurrogate(phase_noise_magnitude=0.2, random_state=config.random_state)
 		'''	
 	def forward(self, data):
-		encoder_output, wavelet_manifold_output = self.mendr_model(data)
-		
-		# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
-		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
+		patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output = self.mendr_model(data)
 
-		# Combined contrastive loss
-		riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge): 
+			# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
+			w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
-		return {
-				'encoder_output': encoder_output,
-				'combined_manifold_output': combined_manifold_output,
-				'combined_manifold_output_masked': combined_manifold_output_masked,
-				'riemannian_loss': riemannian_loss,
-				'wavelet_manifold_output': wavelet_manifold_output,
-				'wavelet_loss': w_loss,
-				'wavelet_acc': w_correct / w_pairs
-		}
+			# Combined contrastive loss
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+
+			return {
+					'encoder_output': encoder_output,
+					'combined_manifold_output': combined_manifold_output,
+					'combined_manifold_output_masked': combined_manifold_output_masked,
+					'riemannian_loss': riemannian_loss,
+					'wavelet_manifold_output': wavelet_manifold_output,
+					'wavelet_loss': w_loss,
+					'wavelet_acc': w_correct / w_pairs
+			}
+		elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny): 
+			# Combined contrastive loss
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+			return {
+					'encoder_output': encoder_output,
+					'combined_manifold_output': combined_manifold_output,
+					'combined_manifold_output_masked': combined_manifold_output_masked,
+					'riemannian_loss': riemannian_loss,
+			}
+		else:
+			raise ValueError("Unidentified Contextualizer Type")
+
 	
 	def reconstruction_loss(self, inputs, outputs):
 		decodings = {band: outputs[1] for band, outputs in outputs.items()}

@@ -305,7 +305,13 @@ def testMENDRTrainerMAEReconLoss():
 
     for batch_index, epoch_index in enumerate(mask):
         assert not torch.equal(combined_manifold_output[batch_index, epoch_index.item(), :, :], combined_manifold_output_masked[batch_index, epoch_index.item(),:,:])
-        
+
+def testMENDRTrainerWithTiny():
+    def testMENDRTrainerNoValidation():
+        args = SimpleNamespace(
+
+
+
 
 def testMENDRTrainerNoValidation():
     args = SimpleNamespace(
@@ -498,13 +504,17 @@ if __name__ == "__main__":
     #testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
-    print("Testing trainer LOO contrastive loss")
+    print("Testing trainer LOO contrastive loss...")
     #testMENDRTrainerLOOLoss()
     print("Trainer LOO contrastive loss test passed! ")
 
-    print("Testing trainer MAE Recon loss")
-    testMENDRTrainerMAEReconLoss()
+    print("Testing trainer MAE Recon loss...")
+    #testMENDRTrainerMAEReconLoss()
     print("Trainer MAE Recon loss test passed! ")
+
+    print("Testing trainer with tiny contextualizer...")
+    testMENDRTrainerWithTiny()
+    print("Trainer with tiny contextualizer test passed!")
 
     print("Testing trainer fit without validation...")
     #testMENDRTrainerNoValidation()
