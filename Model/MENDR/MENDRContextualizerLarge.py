@@ -134,8 +134,9 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask=None):
-		batch_size, num_epochs = x[list(x.keys())[0]].shape[0], x[list(x.keys())[0]].shape[1]
-		if mask:
+		batch_size = og_output_shape[0]
+		num_epochs = og_output_shape[1]
+		if mask != None:
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			for band, spd_batch in x.items():

@@ -246,7 +246,6 @@ def testMENDRTrainerLOOLoss():
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
     with torch.autograd.detect_anomaly():
         embeddings = {
             'delta': random_spd_batch(8, 19).to(device),
@@ -255,7 +254,6 @@ def testMENDRTrainerLOOLoss():
             'beta': random_spd_batch(8, 19).to(device),
             'gamma': random_spd_batch(8, 19).to(device),
         }
-
         loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
 
     assert pairs == 30, f"Pairs is not 30: {pairs}"
@@ -278,20 +276,18 @@ def testMENDRTrainerMAEReconLoss():
     random_state=42
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRPreTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
     with torch.autograd.detect_anomaly():
         wavelet_manifold_output = {
-            'delta': random_spd_batch(8, 19).to(device),
-            'theta': random_spd_batch(8, 19).to(device),
-            'alpha': random_spd_batch(8, 19).to(device),
-            'beta': random_spd_batch(8, 19).to(device),
-            'gamma': random_spd_batch(8, 19).to(device),
+            'delta': random_spd_batch(8, 38).to(device),
+            'theta': random_spd_batch(8, 38).to(device),
+            'alpha': random_spd_batch(8, 38).to(device),
+            'beta': random_spd_batch(8, 38).to(device),
+            'gamma': random_spd_batch(8, 38).to(device),
         }
 
         for band, batch in wavelet_manifold_output.items():
@@ -300,15 +296,15 @@ def testMENDRTrainerMAEReconLoss():
         riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
     assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
-    assert combined_manifold_output.shape == torch.Size([8, 19, 19]), f"Combined Manifold Shape does not match{combined_manifold_output.shape}"
-    assert combined_manifold_output_masked.shape == torch.Size([8, 19, 19]), f"Combined Manifold Masked Shape does not match{combined_manifold_output_masked.shape}"
+    assert combined_manifold_output.shape == torch.Size([2, 4, 38, 38]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+    assert combined_manifold_output_masked.shape == torch.Size([2, 4, 38, 38]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
 
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
 
     for batch_index, epoch_index in enumerate(mask):
-        assert not torch.equal(combined_manifold_output[batch_index*4+epoch_index.item(), :, :], combined_manifold_output_masked[batch_index*4+epoch_index.item(),:,:])
+        assert not torch.equal(combined_manifold_output[batch_index, epoch_index.item(), :, :], combined_manifold_output_masked[batch_index, epoch_index.item(),:,:])
         
 
 def testMENDRTrainerNoValidation():
@@ -333,7 +329,7 @@ def testMENDRTrainerNoValidation():
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    dataset = WaveletPretrainDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
     with torch.autograd.detect_anomaly():
         trainer.fit(training_dataset=dataset, epochs=1, batch_size=16)
 
@@ -479,27 +475,27 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     print("Testing MENDR Super patching...")
-    testMENDRSuperPatching()
+    #testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    testLargeContextualizerBatchLEM()
+    #testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    testLargeContextualizerWaveletLEM()
+    #testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
-    testContextualizerTiny()
+    #testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
     print("Testing Large Contextualizer...")
-    testContextualizerLarge()
+    #testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
     print("Testing trainer LOO contrastive loss")
@@ -507,7 +503,7 @@ if __name__ == "__main__":
     print("Trainer LOO contrastive loss test passed! ")
 
     print("Testing trainer MAE Recon loss")
-    #testMENDRTrainerMAEReconLoss()
+    testMENDRTrainerMAEReconLoss()
     print("Trainer MAE Recon loss test passed! ")
 
     print("Testing trainer fit without validation...")

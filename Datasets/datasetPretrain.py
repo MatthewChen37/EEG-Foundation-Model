@@ -28,7 +28,6 @@ class WaveletPretrainDataset(Dataset):
 			futures = [executor.submit(self._process_subject, subject) for subject in subjects]
 			for future in tqdm(futures):
 				future.result()
-
 		self.length = len(self.epochs)
 			
 

@@ -82,15 +82,15 @@ class MENDRPreTrainer(BaseModelTrainer):
 		with torch.no_grad(): # Don't need gradients for random indices
 			masked_epochs = torch.randint(num_epochs, (batch_size,))
 
-		combined_manifold_output_masked = self.contextualizer.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask=masked_epochs)
+		combined_manifold_output_masked = self.mendr_model.mendr_contextualizer.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask=masked_epochs)
 
 		# Log Euclidean Mean True 
-		combined_manifold_output = self.contextualizer.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
+		combined_manifold_output = self.mendr_model.mendr_contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(wavelet_manifold_output)
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
 		# Reconstruction loss
-		riemannian_loss = criterion(combined_manifold_output_important_part, combined_manifold_output_masked_important_part)
-
+		combined_manifold_output_masked = combined_manifold_output_masked.view(epoched_shape[0], epoched_shape[1], combined_manifold_output_masked.shape[1], combined_manifold_output_masked.shape[2])
+		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 		return 3e7*riemannian_loss, combined_manifold_output, combined_manifold_output_masked, masked_epochs
 
 	def leave_one_out(self, embeddings, criterion, negatives=20):
@@ -128,7 +128,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 				other_embeddings.append(embedding_tensor)
 
 			curr_target = embeddings[frequency_bands[i]][negative_indices]
-			other_embeddings_mean = self.mendr.mendr_contextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
+			other_embeddings_mean = self.mendr_model.mendr_contextualizer.WaveletContextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
 
 			# Why does this fail for higher precisions?
 			# Answer: AttenionManifold's forward and SPDTransforms Forward are numerically unstable for FloatingPoint Precision calculations
@@ -223,5 +223,5 @@ class MENDRPreTrainer(BaseModelTrainer):
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
 		inner_term = tensor_log_A[:, None, ...] - tensor_log_B[None, ...]
-		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.temp1)
+		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.mendr_model.temp1)
 		return output
