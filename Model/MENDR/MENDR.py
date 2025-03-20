@@ -90,7 +90,7 @@ class MENDR_model(nn.Module):
             self.mendr_contextualizer = MENDRContextualizerLarge(device=device)
         elif contextualizer_size.upper() == "TINY":
             # TODO: Modify
-            self.mendr_contextualizer = MENDRContextualizerTiny(device=device, encoded_h=190, patch_len=18, encoded_ff=380)
+            self.mendr_contextualizer = MENDRContextualizerTiny(device=device)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         
@@ -107,7 +107,7 @@ class MENDR_model(nn.Module):
         for band in BANDS:
             if band in encodings:
                 encodings[band] = encodings[band].reshape(batch_size, -1, self.encoded_h[band], self.WAVELET_SUPER_PATCH_LENGTHS[band])
-        combined_manifold_output, wavelet_manifold_output = self.mendr_contextualizer(encodings)
+        combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings) # Mask indices should never be used here
         return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
     def _super_patchify(self, data):

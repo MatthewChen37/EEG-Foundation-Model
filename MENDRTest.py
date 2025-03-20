@@ -186,15 +186,11 @@ def testContextualizerTiny():
 
     with torch.no_grad():
         contextualizer = MENDRContextualizerTiny(device)
-        combined_manifold_output, cov_matrices = contextualizer(example_input)
+        combined_manifold_output, cov_matrices, _ = contextualizer(example_input)
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
         assert combined_manifold_output.shape == torch.Size([4, 11, 228, 228]), f"Incorrect output shape: {combined_manifold_output.shape}"
 
-        assert cov_matrices['delta'].shape == torch.Size([4, 11, 38, 38])
-        assert cov_matrices['theta'].shape == torch.Size([4, 11, 38, 38])
-        assert cov_matrices['alpha'].shape == torch.Size([4, 11, 38, 38])
-        assert cov_matrices['beta'].shape == torch.Size([4, 11, 38, 38])
-        assert cov_matrices['gamma'].shape == torch.Size([4, 11, 76, 76])
+        assert cov_matrices.shape == torch.Size([4, 11, 228, 228])
 
 def testContextualizerLarge():
     example_input = {
@@ -224,7 +220,32 @@ def testContextualizerLarge():
 
         assert combined_manifold_output.shape == torch.Size([4, 11, 38, 38]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
-    
+
+
+def testMENDRLargeCombinedContextualizerMasking():
+    example_input = {
+            'delta': torch.randn(44, 38, 38).to(device).float(),
+            'theta': torch.randn(44, 38, 38).to(device).float(),
+            'alpha': torch.randn(44, 38, 38).to(device).float(),
+            'beta': torch.randn(44, 38, 38).to(device).float(),
+            'gamma': torch.randn(44, 38, 38).to(device).float()
+    }
+
+    with torch.no_grad():
+        contextualizer = MENDRContextualizerLarge(device)
+        true_LEM = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
+        combined_manifold_output, mask_idxes = contextualizer.CombinedContextualizer(
+            example_input, [4, 11, -1], mask_ratio=0.5)
+
+        true_LEM = true_LEM.view(4, 11, 38, 38)
+        combined_manifold_output = combined_manifold_output.view(4, 11, 38, 38)
+
+        assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
+        for batch_idx, batch_mask_idxes in enumerate(mask_idxes):
+            assert len(batch_mask_idxes) > 0, f"For batch {batch_idx} there are no masked indicies: {batch_mask_idxes}" 
+            for batch_mask_idx in batch_mask_idxes:
+                assert not torch.equal(true_LEM[batch_idx, batch_mask_idx, :, :], combined_manifold_output[batch_idx, batch_mask_idx, :, :])
+
 def testMENDRTrainerLOOLoss():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
@@ -293,7 +314,7 @@ def testMENDRTrainerMAEReconLoss():
         for band, batch in wavelet_manifold_output.items():
             assert torch.allclose(batch, batch.mT, atol=(10 ** -7)), f"{band}"
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
     assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
     assert combined_manifold_output.shape == torch.Size([2, 4, 38, 38]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
@@ -302,10 +323,7 @@ def testMENDRTrainerMAEReconLoss():
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
-    for batch_index, epoch_index in enumerate(mask):
-        assert not torch.equal(combined_manifold_output[batch_index, epoch_index.item(), :, :], combined_manifold_output_masked[batch_index, epoch_index.item(),:,:])
-
-def testMENDRTrainerWithTiny():
+def testMENDRTrainerTinyMAEReconLoss():
     args = SimpleNamespace(
         encoder_grad_frac = 0.5,
         learning_rate = 0.001,
@@ -326,6 +344,51 @@ def testMENDRTrainerWithTiny():
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
+
+    with torch.autograd.detect_anomaly():
+        example_input = {
+            'delta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'theta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'alpha': torch.randn(4, 11, 38, 18).to(device).float(),
+            'beta': torch.randn(4, 11, 38, 18).to(device).float(),
+            'gamma': torch.randn(4, 11, 76, 18).to(device).float()
+        }
+
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
+
+        assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
+
+        assert combined_manifold_output.shape == torch.Size([4, 11, 228, 228]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 11, 228, 228]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
+
+        assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
+        assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
+
+def testMENDRTrainerWithTiny():
+    args = SimpleNamespace(
+        encoder_grad_frac = 0.5,
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        mask_rate = 0.01,
+        mask_span = 5,
+        temp = 0.01,
+        num_negatives=10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42
+    )
+
+    
+
+    mendr = MENDR_model(device, contextualizer_size="TINY")
+    trainer = MENDRPreTrainer(mendr, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+
+
 
 
 def testMENDRTrainerNoValidation():
@@ -496,39 +559,47 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     print("Testing MENDR Super patching...")
-    #testMENDRSuperPatching()
+    testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    #testLargeContextualizerBatchLEM()
+    testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    #testLargeContextualizerWaveletLEM()
+    testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
-    #testContextualizerTiny()
+    testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
     print("Testing Large Contextualizer...")
-    #testContextualizerLarge()
+    testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
+    print("Testing Large Contextualizer masking...")
+    testMENDRLargeCombinedContextualizerMasking()
+    print("Large Contextualizer masking test passed!")
+
     print("Testing trainer LOO contrastive loss...")
-    #testMENDRTrainerLOOLoss()
+    testMENDRTrainerLOOLoss()
     print("Trainer LOO contrastive loss test passed! ")
 
     print("Testing trainer MAE Recon loss...")
-    #testMENDRTrainerMAEReconLoss()
+    testMENDRTrainerMAEReconLoss()
     print("Trainer MAE Recon loss test passed! ")
 
+    print("Testing trainer Tiny MAE Recon loss...")
+    testMENDRTrainerTinyMAEReconLoss()
+    print("Trainer Tiny MAE Recon loss test passed! ")
+
     print("Testing trainer with tiny contextualizer...")
-    testMENDRTrainerWithTiny()
+    #testMENDRTrainerWithTiny()
     print("Trainer with tiny contextualizer test passed!")
 
     print("Testing trainer fit without validation...")

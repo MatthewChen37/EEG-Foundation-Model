@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from .MENDRCommon import PositionalEncoding, BatchTraceNormalization
+from .MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes
 
 '''
 BENDR-style Contextualizer using mATT module 
@@ -34,7 +34,8 @@ class MENDRContextualizerLarge(nn.Module):
 
 	def forward(self, x):
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_manifold_output = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape)
+		combined_manifold_output, _ = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
+		# Never mask when calling it from here
 
 		for band in wavelet_manifold_output.keys():
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(epoched_shape[0], epoched_shape[1],
@@ -133,24 +134,27 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = torch.from_numpy(np.random.rand(encoded_out, encoded_out))
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
-	def forward(self, x, og_output_shape, mask=None):
-
+	def forward(self, x, og_output_shape, mask_ratio=0.0):
 		batch_size = og_output_shape[0]
-		num_epochs = og_output_shape[1]
-		if mask != None:
+		num_patches = og_output_shape[1]
+		mask_idxes = None
+		if mask_ratio > 0:
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			for band, spd_batch in x.items():
-				x[band] = spd_batch.clone().view(batch_size, num_epochs, spd_batch.shape[1], spd_batch.shape[2])
+				x[band] = spd_batch.clone().view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2])
 
-			# We mask one epoch calculate the LEM and then compare it with the full LEM
-			# [B, E, C, C]
-			for batch_idx, masked_epoch_idx in enumerate(mask):
+			# We randomly mask each patch with probability mask_ratio
+			# and calculate the LEM and then compare it with the full LEM
+			# [B, P, C, C]
+			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
+			for batch_idx, masked_patch_idxes in enumerate(mask_idxes):
 				for band in x.keys():
-					x[band][batch_idx, masked_epoch_idx.item(), :, :] = spd_mask
+					for masked_epoch_idx in masked_patch_idxes:
+						x[band][batch_idx, masked_epoch_idx, :, :] = spd_mask
 
 			for band in x.keys():
-				x[band] = x[band].view(batch_size * num_epochs, spd_batch.shape[1], spd_batch.shape[2])
+				x[band] = x[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
 
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
@@ -163,10 +167,12 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = self.ract(combined_manifold_output)
 		combined_manifold_output = self.combined_spd_transform2(combined_manifold_output)
 
-		return combined_manifold_output
+		return combined_manifold_output, mask_idxes
 
 	def _wavelet_LogEuclideanMean(self, x):
 		combined_manifold_output = torch.stack(list(x.values()), dim=1)
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
 		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
 		return combined_manifold_output
+
+	

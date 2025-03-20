@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+import numpy as np
 
 # Based on BENDR's Convolutional Position Encoding Scheme
 # Positional as in "Temporal"
@@ -62,6 +63,14 @@ class BatchTraceNormalization(nn.Module):
 		x = x + (self.epsilon * identity)
 		return x
 
+def _make_mask_idxes(batch_size, num_epochs, mask_ratio):
+		batch_mask_idxes = list()
+		for i in range(batch_size):
+			sample_mask_idxes = list()
+			while len(sample_mask_idxes) == 0 and mask_ratio > 0:
+				sample_mask_idxes = np.nonzero(np.random.rand(num_epochs) < mask_ratio)[0]
+			batch_mask_idxes.append(sample_mask_idxes)
+		return batch_mask_idxes
 
 if __name__ == "__main__":
 	# Test Positional Encoding
