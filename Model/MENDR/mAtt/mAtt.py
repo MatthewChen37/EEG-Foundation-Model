@@ -98,7 +98,8 @@ class AttentionManifold(nn.Module):
         inner_multi = inner_term @ inner_term.permute(0, 1, 3, 2)
         batch = inner_multi.shape[0]
         epochs = inner_multi.shape[1]
-        _, s, _= self.svd(inner_multi.view(batch * epochs, inner_multi.shape[2], inner_multi.shape[3]))
+        #_, s, _= self.svd(inner_multi.view(batch * epochs, inner_multi.shape[2], inner_multi.shape[3]))
+        s = torch.linalg.svdvals(inner_multi.view(batch * epochs, inner_multi.shape[2], inner_multi.shape[3]))
         s = s.view(batch, epochs, s.shape[1])
         final = torch.sum(s, dim=-1)
         return final

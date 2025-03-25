@@ -10,14 +10,14 @@ BENDR-style Contextualizer using mATT module
 '''
 class MENDRContextualizerLarge(nn.Module):
 	def __init__(self, device,
-				delta_encoded_h=38,
-                theta_encoded_h=38,
-                alpha_encoded_h=38,
-                beta_encoded_h=38,
-                gamma_encoded_h=76,
-                high_encoded_h=76,
-				encoded_out = 38):
-		super(MENDRContextualizerLarge, self).__init__()
+				delta_encoded_h,
+                theta_encoded_h,
+                alpha_encoded_h,
+                beta_encoded_h,
+                gamma_encoded_h,
+                high_encoded_h,
+				encoded_out = 19):
+		super().__init__()
 		self.device = device
 		self.encoded_h = {
 			'delta': delta_encoded_h,
@@ -32,9 +32,14 @@ class MENDRContextualizerLarge(nn.Module):
 		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=18)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
-	def forward(self, x):
-		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_manifold_output, _ = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
+	def forward(self, x, batch_size, patch_num):
+		# Reshape encodings before passing into contextualizer
+		x_reshaped = dict()
+		for band in self.encoded_h.keys():
+			if band in x:
+				x_reshaped[band] = x[band].clone().reshape(batch_size, patch_num, self.encoded_h[band], -1)
+		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x_reshaped)
+		combined_manifold_output, mask_idxes = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
 		# Never mask when calling it from here
 
 		for band in wavelet_manifold_output.keys():
@@ -43,17 +48,19 @@ class MENDRContextualizerLarge(nn.Module):
 		combined_manifold_output = combined_manifold_output.reshape(epoched_shape[0], epoched_shape[1],
 		combined_manifold_output.shape[1], combined_manifold_output.shape[2])
 
-		return combined_manifold_output, wavelet_manifold_output
+		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
 
 	
 class MENDRWaveletContextualizer(nn.Module):
 	def __init__(self, device, encoded_h, encoded_out, patch_len=18):
-		super(MENDRWaveletContextualizer, self).__init__()
+		super().__init__()
 		self.device = device
 		self.encoded_h = encoded_h
 		self.encoded_out = encoded_out
 		self.patch_len = patch_len
 
+
+		self.ract = SPDRectified()
 		# Positional Encoding
 		self.position_encoder = dict()
 		for band in self.encoded_h:
@@ -67,10 +74,16 @@ class MENDRWaveletContextualizer(nn.Module):
 				self.wavelet_e2r[band] = E2R(device=self.device)
 		self.wavelet_e2r = nn.ParameterDict(self.wavelet_e2r).to(self.device)
 
+		self.pre_attention_spd_transform = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.pre_attention_spd_transform[band] = SPDTransform(self.encoded_h[band], self.encoded_out, self.device)
+		self.pre_attention_spd_transform = nn.ParameterDict(self.pre_attention_spd_transform).to(self.device)
+
 		self.wavelet_attention_manifolds = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
-				self.wavelet_attention_manifolds[band] = AttentionManifold(self.encoded_h[band], self.encoded_h[band], self.device)
+				self.wavelet_attention_manifolds[band] = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
 		self.wavelet_attention_manifolds = nn.ParameterDict(self.wavelet_attention_manifolds).to(self.device)
 
 		self.trace_normalization = BatchTraceNormalization(self.device)
@@ -79,9 +92,12 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.wavelet_spd_transforms = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
-				self.wavelet_spd_transforms[band] = SPDTransform(self.encoded_h[band], self.encoded_out, self.device)
+				self.wavelet_spd_transforms[band] = nn.Sequential(SPDTransform(self.encoded_out, self.encoded_out, self.device),
+																BatchTraceNormalization(self.device),
+																self.ract,
+																SPDTransform(self.encoded_out, self.encoded_out, self.device))
 		self.wavelet_spd_transforms = nn.ParameterDict(self.wavelet_spd_transforms).to(self.device)
-		self.ract = SPDRectified()
+
 
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
@@ -95,20 +111,27 @@ class MENDRWaveletContextualizer(nn.Module):
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
+			batch_size = wavelet_manifold_output[band].shape[0]
+			num_patches = wavelet_manifold_output[band].shape[1]
+			cov_dim = wavelet_manifold_output[band].shape[2]
 			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
-			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band])
+			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
+			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
+			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7)), "Attention Manifold"
+			'''
 			# Skip Connection
 			epoched_shape = shape
 			og_output_shape = output.shape
 			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
-			output = output.view(og_output_shape) 
+			output = output.view(og_output_shape)
+			'''
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 			output = self.trace_normalization(output)
 			wavelet_manifold_output[band] = self.ract(output)
 			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
 
-		return wavelet_manifold_output, epoched_shape
+		return wavelet_manifold_output, shape
 
 	def _batch_LogEuclideanMean(self, x, band):
 		# X is list of [Batch_Size * epochs, C, C]
@@ -118,14 +141,15 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, encoded_out):
+	def __init__(self, device, encoded_out, ff_dim=19):
 		super().__init__()
 		self.device = device
 		self.encoded_out = encoded_out
+		self.ff_dim = ff_dim
 
-		self.combined_attention = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
-		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.encoded_out, self.encoded_out, self.device), BatchTraceNormalization(self.device))
-		self.combined_spd_transform2 = SPDTransform(self.encoded_out, self.encoded_out, self.device)
+		self.combined_attention = AttentionManifold(self.encoded_out, self.ff_dim, self.device)
+		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.ff_dim, self.ff_dim, self.device), BatchTraceNormalization(self.device))
+		self.combined_spd_transform2 = SPDTransform(self.ff_dim, self.encoded_out, self.device)
 		self.ract = SPDRectified()
 
 		# Mask is a learnable SPD matrix
@@ -174,5 +198,3 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = self.combined_attention.tensor_log(combined_manifold_output)
 		combined_manifold_output = self.combined_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
 		return combined_manifold_output
-
-	

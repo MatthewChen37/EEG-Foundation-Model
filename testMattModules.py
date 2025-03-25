@@ -48,6 +48,8 @@ def check_TangentSpace():
     forward_eq = assertTensorEqual(forward, desired_forward)
     backward_eq = assertTensorEqual(backward, desired_backward)
 
+    print("Tangent space:", forward_eq, backward_eq)
+
     return (forward_eq and backward_eq)
 
 def check_Rectified():
@@ -79,6 +81,32 @@ def check_UnTangentSpace():
     transform_assert = assertTensorEqual(spd, untang, tolerance=1e-4)
     return transform_assert
 
+def check_eigh():
+    from types import SimpleNamespace
+
+    # Eigenvalues are 1, 2, and 4
+    simple_spd = torch.from_numpy(np.array([[[2, 1, 0], [1, 3, 1], [0, 1, 2]]], np.float32)).float()
+    S, U = SVD.eigh.apply(simple_spd)
+    eigenvalue_assert = assertTensorEqual(S, torch.tensor([1, 2, 4]))
+
+    input_self = SimpleNamespace()
+    input_self.saved_tensors = S, U
+    dA = SVD.eigh.backward(input_self, dS=torch.ones(1, 3), dU=torch.ones(1, 3, 3))
+
+    expected_dA = torch.Tensor([[ 1.0241,  0.3588, -0.2388],
+                                [ 0.5418,  1.3974, -0.6550],
+                                [-0.2561, -0.6464,  0.5880]])
+
+    dA_assert = assertTensorEqual(expected_dA, dA)
+
+    if not dA_assert:
+        print(expected_dA, expected_dA.shape)
+        print(dA, dA.shape)
+
+    if not eigenvalue_assert:
+        print(S)
+
+    return eigenvalue_assert and dA_assert
 
 def check_TensorLog():
     attention_manifold = AttentionManifold(3, 3, "cpu")
@@ -119,7 +147,7 @@ def check_LogEuclideanMean():
     lem_assert = assertTensorEqual(log_euclidean_mean, simple_spd)
 
     if not lem_assert:
-        print(log_euclidean_mean, simple_spd)
+        print("Failed:", log_euclidean_mean, simple_spd)
 
     return lem_assert
 
@@ -161,14 +189,33 @@ def check_NearestSymPosDef():
     return nearest_sym_pos_def_assert
 
 
+def check_NearestSymPosDef_2():
+    simple_non_spd = torch.from_numpy(np.array([[2, 1, 0.1],
+                                                [1, 3, 1],
+                                                [0, 1, 2]], np.float32)).float()
+
+    simple_non_spd = simple_non_spd.repeat(4, 1, 1)
+    
+    output = SVD.nearest_sym_pos_def(simple_non_spd)
+
+    nearest_sym_pos_def_assert = True
+    for out in output:
+        nearest_sym_pos_def_assert = nearest_sym_pos_def_assert and torch.allclose(out, out.mT)
+
+    return nearest_sym_pos_def_assert
+
+
+
 units = {
     'Tangent space layer': check_TangentSpace,
     'Rectification layer': check_Rectified,
     'Untangent space layer': check_UnTangentSpace,
+    #'Check eigh': check_eigh,
     'Tensor Log': check_TensorLog,
     'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
+    'Nearest Sym Pos Def 2': check_NearestSymPosDef_2,
 }
 
 result = True

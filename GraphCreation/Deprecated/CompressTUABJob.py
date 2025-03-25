@@ -50,7 +50,7 @@ def _process_file_thread(args, file_name):
 			epoch_file_path = os.path.join(original_wavelet_path, wavelet_file)
 			if os.path.isfile(epoch_file_path) and band != "freq":
 				epoch_data = torch.load(epoch_file_path).data
-				for i in range(epoch_data.shape[0]):
+				# for i in range(epoch_data.shape[0]):
 					curr_epoch = torch.tensor(epoch_data[i])
 					torch.save(curr_epoch, os.path.join(wavelet_path, f"{wavelet_file[:-3]}_epoch_{i}.pt"))
 		for graph_file in os.listdir(original_graph_path):

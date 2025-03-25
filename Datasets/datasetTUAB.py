@@ -10,9 +10,7 @@ BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 class WaveletTUABDataset(Dataset):
 	def __init__(self, root, frac=1.0, transform=None):
 		super(WaveletTUABDataset, self).__init__(root, transform)
-
 		self.frac = frac
-
 		# Prevents the FutureWarning: from loading without setting weights_only to True
 		warnings.filterwarnings("ignore", category=FutureWarning)
 		self._index_data()
@@ -21,17 +19,24 @@ class WaveletTUABDataset(Dataset):
 		self.graphs = dict()
 		self.epochs = []
 		folders = os.listdir(self.root)
+		folders = folders[:int(len(folders) * self.frac)]
 		print(f"Loading {len(folders)} folders")
 		with ThreadPoolExecutor() as executor:
-			futures = [executor.submit(self._process_folder, os.path.join(self.root, curr_folder, "wavelet_decompositions"), os.path.join(self.root, curr_folder, "graphs")) for curr_folder in folders]
+			futures = [executor.submit(self._process_folder, curr_folder, os.path.join(self.root, curr_folder, "wavelet_decompositions"), os.path.join(self.root, curr_folder, "graphs")) for curr_folder in folders]
 			for future in tqdm(futures):
 				future.result()
 		self.length = len(self.epochs)
 
-	def _process_folder(self, wavelet_folder, graph_folder):
+	def _process_folder(self, curr_folder, wavelet_folder, graph_folder):
 		folder_epochs = dict()
 		folder_graph_path = os.listdir(graph_folder)[0]
-		self.graphs[folder_graph_path.split("_")[0]] = torch.load(os.path.join(graph_folder, folder_graph_path))
+		split_path = folder_graph_path.split("_")
+		folder_class = curr_folder.split("_")[-1]
+		subject_int_class = 0 if folder_class == "normal" else 1
+		graph = torch.load(os.path.join(graph_folder, folder_graph_path))
+		graph.y = torch.tensor([subject_int_class])
+		graph_name = "_".join(split_path[0:2])
+		self.graphs[graph_name] = graph
 		wavelet_files = os.listdir(wavelet_folder)
 		for file_name in wavelet_files:
 			attributes = file_name.split("_")
@@ -39,7 +44,7 @@ class WaveletTUABDataset(Dataset):
 			band = attributes[-4]
 			if epoch_idx not in folder_epochs:
 				folder_epochs[epoch_idx] = dict()
-				folder_epochs[epoch_idx]['graph_name'] = attributes[0]
+				folder_epochs[epoch_idx]['graph_name'] = graph_name
 			folder_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_folder, file_name))
 		for epoch_idx, epoch_wavelet_dict in folder_epochs.items():
 			epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, epoch_idx,
@@ -64,19 +69,16 @@ class WaveletTUABDataset(Dataset):
 		}
 		return data
 
-		
 if __name__ == "__main__":
+	train_dataset = WaveletTUABDataset(root="/home/hice1/mchen439/scratch/TUAB/train", frac=1.0)
+	eval_dataset = WaveletTUABDataset(root="/home/hice1/mchen439/scratch/TUAB/eval", frac=1.0)
+	print("Length of train dataset: ", len(train_dataset))
+	print("Length of val dataset: ", len(eval_dataset))
+	data = train_dataset[0]
+	print("Data: ", len(data), data['graph'], data['wavelet_folder'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
 
-	# dataset = EEGDataset(root="/home/hice1/mchen439/data/TUH-Processed", frac=0.0001)
+	print("Train Graphs: ", len(train_dataset.graphs)) # Should be 2717, One for each folder
+	print("Train Epochs: ", len(train_dataset.epochs)) # Should be 61223
 
-	dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
-
-	#dataset = WaveletFinetuningDataset(root="/home/hice1/mchen439/scratch/downstreamTaskData/eval")
-
-	print("Length of dataset: ", len(dataset))
-
-	data = dataset[0]
-
-	#print("Data: ", len(data), data['graph'], data['wavelet_folder'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
-
-	print("Data: ", len(data), data['graph'], data['subject_name'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
+	print("Val Graphs: ", len(eval_dataset.graphs)) # Should be 276
+	print("Val Epochs: ", len(eval_dataset.epochs)) # Should be 6067

@@ -15,7 +15,7 @@ class MENDR_model(nn.Module):
                 theta_encoded_h=38,
                 alpha_encoded_h=38,
                 beta_encoded_h=38,
-                gamma_encoded_h=76,
+                gamma_encoded_h=38,
                 high_encoded_h=76,
                 super_patch_seconds=10,
                 temp=10.0,
@@ -25,11 +25,12 @@ class MENDR_model(nn.Module):
         Hop Length analogous to BIOT's hop length parameter but is specified in seconds.
         By default 0.5 seconds.  
         '''
-        super(MENDR_model, self).__init__()
+        super().__init__()
         self.sampling_rate = sampling_rate
         self.hop_length = hop_length
         self.super_patch_seconds = super_patch_seconds
         self.device = device
+        self.contextualizer_size=contextualizer_size
 
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
@@ -86,11 +87,18 @@ class MENDR_model(nn.Module):
             high_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['high'],
             device=device)
         
-        if contextualizer_size.upper() == "LARGE":
-            self.mendr_contextualizer = MENDRContextualizerLarge(device=device)
-        elif contextualizer_size.upper() == "TINY":
-            # TODO: Modify
-            self.mendr_contextualizer = MENDRContextualizerTiny(device=device)
+        if self.contextualizer_size.upper() == "LARGE":
+            self.mendr_contextualizer = MENDRContextualizerLarge(
+                delta_encoded_h=self.encoded_h['delta'],
+                theta_encoded_h=self.encoded_h['theta'],
+                alpha_encoded_h=self.encoded_h['alpha'],
+                beta_encoded_h=self.encoded_h['beta'],
+                gamma_encoded_h=self.encoded_h['gamma'],
+                high_encoded_h=self.encoded_h['high'],
+                device=device)
+        elif self.contextualizer_size.upper() == "TINY":
+            encoded_h_total = self.encoded_h['delta'] + self.encoded_h['theta'] + self.encoded_h['alpha'] + self.encoded_h['beta'] + self.encoded_h['gamma']
+            self.mendr_contextualizer = MENDRContextualizerTiny(encoded_h=encoded_h_total, device=device)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         
@@ -99,15 +107,11 @@ class MENDR_model(nn.Module):
 
 
     def forward(self, graphs, data):
-        batch_size = data['delta'].shape[0]
         patchified_inputs = self._super_patchify(data)
-        encodings, decodings = self.mendr_encoder(graphs, patchified_inputs)
-
-        # Reshape encodings before passing into contextualizer
-        for band in BANDS:
-            if band in encodings:
-                encodings[band] = encodings[band].reshape(batch_size, -1, self.encoded_h[band], self.WAVELET_SUPER_PATCH_LENGTHS[band])
-        combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings) # Mask indices should never be used here
+        batch_size = patchified_inputs['delta'].shape[0]
+        patch_num = patchified_inputs['delta'].shape[1]
+        encodings, decodings = self.mendr_encoder(graphs, patchified_inputs) # this is the shared module in torch JD
+        combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings, batch_size, patch_num) # Mask indices should never be used here
         return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
     def _super_patchify(self, data):

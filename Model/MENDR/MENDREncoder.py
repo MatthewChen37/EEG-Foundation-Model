@@ -16,7 +16,7 @@ intepretation.
 '''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len, encoded_h, device):
-        super(WaveletEncoderDecoder, self).__init__()
+        super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = nn.Dropout1d(0.1)
         self.patch_size = sub_patch_size
@@ -47,8 +47,10 @@ class WaveletEncoderDecoder(nn.Module):
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (1 - 1) + 0 + 1
         self.up1 = nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 4, kernel_size=1, stride=self.stride, groups=1).to(self.device)
         self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=19, kernel_size=1, stride=1, groups=19).to(self.device)
-        self.up3 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len)).to(self.device)
+        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=encoded_h * 2, kernel_size=1, stride=1, groups=19).to(self.device)
+        self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
+        self.up3 = nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=1, stride=1, groups=19).to(self.device)
+        self.up4 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len)).to(self.device)
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
@@ -59,7 +61,8 @@ class WaveletEncoderDecoder(nn.Module):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
         up2_count = sum(p.numel() for p in self.up2.parameters() if p.requires_grad)
         up3_count = sum(p.numel() for p in self.up3.parameters() if p.requires_grad)
-        return up1_count + up2_count + up3_count
+        up4_count = sum(p.numel() for p in self.up4.parameters() if p.requires_grad)
+        return up1_count + up2_count + up3_count + up4_count
 
     def forward(self, graph, x):
         # x: [Batch Size, Patches, Channels, Time Steps]
@@ -99,6 +102,7 @@ class WaveletEncoderDecoder(nn.Module):
         decoding = self.channel_dropout(decoding)
         decoding = self.up2(decoding)
         decoding = self.up3(decoding)
+        decoding = self.up4(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
 
         '''
@@ -135,7 +139,7 @@ class MENDRPatchEncoder(nn.Module):
                 gamma_super_patch_seq_len,
                 high_super_patch_seq_len,
                 device):
-        super(MENDRPatchEncoder, self).__init__()
+        super().__init__()
         self.device = device
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(

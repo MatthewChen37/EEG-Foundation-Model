@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 
 
 # Bless this https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/trg.py#L3-L4
@@ -77,6 +78,14 @@ class SVD(torch.autograd.Function):
 
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
 		return dA
+
+class robust_svd(nn.Module):
+
+	def __init__(self):
+		super(robust_svd, self).__init__()
+	
+	def forward(self, input):
+		return svdv2.apply(input)
 
 # From https://arxiv.org/abs/2104.03821
 class svdv2(torch.autograd.Function):
