@@ -320,7 +320,7 @@ class SPDPowerFunction(Function):
 
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
-            u, s, v = x.svd()
+            s, u = torch.linalg.eigh(x)
             s = torch.exp(weight * torch.log(s))
             output[k] = u.mm(s.diag().mm(u.t()))
         return output
@@ -340,7 +340,7 @@ class SPDPowerFunction(Function):
                 continue
 
             x = input[k]
-            u, s, v = x.svd() 
+            s, u = torch.linalg.eigh(x)
 
             g = symmetric(g)
             

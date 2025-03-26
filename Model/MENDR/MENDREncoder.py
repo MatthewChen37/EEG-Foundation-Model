@@ -29,19 +29,20 @@ class WaveletEncoderDecoder(nn.Module):
         self.L_out_1 = self.seq_len + 2 * (0) - 1 * ((self.patch_size) - 1) - 1
         self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
         self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
         #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
-        self.gnn_channel_encoder = GATConv(self.L_out_1, self.L_out_1, heads=1, concat=False).to(self.device)
-        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
+        self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=1, concat=False).to(self.device)
+        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
-        self.layer_norm1 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
-        self.layer_norm2 = nn.LayerNorm((19, self.L_out_1)).to(self.device)
+        self.layer_norm1 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
+        self.layer_norm2 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
 
-        self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
+        self.L_out_2 = 2 * self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
         self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
+        self.patch_embedder2_lin2 = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (1 - 1) + 0 + 1
@@ -54,8 +55,12 @@ class WaveletEncoderDecoder(nn.Module):
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
+        patch_embedder_lin_count = sum(p.numel() for p in self.patch_embedder_lin.parameters() if p.requires_grad)
+        patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
+        patch_embedder2_lin2_count = sum(p.numel() for p in self.patch_embedder2_lin2.parameters() if p.requires_grad)
         gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
-        return patch_embedder_count + gnn_encoder_count
+        gnn_lin = sum(p.numel() for p in self.gnn_lin1.parameters() if p.requires_grad)
+        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + patch_embedder2_lin2_count + gnn_lin
 
     def getDecoderParamCount(self):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
@@ -78,24 +83,25 @@ class WaveletEncoderDecoder(nn.Module):
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
 
-        x = x.view(B, P, C, self.L_out_1)
+        x = x.view(B, P, C, 2*self.L_out_1)
         # x: [Batch Size, Patches, Channels, self.L_out_1]
 
         for patch_idx in range(x.shape[1]):
-            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.L_out_1)
+            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, 2 * self.L_out_1)
             # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
             channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
             # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
             channel_encoding = channel_encoding
-            x[:, patch_idx, :, :] += channel_encoding.reshape(B, C, self.L_out_1)
+            x[:, patch_idx, :, :] += channel_encoding.reshape(B, C, 2 * self.L_out_1)
 
-        x = x.view(B*P, C, self.L_out_1)
+        x = x.view(B*P, C, 2 * self.L_out_1)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         x = self.layer_norm2(x)
         x = self.gnn_lin1(x)
         x = self.patch_embedder2(x)
         x = self.patch_embedder2_lin(x)
+        x = self.patch_embedder2_lin2(x)
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
 
         decoding = self.up1(x)
