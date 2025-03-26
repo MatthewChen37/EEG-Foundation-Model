@@ -22,7 +22,7 @@ def is_pos_def(x):
     return torch.all(torch.linalg.eigvals(x) > 0)
 
 def matrix_operator(A, operator):
-    u, s, v = A.svd()
+    s, u = torch.linalg.eigh(A)
     if operator == 'sqrtm':
         s.sqrt_()
     elif operator == 'rsqrtm':
