@@ -257,7 +257,7 @@ class SPDRectifiedFunction(Function):
 
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
-            u, s, v = x.svd()
+            s, u = torch.linalg.eigh(x)
             s[s < epsilon[0]] = epsilon[0]
 
             output[k] = u.mm(s.diag().mm(u.t()))
@@ -279,7 +279,7 @@ class SPDRectifiedFunction(Function):
                 g = symmetric(g)
 
                 x = input[k]
-                u, s, v = x.svd()
+                s, u = torch.linalg.eigh(x)
                 
                 max_mask = s > epsilon
                 s_max_diag = s.clone(); s_max_diag[~max_mask] = epsilon; s_max_diag = s_max_diag.diag()
