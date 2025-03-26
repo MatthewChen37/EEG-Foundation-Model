@@ -123,14 +123,14 @@ class SPDUnVectorize(nn.Module):
 
 
 class SPDTangentSpaceFunction(Function):
-
+    # This function is actually never used
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
         
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
-            u, s, v = x.svd()
+            s, u = torch.linalg.eigh(x)
             s.log_()
             output[k] = u.mm(s.diag().mm(u.t()))
 
@@ -148,7 +148,7 @@ class SPDTangentSpaceFunction(Function):
             grad_input = input.new(input.size(0), input.size(1), input.size(1))
             for k, g in enumerate(grad_output):
                 x = input[k]
-                u, s, v = x.svd()
+                s, u = torch.linalg.eigh(x)
                 
                 g = symmetric(g)
                 
@@ -188,14 +188,14 @@ class SPDTangentSpace(nn.Module):
 
 
 class SPDUnTangentSpaceFunction(Function):
-
+    # This function is actually never used either
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
         
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
-            u, s, v = x.svd()
+            s, u = torch.linalg.eigh(x)
             s.exp_()
             output[k] = u.mm(s.diag().mm(u.t()))
 
@@ -213,7 +213,7 @@ class SPDUnTangentSpaceFunction(Function):
             grad_input = input.new(input.size(0), input.size(1), input.size(1))
             for k, g in enumerate(grad_output):
                 x = input[k]
-                u, s, v = x.svd()
+                s, u = torch.linalg.eigh(x)
 
                 g = symmetric(g)
                 
@@ -313,7 +313,7 @@ class SPDRectified(nn.Module):
 
 
 class SPDPowerFunction(Function):
-
+    # This function is actually never used either 
     @staticmethod
     def forward(ctx, input, weight):
         ctx.save_for_backward(input, weight)
@@ -373,7 +373,7 @@ class SPDPowerFunction(Function):
 
 
 class SPDPower(nn.Module):
-
+    # This function is actually never used either 
     def __init__(self, input_dim, device):
         super(SPDPower, self).__init__()
         self.device = device 
