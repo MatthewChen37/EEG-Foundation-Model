@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
+import warnings
 
 # Bless this https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/trg.py#L3-L4
 # From https://github.com/jax-ml/jax/issues/2311
@@ -60,14 +60,16 @@ class SVD(torch.autograd.Function):
 		Ut = U.permute(0, 2, 1)
 		M = U.size(1)
 		N = V.size(1)
-		NS = len(S[1])
+		#NS = len(S[1])
 
 		F = (S[..., None, :] - S[..., None])
 		F = safe_inverse(F)
-		F.diagonal().fill_(0)
+		F.diagonal(dim1=-2, dim2=-1).fill_(0)
 
 		G = (S[..., None, :] + S[..., None])
-		G.diagonal().fill_(np.inf)
+		#G2 = (S[0] + S[0, :, None])
+		#assert torch.equal(torch.flatten(G), torch.flatten(G2))
+		G.diagonal(dim1=-2, dim2=-1).fill_(np.inf)
 		G = 1/G 
 
 		UdU = Ut @ dU
@@ -79,52 +81,55 @@ class SVD(torch.autograd.Function):
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
 		return dA
 
+	
+# From https://github.com/xitorch/xitorch/blob/ad9eec1b02804d0934e091640559cb66e3ec7f2c/xitorch/_impls/linalg/symeig.py#L47
 class Eigh(torch.autograd.Function):
-    @staticmethod
-    def forward(self, A):
-        s, u = torch.linalg.eigh(A)
-        self.save_for_backward(w, v)
-        return w, v
-
-	'''
+	def forward(self, A):
+		eival, eivec = torch.linalg.eigh(A)
+		self.save_for_backward(eival, eivec)
+		return eival, eivec
+	
 	@staticmethod
-    def backward(self, dw, dv):
-        w, v = self.saved_tensors
-        dtype, device = w.dtype, w.device
-        N = v.shape[0]
+	def backward(self, grad_eival, grad_eivec, debug_mode=True):
+		eival, eivec = self.saved_tensors
+		min_threshold = torch.finfo(eival.dtype).eps ** 0.6
+		eivect = eivec.transpose(-2, -1).conj()
 
-        F = w - w[:,None]
-        F.diagonal().fill_(np.inf)
-        # safe inverse
-        msk = (torch.abs(F) < 1e-20)
-        F[msk] += 1e-20
-        F = 1./F  
+		# remove the degenerate part
+		# see https://arxiv.org/pdf/2011.04366.pdf
+		if grad_eivec is not None:
+			# take the contribution from the eivec
+			F = eival.unsqueeze(-2) - eival.unsqueeze(-1)
+			idx = torch.abs(F) <= min_threshold
+			F[idx] = float("inf")
+			F = F.pow(-1)
+			if debug_mode:
+				degenerate = torch.any(idx)
+				xtg = eivect @ grad_eivec
+				diff_xtg = (xtg - xtg.transpose(-2, -1).conj())[idx]
+				reqsat = torch.allclose(diff_xtg, torch.zeros_like(diff_xtg))
+				# if the requirement is not satisfied, mathematically the derivative
+				# should be `nan`, but here we just raise a warning
+				if not reqsat:
+					msg = ("Degeneracy appears but the loss function seem to depend "
+							"strongly on the eigenvector. The gradient might be incorrect.\n")
+					msg += "Eigenvalues:\n%s\n" % str(eival)
+					msg += "Degenerate map:\n%s\n" % str(idx)
+					msg += "Requirements (should be all 0s):\n%s" % str(diff_xtg)
+					warnings.warn(MathWarning(msg))
+			F = F * torch.matmul(eivect, grad_eivec)
+			result = torch.matmul(eivec, torch.matmul(F, eivect))
+		else:
+			result = torch.zeros_like(eivec)
 
-        vt = v.t()
-        vdv = vt@dv
+		# calculate the contribution from the eival
+		if grad_eival is not None:
+			result += torch.matmul(eivec, grad_eival.unsqueeze(-1) * eivect)
 
-        return v@(torch.diag(dw) + F*(vdv-vdv.t())/2) @vt
-	'''
-
-    @staticmethod
-	# Must be a decomposition of batches of matrices
-    def backward(self, ds, du):
-        s, u = self.saved_tensors
-        dtype, device = w.dtype, w.device
-        N = v.shape[0]
-
-        F = s[..., None, :] - s[...,None]
-        F.diagonal().fill_(np.inf)
-        # safe inverse
-        msk = (torch.abs(F) < 1e-20)
-        F[msk] += 1e-20
-        F = 1./F  
-
-        ut = u.permute(0, 2, 1)
-        udu = ut@du
-
-        return u@(torch.diag(du) + F*(udu-udu.t())/2) @ ut
-
+		# symmetrize to reduce numerical instability
+		result = (result + result.transpose(-2, -1).conj()) * 0.5
+		return result
+	
 class robust_svd(nn.Module):
 
 	def __init__(self):
