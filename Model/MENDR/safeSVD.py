@@ -79,6 +79,52 @@ class SVD(torch.autograd.Function):
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
 		return dA
 
+class Eigh(torch.autograd.Function):
+    @staticmethod
+    def forward(self, A):
+        s, u = torch.linalg.eigh(A)
+        self.save_for_backward(w, v)
+        return w, v
+
+	'''
+	@staticmethod
+    def backward(self, dw, dv):
+        w, v = self.saved_tensors
+        dtype, device = w.dtype, w.device
+        N = v.shape[0]
+
+        F = w - w[:,None]
+        F.diagonal().fill_(np.inf)
+        # safe inverse
+        msk = (torch.abs(F) < 1e-20)
+        F[msk] += 1e-20
+        F = 1./F  
+
+        vt = v.t()
+        vdv = vt@dv
+
+        return v@(torch.diag(dw) + F*(vdv-vdv.t())/2) @vt
+	'''
+
+    @staticmethod
+	# Must be a decomposition of batches of matrices
+    def backward(self, ds, du):
+        s, u = self.saved_tensors
+        dtype, device = w.dtype, w.device
+        N = v.shape[0]
+
+        F = s[..., None, :] - s[...,None]
+        F.diagonal().fill_(np.inf)
+        # safe inverse
+        msk = (torch.abs(F) < 1e-20)
+        F[msk] += 1e-20
+        F = 1./F  
+
+        ut = u.permute(0, 2, 1)
+        udu = ut@du
+
+        return u@(torch.diag(du) + F*(udu-udu.t())/2) @ ut
+
 class robust_svd(nn.Module):
 
 	def __init__(self):

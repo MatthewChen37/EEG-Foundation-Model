@@ -174,7 +174,7 @@ class SPDTangentSpaceFunction(Function):
 class SPDTangentSpace(nn.Module):
 
     def __init__(self, input_size, device, vectorize=True):
-        super(SPDTangentSpace, self).__init__()
+        super().__init__()
         self.vectorize = vectorize
         if vectorize:
             self.vec = SPDVectorize(input_size, device)
