@@ -59,7 +59,6 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.encoded_out = encoded_out
 		self.patch_len = patch_len
 
-
 		self.ract = SPDRectified()
 		# Positional Encoding
 		self.position_encoder = dict()
@@ -92,10 +91,9 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.wavelet_spd_transforms = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
-				self.wavelet_spd_transforms[band] = nn.Sequential(SPDTransform(self.encoded_out, self.encoded_out, self.device),
-																BatchTraceNormalization(self.device),
+				self.wavelet_spd_transforms[band] = nn.Sequential(SPDTransform(self.encoded_out, int(1.5 * self.encoded_out), self.device),
 																self.ract,
-																SPDTransform(self.encoded_out, self.encoded_out, self.device))
+																SPDTransform(int(1.5 *self.encoded_out), self.encoded_out, self.device))
 		self.wavelet_spd_transforms = nn.ParameterDict(self.wavelet_spd_transforms).to(self.device)
 
 
@@ -117,20 +115,18 @@ class MENDRWaveletContextualizer(nn.Module):
 			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
-			output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
+			res_output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7)), "Attention Manifold"
-			'''
 			# Skip Connection
 			epoched_shape = shape
-			og_output_shape = output.shape
-			output = output.view(wavelet_manifold_output[band].shape) + wavelet_manifold_output[band]
-			output = output.view(og_output_shape)
-			'''
+			og_output_shape = res_output.shape
+			wavelet_manifold_output[band] += res_output.view(wavelet_manifold_output[band].shape)
+			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(og_output_shape)
+			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
-			output = self.trace_normalization(output)
-			wavelet_manifold_output[band] = self.ract(output)
-			wavelet_manifold_output[band] = self.wavelet_spd_transforms[band](output)
-
+			# Another skip connection
+			wavelet_manifold_output[band] += self.wavelet_spd_transforms[band](wavelet_manifold_output[band])
+			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
 		return wavelet_manifold_output, shape
 
 	def _batch_LogEuclideanMean(self, x, band):
@@ -141,21 +137,23 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, encoded_out, ff_dim=25):
+	def __init__(self, device, encoded_out):
 		super().__init__()
 		self.device = device
 		self.encoded_out = encoded_out
-		self.ff_dim = ff_dim
 
-		self.combined_attention = AttentionManifold(self.encoded_out, self.ff_dim, self.device)
-		self.combined_spd_transform1 = nn.Sequential(SPDTransform(self.ff_dim, self.ff_dim, self.device), BatchTraceNormalization(self.device))
-		self.combined_spd_transform2 = SPDTransform(self.ff_dim, self.encoded_out, self.device)
+		self.combined_attention = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
 		self.ract = SPDRectified()
+		self.combined_spd_transform = nn.Sequential(SPDTransform(self.encoded_out, int(1.5*self.encoded_out), self.device),
+													self.ract,
+													SPDTransform(int(1.5*self.encoded_out), self.encoded_out, self.device))
+
+		self.trace_normalization = BatchTraceNormalization(self.device)
 
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
-		self.mask = torch.from_numpy(np.random.rand(encoded_out, encoded_out))
+		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out))
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask_ratio=0.0):
@@ -183,13 +181,14 @@ class MENDRCombinedContextualizer(nn.Module):
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
 		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+		combined_manifold_output_res, shape = self.combined_attention(combined_manifold_output)
 
-		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
-		combined_manifold_output = self.ract(combined_manifold_output)
+		# Add and norm
+		combined_manifold_output = combined_manifold_output.view(combined_manifold_output_res.shape) + combined_manifold_output_res
+		combined_manifold_output = self.trace_normalization(combined_manifold_output)
 
-		combined_manifold_output = self.combined_spd_transform1(combined_manifold_output)
-		combined_manifold_output = self.ract(combined_manifold_output)
-		combined_manifold_output = self.combined_spd_transform2(combined_manifold_output)
+		# Skip Connection
+		combined_manifold_output += self.combined_spd_transform(combined_manifold_output) # Just add, no norm
 
 		return combined_manifold_output, mask_idxes
 

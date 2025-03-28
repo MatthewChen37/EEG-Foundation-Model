@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from .MENDRCommon import PositionalEncoding, _make_mask_idxes
+from .MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization
 
 '''
 BENDR-style Contextualizer using mATT module 
@@ -48,9 +48,13 @@ class MENDRContextualizer(nn.Module):
 		self.encoded_out = encoded_out
 
 		self.attention = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
-		self.spd_transform1 = SPDTransform(self.encoded_out, self.encoded_out, self.device)
-		self.spd_transform2 = SPDTransform(self.encoded_out, self.encoded_out, self.device)
 		self.ract = SPDRectified()
+		self.spd_transform1 = SPDTransform(self.encoded_out, int(1.5*self.encoded_out), self.device)
+		self.spd_transform2 = SPDTransform(int(1.5*self.encoded_out), self.encoded_out, self.device)
+
+		self.spd_transform = nn.Sequential(self.spd_transform1, self.ract, self.spd_transform2)
+
+		self.trace_normalization = BatchTraceNormalization(self.device)
 
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
@@ -72,10 +76,12 @@ class MENDRContextualizer(nn.Module):
 				for masked_epoch_idx in masked_patch_idxes:
 					x[batch_idx, masked_epoch_idx, :, :] = spd_mask
 
-		x, shape = self.attention(x)
-		x = self.spd_transform1(x)
-		x = self.ract(x)
-		x = self.spd_transform2(x)
+		res_x, shape = self.attention(x)
+		# Add and norm
+		x = res_x + x.view(res_x.shape)
+		x = self.trace_normalization(x)
+
+		x += self.spd_transform(x) # Just add, no norm
 		x = x.reshape(shape[0], shape[1], self.encoded_out, self.encoded_out)
 		return x, mask_idxes
 	

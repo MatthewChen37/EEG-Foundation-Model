@@ -24,7 +24,7 @@ BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
 def random_spd_batch(batch_size, n):
     return torch.tensor(np.array([
         random_spd_matrix(n) for i in range(batch_size)
-    ]))
+    ])).float()
 
 def random_spd_matrix(n):
     A = np.random.rand(n, n)
