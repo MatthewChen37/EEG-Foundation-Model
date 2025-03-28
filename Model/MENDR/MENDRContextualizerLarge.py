@@ -29,7 +29,7 @@ class MENDRContextualizerLarge(nn.Module):
 		}
 		self.encoded_out = encoded_out
 
-		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=18)
+		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=37)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
 	def forward(self, x, batch_size, patch_num):
@@ -141,7 +141,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, encoded_out, ff_dim=19):
+	def __init__(self, device, encoded_out, ff_dim=25):
 		super().__init__()
 		self.device = device
 		self.encoded_out = encoded_out

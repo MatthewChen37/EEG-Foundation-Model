@@ -88,9 +88,13 @@ class Eigh(torch.autograd.Function):
 		eival, eivec = torch.linalg.eigh(A)
 		self.save_for_backward(eival, eivec)
 		return eival, eivec
-	
+
+	'''
+	This does not calculate the precise gradient but an approximated gradient that 
+	can have errors of at least 0.5 per entry in the gradient
+	'''
 	@staticmethod
-	def backward(self, grad_eival, grad_eivec, debug_mode=True):
+	def backward(self, grad_eival, grad_eivec, debug_mode=False):
 		eival, eivec = self.saved_tensors
 		min_threshold = torch.finfo(eival.dtype).eps ** 0.6
 		eivect = eivec.transpose(-2, -1).conj()
