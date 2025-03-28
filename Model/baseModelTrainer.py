@@ -265,16 +265,7 @@ class BaseModelTrainer(object):
         if self.loaded_from_ckpt == False:
             self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
-            epoch_metrics = {
-                'total_epoch_training_loss': 0,
-                'total_epoch_combined_training_loss': 0,
-                'total_epoch_wavelet_training_loss': 0,
-                'total_epoch_reconstruction_training_loss': 0,
-                'total_epoch_validation_loss': 0,
-                'total_epoch_combined_validation_loss': 0,
-                'total_epoch_wavelet_validation_loss': 0,
-                'total_epoch_reconstruction_validation_loss': 0,
-            }
+            epoch_metrics = {}
             self.epoch = epoch
 
             ''' TRAINING '''
@@ -284,13 +275,9 @@ class BaseModelTrainer(object):
             for iteration in train_pbar:
                 input_batch = self._get_batch(train_data_iterator)
                 train_metrics = self.train_step(input_batch)
-                epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
-                epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Riemannian Loss']
-                epoch_metrics['total_epoch_wavelet_training_loss'] += train_metrics['Wavelet Loss']
-                epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
-
+                epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
                 # Logging
@@ -303,21 +290,15 @@ class BaseModelTrainer(object):
             if validation_dataloader != None:
                 self.train(False)
                 pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
-
-                val_metrics = self.evaluate(validation_dataloader, **loader_kwargs)
+                val_data_iterator = iter(validation_dataloader)
                 for iteration in pbar:
                     input_batch = self._get_batch(val_data_iterator)
                     val_metrics = self.evaluate_step(input_batch, iteration)
-                    epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
-                    epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Riemannian Loss']
-                    epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
-                    epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
+                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                     pbar.set_postfix(val_metrics)
-                    mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
 
-                self._retain_best(val_metrics)
-                mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
-                self.standard_logging(val_metrics, "End of Epoch")
+                self._retain_best(epoch_metrics)
+                self.standard_logging(epoch_metrics, "End of Epoch")
 
                 ''' SAVE '''
                 self.logger.logEncoderParams(self.encoder, step=epoch)
@@ -326,7 +307,7 @@ class BaseModelTrainer(object):
 
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
-            print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
+            print("Epoch: ", epoch, "Total Training Riemannian Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Riemannian Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
             mlflow.log_metrics(epoch_metrics, step=epoch)
 
         if self.ckpt_dir != None:
@@ -334,3 +315,12 @@ class BaseModelTrainer(object):
 
         mlflow.end_run()
         self.logger.closeWriter()
+
+
+    def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
+        for metric in metric_dict and metric != 'lr':
+            if metric not in aggregated_metrics:
+                aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+            else:
+                aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+        return aggregated_metrics
