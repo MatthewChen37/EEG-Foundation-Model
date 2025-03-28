@@ -124,9 +124,10 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(og_output_shape)
 			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
+
 			# Another skip connection
-			wavelet_manifold_output[band] += self.wavelet_spd_transforms[band](wavelet_manifold_output[band].clone())
-			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
+			wavelet_manifold_output[band] += self.wavelet_spd_transforms[band](wavelet_manifold_output[band].clone()) # Just add, no norm
+
 		return wavelet_manifold_output, shape
 
 	def _batch_LogEuclideanMean(self, x, band):
