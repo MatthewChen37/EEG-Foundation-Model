@@ -420,7 +420,6 @@ def testMENDRTrainerWithTiny():
         random_state=42
     )
 
-
     mendr = MENDR_model(device, contextualizer_size="TINY")
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())

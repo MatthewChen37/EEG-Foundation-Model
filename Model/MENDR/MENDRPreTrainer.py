@@ -29,7 +29,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.pref_vector = None
-		self.aggregator = UPGrad(pref_vector) # TODO: include pref_vector
+		self.aggregator = UPGrad(self.pref_vector) # TODO: include pref_vector
 
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, aggregator=self.aggregator, lr=config.learning_rate,
