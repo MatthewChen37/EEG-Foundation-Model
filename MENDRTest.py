@@ -286,7 +286,7 @@ def testMENDRLargeCombinedContextualizerMasking():
             for batch_mask_idx in batch_mask_idxes:
                 assert not torch.equal(true_LEM[batch_idx, batch_mask_idx, :, :], combined_manifold_output[batch_idx, batch_mask_idx, :, :])
 
-def testMENDRTrainerLOOLoss():
+def testMENDRPreTrainerLOOLoss():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
@@ -321,7 +321,7 @@ def testMENDRTrainerLOOLoss():
     assert loss > 0, f"Loss is not greater than 0: {loss}"
 
 
-def testMENDRTrainerMAEReconLoss():
+def testMENDRPreTrainerMAEReconLoss():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
@@ -363,7 +363,7 @@ def testMENDRTrainerMAEReconLoss():
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
-def testMENDRTrainerTinyMAEReconLoss():
+def testMENDRPreTrainerTinyMAEReconLoss():
     args = SimpleNamespace(
         encoder_grad_frac = 0.5,
         learning_rate = 0.001,
@@ -404,7 +404,7 @@ def testMENDRTrainerTinyMAEReconLoss():
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
         assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
-def testMENDRTrainerWithTiny():
+def testMENDRPreTrainerWithTiny():
     args = SimpleNamespace(
         encoder_grad_frac = 0.5,
         learning_rate = 0.001,
@@ -426,10 +426,7 @@ def testMENDRTrainerWithTiny():
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
 
-
-
-
-def testMENDRTrainerNoValidation():
+def testMENDRPreTrainerNoValidation():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
@@ -521,7 +518,7 @@ def testMENDRParameters():
     encoder.apply(check_sanity)
     contextualizer.apply(check_sanity)
 
-def testMENDRTrainerWithValidation():
+def testMENDRPreTrainerWithValidation():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
@@ -554,7 +551,7 @@ def testMENDRTrainerWithValidation():
     encoder.apply(check_sanity)
     contextualizer.apply(check_sanity)
 
-def testMENDRLoadFromCheckpoint():
+def testMENDRPreTrainerLoadFromCheckpoint():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
     learning_rate = 0.001,
@@ -624,35 +621,35 @@ if __name__ == "__main__":
     testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
-    print("Testing trainer LOO contrastive loss...")
-    testMENDRTrainerLOOLoss()
-    print("Trainer LOO contrastive loss test passed! ")
+    print("Testing pretrainer LOO contrastive loss...")
+    testMENDRPreTrainerLOOLoss()
+    print("PreTrainer LOO contrastive loss test passed! ")
 
-    print("Testing trainer MAE Recon loss...")
-    testMENDRTrainerMAEReconLoss()
-    print("Trainer MAE Recon loss test passed! ")
+    print("Testing pretrainer MAE Recon loss...")
+    testMENDRPreTrainerMAEReconLoss()
+    print("PreTrainer MAE Recon loss test passed! ")
 
-    print("Testing trainer Tiny MAE Recon loss...")
-    testMENDRTrainerTinyMAEReconLoss()
-    print("Trainer Tiny MAE Recon loss test passed! ")
+    print("Testing pretrainer Tiny MAE Recon loss...")
+    testMENDRPreTrainerTinyMAEReconLoss()
+    print("PreTrainer Tiny MAE Recon loss test passed! ")
 
-    print("Testing trainer with tiny contextualizer...")
-    #testMENDRTrainerWithTiny()
-    print("Trainer with tiny contextualizer test passed!")
+    print("Testing pretrainer with tiny contextualizer...")
+    #testMENDRPreTrainerWithTiny()
+    print("PreTrainer with tiny contextualizer test passed!")
 
-    print("Testing trainer fit without validation...")
-    #testMENDRTrainerNoValidation()
-    print("Trainer fit without validation test passed!")
+    print("Testing pretrainer fit without validation...")
+    #testMENDRPreTrainerNoValidation()
+    print("PreTrainer fit without validation test passed!")
 
     print("Testing MENDR Parameters...")
     #testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
-    print("Testing trainer fit with validation...")
-    #testMENDRTrainerWithValidation()
-    print("Trainer fit with validation test passed!")
+    print("Testing pretrainer fit with validation...")
+    #testMENDRPreTrainerWithValidation()
+    print("PreTrainer fit with validation test passed!")
 
-    print("Testing trainer load from checkpoint...")
-    #testMENDRLoadFromCheckpoint()
-    print("Trainer load from checkpoint test passed!")
+    print("Testing pretrainer load from checkpoint...")
+    #testMENDRPreTrainerLoadFromCheckpoint()
+    print("PreTrainer load from checkpoint test passed!")
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
