@@ -59,9 +59,7 @@ class BaseModelTrainer(object):
         self.lr = lr
         self.weight_decay = l2_weight_decay
         self.ckpt_dir = ckpt_dir
-        self.best_metric = float("Inf")
         self.loaded_from_ckpt = False
-
 
     def set_optimizer(self, optimizer):
         # assert isinstance(optimizer, torch.optim.Optimizer)
@@ -113,10 +111,24 @@ class BaseModelTrainer(object):
             yield from self.__dict__[member].parameters()
             #print(f"{member}: {sum(p.numel() for p in self.__dict__[member].parameters() if p.requires_grad)}")
 
-
     def forward(self, data):
         raise NotImplementedError
     
+    def backward(self, encodings, losses):
+        '''
+        Calculate gradients and update parameters
+
+        Parameters
+        ----------
+        encodings : list
+                    List of encoding matrices
+                    Each encoding matrix is a tensor of shape [Batch, Patches, Channels, Time Steps]
+        losses : list
+                 List of loss tensors
+                 Each loss tensor is a tensor of shape [Batch, Patches, Channels, Time Steps]
+        '''
+        raise NotImplementedError
+
     def calculate_metrics(self, inputs, outputs):
         """
         Given the inputs to and outputs from underlying modules, calculate the metrics.
@@ -128,20 +140,6 @@ class BaseModelTrainer(object):
         """
         raise NotImplementedError
 
-    def backward(self, loss):
-        self.optimizer.zero_grad()
-
-        # Sanity checks -- although computationally inefficient neccessary for the complexity of this model/loss func
-        assert loss.item() != 0, f"Loss is 0: {loss}"
-        loss.backward()
-        # Clamp temperature to non-negative values
-        with torch.no_grad():
-            self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
-
-        # Gradient Clipping
-        nn.utils.clip_grad_norm_(self.parameters(), 1e9, error_if_nonfinite=True)
-
-        
     def train(self, mode=True):
         self._training = mode
         for member in self._trainables:
@@ -150,51 +148,25 @@ class BaseModelTrainer(object):
                 member.freeze_features(unfreeze=mode)
 
     def train_step(self, inputs):
-        self.train(True)
-        outputs = self.forward(inputs)
-
-        encoder_output = outputs['encoder_output']
-        #combined_r2e_output = outputs['combined_r2e_output']
-        #combined_manifold_output = outputs['combined_manifold_output']
-        wavelet_manifold_output = outputs['wavelet_manifold_output']
-        riemannian_loss = outputs['riemannian_loss']
-        wavelet_loss = outputs['wavelet_loss']
-        wavelet_acc = outputs['wavelet_acc']
-        recon_loss, loss_dict = self.reconstruction_loss(inputs, encoder_output)
-        total_loss = recon_loss +  riemannian_loss + wavelet_loss
-
-        
-        self.backward(total_loss)
-        self.optimizer.step()
-        train_metrics = self.calculate_metrics(total_loss.item(), riemannian_loss.item(), wavelet_loss.item(), wavelet_acc, recon_loss.item())
-        train_metrics.setdefault('loss', total_loss.item())
-        train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
-        for band, loss in loss_dict.items():
-            train_metrics[f'{band} Loss'] = loss
-        return train_metrics
-
-    def evaluate(self, dataset, **loader_kwargs):
-        """
-        Calculate and return metrics for a dataset
+        ''' 
+        Calculate gradients and update parameters
 
         Parameters
         ----------
-        dataset: EEGDataset
-                 The dataset that will be used for evaluation, if not a DataLoader, one will be constructed
-        loader_kwargs: dict
-                       Args that will be passed to the dataloader, but `shuffle` and `drop_last` will be both be
-                       forced to `False`
-
+        inputs : dict
+                 Dictionary of inputs to the model
+                 Keys are the bands of the input data
+                 Values are the input data 
+                 Shapes are [Batch, Patches, Channels, Time Steps]
+        
         Returns
         -------
-        metrics : OrderedDict
-                Metric scores for the entire
-        """
-        self.train(False)
-        eval_metrics = self.predict(dataset, **loader_kwargs)
-        return eval_metrics
-
-    def predict(self, dataset, **loader_kwargs):
+        train_metrics : dict
+                        Dictionary of metrics to be recorded.
+        '''
+        raise NotImplementedError
+        
+    def evaluate_step(self, inputs):
         """
         Determine the outputs for all loaded data from the dataset. This is right now only used in validation (when pretraining is implemented only)
 
@@ -213,46 +185,8 @@ class BaseModelTrainer(object):
         outputs : Tensor
                   The outputs from each run of :function:`forward`
         """
-        self.train(False)
-        dataset = self._make_dataloader(dataset, **loader_kwargs)
-
-        pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
-        data_iterator = iter(dataset)
-
-        combined_loss_agg = 0
-        wavelet_loss_agg = 0
-        recon_loss_agg = 0
-        combined_acc_agg = 0
-        wavelet_acc_agg = 0
-        with torch.no_grad():
-            for idx, iteration in enumerate(pbar):
-                input_batch = self._get_batch(data_iterator)
-                outputs = self.forward(input_batch)
-
-                encoder_output = outputs['encoder_output']
-                combined_manifold_output = outputs['combined_manifold_output']
-                combined_manifold_output_masked = outputs['combined_manifold_output_masked']
-                wavelet_manifold_output = outputs['wavelet_manifold_output']
-                combined_loss_agg +=  outputs['riemannian_loss'] 
-                wavelet_loss_agg += outputs['wavelet_loss']
-                wavelet_acc_agg += outputs['wavelet_acc']
-
-                if idx == 0: # Log only the first 16 of the first batch in the validation set
-                    wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, input_batch['subject_name'], max_figs=16)
-                    for band, wavelet_fig in wavelet_figs.items():
-                        mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
-                        plt.close(wavelet_fig)
-                    mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
-                    plt.close(combined_fig)
-
-                recon_loss, loss_dict = self.reconstruction_loss(input_batch, encoder_output)
-                recon_loss_agg += recon_loss
-
-            total_loss_agg = combined_loss_agg + wavelet_loss_agg + recon_loss_agg
-            val_metrics = self.calculate_metrics(total_loss_agg.item(), combined_loss_agg.item(), wavelet_loss_agg, wavelet_acc_agg / len(pbar), recon_loss_agg.item())
-            val_metrics.setdefault('loss', total_loss_agg.item())
-            return val_metrics
-
+        raise NotImplementedError
+        
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
         if start_message.rstrip()[-1] != '|':
@@ -266,49 +200,37 @@ class BaseModelTrainer(object):
                 start_message += " {}: {:.3f} |".format(m, metrics[m])
         tqdm.tqdm.write(start_message)
 
-    def save_best(self):
+    def save_best(self, epoch_ckpt_dir):
         """
         Create a snapshot of what is being currently trained for re-loading with the load_best() method.
-
-        Returns
-        -------
-        best : Any
-               Whatever format is needed for load_best(), will be the argument provided to it.
         """
-        assert self.ckpt_dir != None, "Checkpoint Directory is none."
-        Path(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}').mkdir(parents=True, exist_ok=True)
-        run_save_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
+        assert epoch_ckpt_dir != None, "Checkpoint Directory is none."
+        Path(epoch_ckpt_dir).mkdir(parents=True, exist_ok=True)
         for trainable_member in self._trainables:
-            torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(run_save_dir, f'{trainable_member}_weights.pth'))
+            torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
 
-    def load_best(self):
+    def load_best(self, epoch_ckpt_dir):
         """
         Load the parameters as saved by save_best().
-
         """
-        ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}'
-        assert os.path.exists(ckpt_dir), "Checkpoint Directory does not exist."
-        self.load_from_ckpt(ckpt_dir)
+        assert os.path.exists(epoch_ckpt_dir), "Checkpoint Directory does not exist."
+        self.load_from_ckpt(epoch_ckpt_dir)
         
-    def load_from_ckpt(self, ckpt_path):
+    def load_from_ckpt(self, epoch_ckpt_path):
         for trainable_member in self._trainables:
-                module_weight_path = os.path.join(ckpt_path, f'{trainable_member}_weights.pth') 
+                module_weight_path = os.path.join(epoch_ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
-        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(ckpt_path,"scheduler.pth")))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth")))
         self.loaded_from_ckpt = True
 
-    def _retain_best(self, metrics_to_check: dict):
-        if not os.path.exists(f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}') or metrics_to_check['loss'] <= self.best_metric:
-            tqdm.tqdm.write(f"Best loss: {metrics_to_check['loss']}. Retaining checkpoint...")
-            self.best_metric = metrics_to_check['loss']
-            self.save_best()
-        else:
-            tqdm.tqdm.write(f"Failed to beat best loss. Curr Loss: {metrics_to_check['loss']}. Best Loss: {self.best_metric}. Reverting to old checkpoint...")
-            self.load_best()
-
+    def _retain(self, epoch_idx : int, metrics_to_check: dict):
+        tqdm.tqdm.write(f"Riemannian Loss: {metrics_to_check['Combined Riemannian Loss']}. Retaining checkpoint...")
+        epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
+        self.save_best(epoch_ckpt_dir)
+        self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
-        torch.save(self.optimizer.scheduler.state_dict(), f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}/scheduler.pth')
+        torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
 
     @staticmethod
     def _dataloader_args(dataset, training=False, **loader_kwargs):
@@ -331,8 +253,12 @@ class BaseModelTrainer(object):
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
-        mlflow.start_run()
+        validation_dataloader = None
+        if validation_dataset != None:
+            validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
+            print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
+        mlflow.start_run()
         self.logger = MENDRLogger()
 
         signature = None
@@ -350,11 +276,13 @@ class BaseModelTrainer(object):
                 'total_epoch_reconstruction_validation_loss': 0,
             }
             self.epoch = epoch
-            pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
-            data_iterator = iter(training_dataloader)
+
+            ''' TRAINING '''
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+            train_data_iterator = iter(training_dataloader)
             self.train(True)
-            for iteration in pbar:
-                input_batch = self._get_batch(data_iterator)
+            for iteration in train_pbar:
+                input_batch = self._get_batch(train_data_iterator)
                 train_metrics = self.train_step(input_batch)
                 epoch_metrics['total_epoch_training_loss'] += train_metrics['loss']
                 epoch_metrics['total_epoch_combined_training_loss'] += train_metrics['Combined Riemannian Loss']
@@ -362,6 +290,7 @@ class BaseModelTrainer(object):
                 epoch_metrics['total_epoch_reconstruction_training_loss'] += train_metrics['Recon Loss']
                 pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
+
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
                 # Logging
@@ -370,18 +299,31 @@ class BaseModelTrainer(object):
                 self.logger.log_model_gradients(self.temp1, epoch=epoch * len(pbar) + iteration, name="Temperature")
                 self.logger.log_model_gradients(self.mask, epoch=epoch * len(pbar) + iteration, name="Mask")
 
-            if validation_dataset is not None:
-                val_metrics = self.evaluate(validation_dataset, **loader_kwargs)
-                epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
-                epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Riemannian Loss']
-                epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
-                epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
-                self.standard_logging(val_metrics, "End of Epoch")
+            ''' VALIDATION '''
+            if validation_dataloader != None:
+                self.train(False)
+                pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
+
+                val_metrics = self.evaluate(validation_dataloader, **loader_kwargs)
+                for iteration in pbar:
+                    input_batch = self._get_batch(val_data_iterator)
+                    val_metrics = self.evaluate_step(input_batch, iteration)
+                    epoch_metrics['total_epoch_validation_loss'] += val_metrics['loss']
+                    epoch_metrics['total_epoch_combined_validation_loss'] += val_metrics['Combined Riemannian Loss']
+                    epoch_metrics['total_epoch_wavelet_validation_loss'] += val_metrics['Wavelet Loss']
+                    epoch_metrics['total_epoch_reconstruction_validation_loss'] += val_metrics['Recon Loss']
+                    pbar.set_postfix(val_metrics)
+                    mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
+
                 self._retain_best(val_metrics)
                 mlflow.log_metrics(val_metrics, step=epoch * len(pbar) + iteration)
+                self.standard_logging(val_metrics, "End of Epoch")
+
+                ''' SAVE '''
                 self.logger.logEncoderParams(self.encoder, step=epoch)
                 self.logger.logContextualizerParams(self.contextualizer, step=epoch)
                 self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
+
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
             print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])

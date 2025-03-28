@@ -100,16 +100,37 @@ class MENDRPreTrainer(BaseModelTrainer):
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss'], outputs['wavelet_loss']], reconstruction_losses=recon_losses)
-			train_metrics = self.calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
+			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
 		elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss']], reconstruction_losses=recon_losses)
-			train_metrics = self.calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
+			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
-		train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
+		train_metrics["lr"] = str(self.optimizer.scheduler.get_last_lr()[0])
 		return train_metrics
 
-	def calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
+	def evaluate_step(self, inputs, step_idx):
+		self.train(False)
+		with torch.no_grad():
+			outputs = self.forward(inputs)
+			recon_losses = self.WaveletReconstructionLoss(inputs, outputs['decodings']) # Reconstruction Loss returns a dictionary
+			if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
+				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
+			elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
+				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
+			else:
+				raise ValueError("Unidentified Contextualizer Type")
+
+			if step_idx == 0: # Log only the first 44 of the first batch in the validation set
+				wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, input_batch['subject_name'], max_figs=44)
+				for band, wavelet_fig in wavelet_figs.items():
+					mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+					plt.close(wavelet_fig)
+				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+				plt.close(combined_fig)
+			return eval_metrics
+
+	def _calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
 		if wavelet_loss is None or wavelet_acc is None:
 			return {
 				'Combined Riemannian Loss': combined_riemannian_loss,
