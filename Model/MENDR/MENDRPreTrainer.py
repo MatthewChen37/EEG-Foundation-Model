@@ -12,6 +12,8 @@ from .safeSVD import SVD, svdv2
 from scipy.linalg import orth
 from .MENDRContextualizerLarge import MENDRContextualizerLarge
 from .MENDRContextualizerTiny import MENDRContextualizerTiny
+from torchjd import mtl_backward
+from torchjd.aggregation import UPGrad
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
@@ -26,10 +28,15 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
+		self.aggregator = UPGrad() # TODO: include pref_vector
 
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
-			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
+			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, aggregator=self.aggregator, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
+
+		# Clamp gradients
+		for p in self.parameters():
+			p.register_hook(lambda grad: torch.clamp(grad, -1e7, 1e7))
 
 		''' Unused
 		self.RandomGaussianNoise = RandomGaussianNoise()
@@ -52,7 +59,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 			# Combined contrastive loss
 			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 			return {
-					'encoder_output': encoder_output,
+					'encodings': encodings,
+					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
 					'riemannian_loss': riemannian_loss,
@@ -65,7 +73,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 			# Combined contrastive loss
 			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(wavelet_manifold_output, self.contrastive_loss_fn_combined)
 			return {
-					'encoder_output': encoder_output,
+					'encodings': encodings,
+					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
 					'riemannian_loss': riemannian_loss,
@@ -73,19 +82,45 @@ class MENDRPreTrainer(BaseModelTrainer):
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
 
-	
-	def reconstruction_loss(self, inputs, outputs):
-		decodings = {band: outputs[1] for band, outputs in outputs.items()}
-		return WaveletReconstructionLoss(inputs, decodings)
-				    
-	def calculate_metrics(self, total_loss, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
-		return {
-			'Total Loss': total_loss,
-			'Combined Riemannian Loss': combined_riemannian_loss,
-			'Wavelet Loss': wavelet_loss,
-			'Wavelet Acc': wavelet_acc,
-			'Recon Loss': recon_loss,
-		}
+	def backward(self, shared_features, losses):
+		self.optimizer.zero_grad()
+		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator)
+		# Clamp temperature to non-negative values
+		with torch.no_grad():
+			self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
+
+	def train_step(self, inputs):
+		self.train(True)
+		outputs = self.forward(inputs)
+		recon_losses = self.WaveletReconstructionLoss(inputs, outputs['decodings']) # Reconstruction Loss returns a dictionary
+		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
+		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
+			self.backward(shared_features=shared_features, losses=recon_losses.extend(outputs['riemannian_loss'], outputs['wavelet_loss']))
+			train_metrics = self.calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
+		elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
+			self.backward(shared_features=shared_features, losses=recon_losses.extend(outputs['riemannian_loss']))
+			train_metrics = self.calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
+		else:
+			raise ValueError("Unidentified Contextualizer Type")
+		train_metrics["LR"] = str(self.optimizer.scheduler.get_last_lr()[0])
+		for band, loss in loss_dict.items():
+			train_metrics[f'{band} Loss'] = loss
+		return train_metrics
+
+	def calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
+		if wavelet_loss is None or wavelet_acc is None:
+			return {
+				'Combined Riemannian Loss': combined_riemannian_loss,
+				'Recon Loss': recon_loss,
+			}
+
+		else:
+			return {
+				'Combined Riemannian Loss': combined_riemannian_loss,
+				'Wavelet Loss': wavelet_loss,
+				'Wavelet Acc': wavelet_acc,
+				'Recon Loss': recon_loss,
+			}
 
 	# Useful for debugging, only called on assertion error
 	def _findNonSymmetry(self, A):
