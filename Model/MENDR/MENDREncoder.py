@@ -33,34 +33,37 @@ class WaveletEncoderDecoder(nn.Module):
 
         #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
         self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=1, concat=False).to(self.device)
-        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
+        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1)).to(self.device)
+        self.gnn_lin2 = nn.Sequential(self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
         self.layer_norm1 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
         self.layer_norm2 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
+        self.layer_norm3 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
 
         self.L_out_2 = 2 * self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
         self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
-        self.patch_embedder2_lin2 = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
-        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up1 = nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 4, kernel_size=1, stride=self.stride, groups=1).to(self.device)
-        self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up2 = nn.ConvTranspose1d(in_channels=encoded_h * 4, out_channels=encoded_h * 2, kernel_size=1, stride=1, groups=19).to(self.device)
-        self.decode_L_out = (self.decode_L_out - 1) * (1) - 2 * 0 + 1 * (1 - 1) + 0 + 1
-        self.up3 = nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=1, stride=1, groups=19).to(self.device)
-        self.up4 = nn.Sequential(self.act, nn.Linear(self.decode_L_out, self.seq_len)).to(self.device)
+        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (2 - 1) + 0 + 1
+        self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
+        self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
+        self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 4, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
+        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (4 - 1)
+        self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
+        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 4, out_channels=19, kernel_size=4, stride=self.stride, groups=1).to(self.device), self.act)
+        self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
         patch_embedder_lin_count = sum(p.numel() for p in self.patch_embedder_lin.parameters() if p.requires_grad)
         patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
-        patch_embedder2_lin2_count = sum(p.numel() for p in self.patch_embedder2_lin2.parameters() if p.requires_grad)
         gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
         gnn_lin = sum(p.numel() for p in self.gnn_lin1.parameters() if p.requires_grad)
-        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + patch_embedder2_lin2_count + gnn_lin
+        gnn_lin2 = sum(p.numel() for p in self.gnn_lin2.parameters() if p.requires_grad)
+
+        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin + gnn_lin2
 
     def getDecoderParamCount(self):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
@@ -98,10 +101,14 @@ class WaveletEncoderDecoder(nn.Module):
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         x = self.layer_norm2(x)
-        x = self.gnn_lin1(x)
+        x_res = self.gnn_lin1(x)
+        x_res = self.gnn_lin2(x_res)
+        x = x + x_res
+        x = self.layer_norm3(x)
+
         x = self.patch_embedder2(x)
-        x = self.patch_embedder2_lin(x)
-        x = self.patch_embedder2_lin2(x)
+        x_res = self.patch_embedder2_lin(x)
+        x = x + x_res
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
 
         decoding = self.up1(x)
