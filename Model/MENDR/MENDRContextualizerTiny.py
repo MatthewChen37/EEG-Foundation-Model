@@ -78,10 +78,10 @@ class MENDRContextualizer(nn.Module):
 
 		res_x, shape = self.attention(x)
 		# Add and norm
-		x = res_x + x.view(res_x.shape)
+		x = res_x + x.clone().view(res_x.shape)
 		x = self.trace_normalization(x)
 
-		x += self.spd_transform(x) # Just add, no norm
+		x += self.spd_transform(x.clone()) # Just add, no norm
 		x = x.reshape(shape[0], shape[1], self.encoded_out, self.encoded_out)
 		return x, mask_idxes
 	
