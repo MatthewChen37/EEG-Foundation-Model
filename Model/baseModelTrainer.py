@@ -297,25 +297,24 @@ class BaseModelTrainer(object):
                     epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                     pbar.set_postfix(val_metrics)
 
+                
+                ''' SAVE '''
                 self._retain_best(epoch_metrics)
                 self.standard_logging(epoch_metrics, "End of Epoch")
-
-                ''' SAVE '''
                 self.logger.logEncoderParams(self.encoder, step=epoch)
                 self.logger.logContextualizerParams(self.contextualizer, step=epoch)
                 self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
+                mlflow.log_metrics(epoch_metrics, step=epoch)
+                print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
 
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
-            print("Epoch: ", epoch, "Total Training Riemannian Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Riemannian Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
-            mlflow.log_metrics(epoch_metrics, step=epoch)
 
         if self.ckpt_dir != None:
-            print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}")
+            print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
 
         mlflow.end_run()
         self.logger.closeWriter()
-
 
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
         for metric in metric_dict and metric != 'lr':
