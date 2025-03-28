@@ -13,19 +13,17 @@ class PositionalEncoding(nn.Module):
 		self.device = device
 
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
-		conv = nn.Conv2d(self.len, self.len, kernel_size=(3, self.encoded_h), padding=(1, self.encoded_h // 2))
+		conv = nn.Conv2d(self.len, 1, kernel_size=(3, self.encoded_h), stride=(1, 1), padding=(1, self.encoded_h // 2))
 		nn.init.normal_(conv.weight, mean=0, std=1)
 		nn.init.constant_(conv.bias, 0)
 		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
-		self.conv = nn.Sequential(conv, nn.GELU(), nn.Dropout(p=dropout)).to(self.device)
+		self.act = nn.GELU()
+		self.conv = nn.Sequential(conv, self.act, nn.Dropout(p=dropout)).to(self.device)
 		self.W_out = self.encoded_h + 2 * (self.encoded_h // 2) - 1 * (self.encoded_h - 1) - 1
 		self.W_out = math.floor((self.W_out / 1) + 1)
 
-
-		self.conv_adj = None
-		if encoded_h != self.W_out: # Non centerable convolution, similar to how BENDR handles it
-			print(f"Modifying positional encoder to be centerable by adding an additional convolution layer {self.W_out} -> {self.encoded_h}")
-			self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=1).to(self.device)
+		self.conv_lin = nn.Linear(self.W_out, self.encoded_h).to(self.device)
+		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
 
 	def forward(self, x):
 		"""
@@ -35,13 +33,13 @@ class PositionalEncoding(nn.Module):
 		x = x.permute(0, 3, 1, 2)
 		# x is now [Batch, #time_step, #patch, encoded_h]
 		positional_encoding = self.conv(x)
-		if self.conv_adj:
-			# Positional Encoding is now [Batch, encoded_h, #time_step, #patch]
-			positional_encoding = positional_encoding.permute(0, 3, 1, 2)
-			positional_encoding = self.conv_adj(positional_encoding)
-			# Positional encoding is now [Batch, #time_step, #patch, encoded_h]
-			positional_encoding = positional_encoding.permute(0, 2, 3, 1)
-		x = x + positional_encoding
+		positional_encoding = self.act(positional_encoding)
+		# Positional Encoding is now [Batch, 1, #patch, W_out]
+		positional_encoding = self.conv_lin(positional_encoding)
+		# Positional encoding is now [Batch, 1, #patch, encoded_h]
+		# Positional encoding is broadcast against x:
+		# [Batch, #time_step, #patch, encoded_h] + [Batch, 1, #patch, encoded_h] = [Batch, #time_step, #patch, encoded_h]
+		x = x + positional_encoding 
 		# x is now back to [Batch, #patch, encoded_h, #time_step]
 		x = x.permute(0, 2, 3, 1)
 		return x
@@ -74,8 +72,9 @@ def _make_mask_idxes(batch_size, num_epochs, mask_ratio):
 
 if __name__ == "__main__":
 	# Test Positional Encoding
-	pe = PositionalEncoding(38, 40)
-	x = torch.randn(2, 11, 38, 40)
+	pe = PositionalEncoding("cpu", 114, 37)
+	print(f"Positional Encoding Test Parameters: {sum(p.numel() for p in pe.parameters() if p.requires_grad)}")
+	x = torch.randn(4, 11, 114, 37)
 	x = pe(x)
-	assert x.shape == torch.Size([2, 11, 38, 40]), f"Positional Encoding Test Failed: {x.shape}"
+	assert x.shape == torch.Size([4, 11, 114, 37]), f"Positional Encoding Test Failed: {x.shape}"
 	print("Positional Encoding Test Passed")
