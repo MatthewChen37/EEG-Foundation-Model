@@ -4,59 +4,63 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, subject_names, max_figs=16):
+def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, subject_names, num_patches=11, num_rows=4, num_cols=11):
     B, N, N = combined_manifold_output.shape
-    MAX_FIGS = max_figs
-    NUM_FIGS_PER_ROW = 4
-    num_cols = MAX_FIGS // NUM_FIGS_PER_ROW # Hopefully MAX_FIGS = NUM_FIGS_PER_ROW ** 2
-
+    assert B % num_patches == 0, f"Batch Size {B} is not divisible by {num_patches}"
+    print(f"B: {B} N: {N} num_patches: {num_patches} num_rows: {num_rows} num_cols: {num_cols}")
     wavelet_figs = dict()
     # Wavelet Manifold Embeddings
     for band, wavelet_batch in wavelet_manifold_output.items():
-        wavelet_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
-        _plotBatchWavelet(wavelet_fig, NUM_FIGS_PER_ROW, num_cols, wavelet_batch, subject_names)
+        wavelet_fig, wavelet_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
+
+        _plotBatchWavelet(wavelet_axs, num_rows, num_cols,
+                        wavelet_batch.clone().reshape(B // num_patches,
+                        num_patches, N, N)[:len(subject_names)], 
+                        subject_names)
         wavelet_fig.suptitle(f"{band} SPD Embeddings")
+        wavelet_fig.tight_layout()
         wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
-    combined_fig = plt.figure(figsize=(MAX_FIGS, MAX_FIGS))  # Square figure
-    _plotBatchCombined(combined_fig, NUM_FIGS_PER_ROW, num_cols, combined_manifold_output, combined_manifold_output_masked, subject_names)
+    combined_fig, combined_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
+    _plotBatchCombined(combined_axs, num_rows, num_cols,
+                      combined_manifold_output.clone().reshape(B // num_patches, num_patches, N, N)[:len(subject_names)],
+                      combined_manifold_output_masked.clone().reshape(B // num_patches, num_patches, N, N)[:len(subject_names)],
+                      subject_names)
+    handles, labels = combined_axs[0, 0].get_legend_handles_labels()
+    combined_fig.legend(handles, labels, loc='upper left')
     combined_fig.suptitle("Combined SPD Embeddings")
-
+    combined_fig.tight_layout()
     return wavelet_figs, combined_fig
 
 
-def _plotBatchCombined(fig, num_figs_per_row, num_cols, output, output_masked, subject_names):
+def _plotBatchCombined(axs, num_rows, num_cols, output, output_masked, subject_names):
     #print(f"Output Shape: {output.shape} Output Masked Shape: {output_masked.shape} Subject_names: {len(subject_names)}")
-    for row in range(num_figs_per_row):
+    for row in range(num_rows):
         for col in range(num_cols):
-            flattened_index = num_figs_per_row * row + col
-            output_matrix = output[flattened_index, :, :]
-            output_masked_matrix = output_masked[flattened_index, :, :]
-            ax = fig.add_subplot(num_figs_per_row, num_cols, flattened_index + 1, projection='3d')
-            ax.view_init(elev=45, azim=45, roll=45) # Always look through the view of positive octant
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_zticks([])
-            _plot_ellipsoid_3D_PCA(output_matrix, ax, color='b', label='Original', alpha=0.5)
-            _plot_ellipsoid_3D_PCA(output_masked_matrix, ax, color='r', label='Reconstruction', alpha=0.5)
-            ax.set_title(f"{flattened_index + 1} - Subject {subject_names[row]}, Epoch {col + 1}")
-            handles, labels = ax.get_legend_handles_labels()
+            output_matrix = output[row, col, :, :]
+            output_masked_matrix = output_masked[row, col, :, :]
+            #axs[row, col].view_init(elev=45, azim=45, roll=45) 
+            axs[row, col].set_xticks([])
+            axs[row, col].set_yticks([])
+            axs[row, col].set_zticks([])
+            _plot_ellipsoid_3D_PCA(output_matrix, axs[row, col], color='b', label='Original', alpha=0.5)
+            _plot_ellipsoid_3D_PCA(output_masked_matrix, axs[row, col], color='r', label='Reconstruction', alpha=0.5)
+            axs[row, col].set_title(f"Subject {subject_names[row]}, Patch {col + 1}")
+            handles, labels = axs[row, col].get_legend_handles_labels()
 
-    fig.legend(handles, labels, loc='upper left')
+    #fig.legend(handles, labels, loc='upper left')
 
-def _plotBatchWavelet(fig, num_figs_per_row, num_cols, spd_batch, subject_names):
+def _plotBatchWavelet(axs, num_rows, num_cols, spd_batch, subject_names):
     #print(f"SPD Shape: {spd_batch.shape} Subject_names: {len(subject_names)}")
-    for row in range(num_figs_per_row):
+    for row in range(num_rows):
         for col in range(num_cols):
-            flattened_index = num_figs_per_row * row + col
-            spd_matrix = spd_batch[flattened_index, :, :]
-            ax = fig.add_subplot(num_figs_per_row, num_cols, flattened_index + 1, projection='3d')
-            ax.view_init(elev=45, azim=45, roll=45) # Always look through the view of positive octant
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_zticks([])
-            _plot_ellipsoid_3D_PCA(spd_matrix, ax)
-            ax.set_title(f"{flattened_index + 1} - Subject {subject_names[row]}, Epoch {col + 1}")
+            spd_matrix = spd_batch[row, col, :, :]
+            #axs[row, col].view_init(elev=45, azim=45, roll=45) # Always look through the view of positive octant
+            axs[row, col].set_xticks([])
+            axs[row, col].set_yticks([])
+            axs[row, col].set_zticks([])
+            _plot_ellipsoid_3D_PCA(spd_matrix, axs[row, col])
+            axs[row, col].set_title(f"Subject {subject_names[row]}, Patch {col + 1}")
 
 def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original', alpha=1):
     if isinstance(spd_matrix, torch.Tensor):
