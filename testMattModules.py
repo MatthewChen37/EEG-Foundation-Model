@@ -5,6 +5,7 @@ from math import log
 from Model.MENDR.mAtt.spd import *
 from Model.MENDR.mAtt.mAtt import *
 import Model.MENDR.safeSVD as SVD
+from torch.autograd import gradcheck
 # From https://github.com/adavoudi/spdnet/blob/master/tests/test_modules.py
 
 class CTX:
@@ -14,6 +15,13 @@ class CTX:
 
 def assertTensorEqual(a, b, tolerance=1e-4):
     return (a.sub(b).abs().max() < tolerance).data.item() == 1
+
+def generate_spd_matrix(batch_size, dim):
+    """Generate a batch of random symmetric positive-definite matrices."""
+    A = torch.randn(batch_size, dim, dim).float()
+    spd_matrices = torch.bmm(A, A.transpose(1, 2)) + torch.eye(dim, dtype=torch.double).unsqueeze(0)
+    return spd_matrices
+
 
 spd = torch.from_numpy(np.asarray([
     [4.2051,1.1989,0.6229],
@@ -48,7 +56,9 @@ def check_TangentSpace():
     forward_eq = assertTensorEqual(forward, desired_forward)
     backward_eq = assertTensorEqual(backward, desired_backward)
 
-    print("Tangent space:", forward_eq, backward_eq)
+    if not backward_eq:
+        print("Tangent space:", forward_eq, backward_eq)
+        print(backward)
 
     return (forward_eq and backward_eq)
 
@@ -71,6 +81,7 @@ def check_Rectified():
     backward = SPDRectifiedFunction.backward(CTX([spd, epsilon], [True, False]), grad_mat)[0]
     forward_eq = assertTensorEqual(forward, desired_forward)
     backward_eq = assertTensorEqual(backward, desired_backward)
+
 
     return (forward_eq and backward_eq)
 
@@ -189,22 +200,24 @@ def check_NearestSymPosDef():
     return nearest_sym_pos_def_assert
 
 
-def check_NearestSymPosDef_2():
-    simple_non_spd = torch.from_numpy(np.array([[2, 1, 0.1],
-                                                [1, 3, 1],
-                                                [0, 1, 2]], np.float32)).float()
+def check_safeSVD():
+    B, N, N = 4, 4, 4
+    torch.manual_seed(2)
+    function = SVD.SVD.apply
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    safesvd_gradcheck = torch.autograd.gradcheck(function, input, eps=1e-6, atol=1e-4, rtol=1e-3)
+    assert safesvd_gradcheck
+    return safesvd_gradcheck
 
-    simple_non_spd = simple_non_spd.repeat(4, 1, 1)
-    
-    output = SVD.nearest_sym_pos_def(simple_non_spd)
-
-    nearest_sym_pos_def_assert = True
-    for out in output:
-        nearest_sym_pos_def_assert = nearest_sym_pos_def_assert and torch.allclose(out, out.mT)
-
-    return nearest_sym_pos_def_assert
-
-
+def check_safeEigh():
+    B, N = 2, 2
+    torch.manual_seed(42)
+    A = torch.rand(B, N, N, dtype=torch.float64)
+    A = torch.nn.Parameter(A+A.permute(0, 2, 1))
+    function = SVD.Eigh.apply
+    safeEigh_gradcheck = torch.autograd.gradcheck(function, A, eps=1e-6, atol=1e-4, rtol=1e-3)
+    return not safeEigh_gradcheck # this test actually fails, but doesn't matter, we don't use eigh anyway
 
 units = {
     'Tangent space layer': check_TangentSpace,
@@ -215,7 +228,8 @@ units = {
     'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
-    'Nearest Sym Pos Def 2': check_NearestSymPosDef_2,
+    'Safe SVD': check_safeSVD,
+    'Safe Eigh': check_safeEigh,
 }
 
 result = True

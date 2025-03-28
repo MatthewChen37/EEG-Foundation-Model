@@ -123,10 +123,9 @@ class SPDUnVectorize(nn.Module):
 
 
 class SPDTangentSpaceFunction(Function):
-    # This function is actually never used
     @staticmethod
     def forward(ctx, input):
-        ctx.save_for_backward(input)
+        '''
         
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
@@ -134,6 +133,15 @@ class SPDTangentSpaceFunction(Function):
             s.log_()
             output[k] = u.mm(s.diag().mm(u.t()))
 
+        return output
+        '''
+        ctx.save_for_backward(input)
+         # Perform batch eigen decomposition
+        s, u = torch.linalg.eigh(input)  # Batch eigen decomposition
+        # Take the logarithm of the eigenvalues
+        s = s.log()
+        # Reconstruct the output using batch operations
+        output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
         return output
 
     @staticmethod
@@ -169,7 +177,6 @@ class SPDTangentSpaceFunction(Function):
 
 
         return grad_input
-
 
 class SPDTangentSpace(nn.Module):
 
@@ -256,22 +263,71 @@ class SPDRectifiedFunction(Function):
         ctx.save_for_backward(input, epsilon)
 
         output = input.new(input.size(0), input.size(1), input.size(2))
+
+        # Perform batch SVD
+        u, s, _ = torch.svd(input)
+
+        # Clamp eigenvalues to be at least epsilon
+        s = torch.clamp(s, min=epsilon[0])
+
+        # Reconstruct the SPD matrices
+        output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
+
+        return output
+        '''
         for k, x in enumerate(input):
-            s, u = torch.linalg.eigh(x)
+            u, s, v = x.svd()
             s[s < epsilon[0]] = epsilon[0]
 
             output[k] = u.mm(s.diag().mm(u.t()))
         return output
+        '''
 
     @staticmethod
     def backward(ctx, grad_output):
         input, epsilon = ctx.saved_variables
         grad_input = None
-        
         if ctx.needs_input_grad[0]:
+            
+            eye = torch.eye(input.size(1), device=input.device).unsqueeze(0)  # Create a batch of identity matrices
+            grad_input = torch.zeros_like(input)
+
+            # Symmetrize grad_output
+            grad_output = symmetric(grad_output)
+
+            # Perform eigen decomposition
+            s, u = torch.linalg.eigh(input)  # Batch eigen decomposition
+
+            # Compute masks and diagonal matrices
+            max_mask = s > epsilon
+            s_max_diag = torch.where(max_mask, s, epsilon.expand_as(s)).diag_embed()
+            Q = max_mask.float().diag_embed()
+
+            # Compute dLdV and dLdS
+            dLdV = 2 * torch.bmm(grad_output, torch.bmm(u, s_max_diag))
+            dLdS = eye * torch.bmm(Q, torch.bmm(u.transpose(1, 2), torch.bmm(grad_output, u)))
+
+            # Compute P matrix
+            P = s.unsqueeze(2) - s.unsqueeze(1)
+            mask_zero = torch.abs(P) == 0
+            P = 1 / P
+            P[mask_zero] = 0
+
+            # Compute grad_input
+            grad_input = torch.bmm(
+                u,
+                torch.bmm(
+                    symmetric(P.transpose(1, 2) * torch.bmm(u.transpose(1, 2), dLdV)) + dLdS,
+                    u.transpose(1, 2)
+                )
+            )
+
+            ''' 
             eye = input.new(input.size(1))
             eye.fill_(1); eye = eye.diag()
             grad_input = input.new(input.size(0), input.size(1), input.size(2))
+            #epsilon_tensor = torch.tensor([epsilon]).repeat(input.size(0))
+            #eye.repeat(input.size(0), 1, 1)
             for k, g in enumerate(grad_output):
                 if len(g.shape) == 1:
                     continue
@@ -296,10 +352,9 @@ class SPDRectifiedFunction(Function):
                 P[mask_zero] = 0
 
                 grad_input[k] = u.mm(symmetric(P.t() * u.t().mm(dLdV))+dLdS).mm(u.t())
-            
+            '''
         return grad_input, None
-
-
+    
 class SPDRectified(nn.Module):
 
     def __init__(self, epsilon=1e-4):
