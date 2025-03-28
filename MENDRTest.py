@@ -211,26 +211,26 @@ def testContextualizerTiny():
         df.to_csv("ProfileData/TinyContextualizer.csv", float_format='%.5f')
 
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-        assert combined_manifold_output.shape == torch.Size([4, 11, 12, 12]), f"Incorrect output shape: {combined_manifold_output.shape}"
-        assert cov_matrices.shape == torch.Size([4, 11, 12, 12])
+        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
+        assert cov_matrices.shape == torch.Size([4, 11, 19, 19])
 
 def testContextualizerLarge():
     example_input = {
             'delta': torch.randn(4, 11, 19, 37).to(device).float(),
             'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 19, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 19, 37).to(device).float()
+            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
+            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
+            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
     }
 
     with torch.no_grad():
         contextualizer = MENDRContextualizerLarge(device,
             delta_encoded_h=19,
             theta_encoded_h=19,
-            alpha_encoded_h=19,
-            beta_encoded_h=19,
-            gamma_encoded_h=19,
-            high_encoded_h=19,
+            alpha_encoded_h=38,
+            beta_encoded_h=76,
+            gamma_encoded_h=114,
+            high_encoded_h=152,
         )
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=False) as prof:
             combined_manifold_output, wavelet_manifold_output, _ = contextualizer(example_input, batch_size=4, patch_num=11)
@@ -245,40 +245,40 @@ def testContextualizerLarge():
         wavelet_manifold_output_beta = wavelet_manifold_output['beta']
         wavelet_manifold_output_gamma = wavelet_manifold_output['gamma']
 
-        assert wavelet_manifold_output_delta.shape == torch.Size([4, 11, 12, 12]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
-        assert wavelet_manifold_output_theta.shape == torch.Size([4, 11, 12, 12]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
-        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 11, 12, 12]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
-        assert wavelet_manifold_output_beta.shape == torch.Size([4, 11, 12, 12]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
-        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 11, 12, 12]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
+        assert wavelet_manifold_output_delta.shape == torch.Size([4, 11, 19, 19]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
+        assert wavelet_manifold_output_theta.shape == torch.Size([4, 11, 19, 19]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
+        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 11, 19, 19]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
+        assert wavelet_manifold_output_beta.shape == torch.Size([4, 11, 19, 19]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
+        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 11, 19, 19]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
 
-        assert combined_manifold_output.shape == torch.Size([4, 11, 12, 12]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
+        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
 
 
 def testMENDRLargeCombinedContextualizerMasking():
     example_input = {
-            'delta': torch.randn(44, 12, 12).to(device).float(),
-            'theta': torch.randn(44, 12, 12).to(device).float(),
-            'alpha': torch.randn(44, 12, 12).to(device).float(),
-            'beta': torch.randn(44, 12, 12).to(device).float(),
-            'gamma': torch.randn(44, 12, 12).to(device).float()
+            'delta': torch.randn(44, 19, 19).to(device).float(),
+            'theta': torch.randn(44, 19, 19).to(device).float(),
+            'alpha': torch.randn(44, 19, 19).to(device).float(),
+            'beta': torch.randn(44, 19, 19).to(device).float(),
+            'gamma': torch.randn(44, 19, 19).to(device).float()
     }
 
     with torch.no_grad():
         contextualizer = MENDRContextualizerLarge(device,
             delta_encoded_h=19,
             theta_encoded_h=19,
-            alpha_encoded_h=19,
-            beta_encoded_h=19,
-            gamma_encoded_h=19,
-            high_encoded_h=19,
+            alpha_encoded_h=38,
+            beta_encoded_h=76,
+            gamma_encoded_h=114,
+            high_encoded_h=152,
         )
         true_LEM = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
         combined_manifold_output, mask_idxes = contextualizer.CombinedContextualizer(
             example_input, [4, 11, -1], mask_ratio=0.5)
 
-        true_LEM = true_LEM.view(4, 11, 12, 12)
-        combined_manifold_output = combined_manifold_output.view(4, 11, 12, 12)
+        true_LEM = true_LEM.view(4, 11, 19, 19)
+        combined_manifold_output = combined_manifold_output.view(4, 11, 19, 19)
 
         assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
         for batch_idx, batch_mask_idxes in enumerate(mask_idxes):
@@ -344,11 +344,11 @@ def testMENDRTrainerMAEReconLoss():
     trainer.set_optimizer(optimizer)
     with torch.autograd.detect_anomaly():
         wavelet_manifold_output = {
-            'delta': random_spd_batch(8, 38).to(device),
-            'theta': random_spd_batch(8, 38).to(device),
-            'alpha': random_spd_batch(8, 38).to(device),
-            'beta': random_spd_batch(8, 38).to(device),
-            'gamma': random_spd_batch(8, 38).to(device),
+            'delta': random_spd_batch(8, 19).to(device),
+            'theta': random_spd_batch(8, 19).to(device),
+            'alpha': random_spd_batch(8, 19).to(device),
+            'beta': random_spd_batch(8, 19).to(device),
+            'gamma': random_spd_batch(8, 19).to(device),
         }
 
         for band, batch in wavelet_manifold_output.items():
@@ -357,8 +357,8 @@ def testMENDRTrainerMAEReconLoss():
         riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
     assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
-    assert combined_manifold_output.shape == torch.Size([2, 4, 38, 38]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
-    assert combined_manifold_output_masked.shape == torch.Size([2, 4, 38, 38]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
+    assert combined_manifold_output.shape == torch.Size([2, 4, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+    assert combined_manifold_output_masked.shape == torch.Size([2, 4, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
 
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
@@ -387,19 +387,19 @@ def testMENDRTrainerTinyMAEReconLoss():
 
     with torch.autograd.detect_anomaly():
         example_input = {
-            'delta': torch.randn(4, 11, 19, 18).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 18).to(device).float(),
-            'alpha': torch.randn(4, 11, 19, 18).to(device).float(),
-            'beta': torch.randn(4, 11, 19, 18).to(device).float(),
-            'gamma': torch.randn(4, 11, 19, 18).to(device).float()
+            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
+            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
+            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
+            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
+            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
         }
 
         riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
 
         assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
-        assert combined_manifold_output.shape == torch.Size([4, 11, 38, 38]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
-        assert combined_manifold_output_masked.shape == torch.Size([4, 11, 38, 38]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
+        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
 
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
         assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"

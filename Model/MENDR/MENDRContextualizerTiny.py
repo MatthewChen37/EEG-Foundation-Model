@@ -9,7 +9,7 @@ from .MENDRCommon import PositionalEncoding, _make_mask_idxes
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, device, encoded_h, patch_len=37, encoded_out=12):
+	def __init__(self, device, encoded_h, patch_len=37, encoded_out=19):
 		super(MENDRContextualizerTiny, self).__init__()
 		self.device = device
 		self.encoded_h = encoded_h
