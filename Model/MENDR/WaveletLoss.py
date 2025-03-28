@@ -1,8 +1,7 @@
 import torch
-
 loss_fn = torch.nn.MSELoss()
 
-def WaveletReconstructionLoss(inputs, outputs):
+def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
     '''
     for band, input_data in inputs.items():
         if isinstance(input_data, torch.Tensor):
@@ -18,30 +17,54 @@ def WaveletReconstructionLoss(inputs, outputs):
     assert inputs['gamma'].shape == outputs['gamma'].shape, f"Input Shape {inputs['gamma'].shape} Output Shape {outputs['gamma'].shape}"
     '''
 
-    delta_loss = loss_fn(inputs['delta'], outputs['delta']) + fft_loss(inputs['delta'], outputs['delta']) 
-    theta_loss = loss_fn(inputs['theta'], outputs['theta'])  + fft_loss(inputs['theta'], outputs['theta'])
-    alpha_loss = loss_fn(inputs['alpha'], outputs['alpha'])  + fft_loss(inputs['alpha'], outputs['alpha'])
-    beta_loss =  loss_fn(inputs['beta'],  outputs['beta'])  + fft_loss(inputs['beta'], outputs['beta'])
-    gamma_loss = loss_fn(inputs['gamma'], outputs['gamma'])  + fft_loss(inputs['gamma'], outputs['gamma'])
+    if loss_type == 'real':
+        delta_real_loss = loss_fn(inputs['delta'], outputs['delta'])
+        theta_real_loss = loss_fn(inputs['theta'], outputs['theta']) 
+        alpha_real_loss = loss_fn(inputs['alpha'], outputs['alpha'])
+        beta_real_loss =  loss_fn(inputs['beta'],  outputs['beta'])
+        gamma_real_loss = loss_fn(inputs['gamma'], outputs['gamma'])
 
-    loss_dict = {
-        'delta': delta_loss.item(),
-        'theta': theta_loss.item(),
-        'alpha': alpha_loss.item(),
-        'beta': beta_loss.item(),
-        'gamma': gamma_loss.item(),
-    }
+        real_loss_dict = {
+            'delta_real_loss': delta_real_loss.item(),
+            'theta_real_loss': theta_real_loss.item(),
+            'alpha_real_loss': alpha_real_loss.item(),
+            'beta_real_loss': beta_real_loss.item(),
+            'gamma_real_loss': gamma_real_loss.item(),
+        }
 
-    loss = delta_loss + theta_loss + alpha_loss + beta_loss + gamma_loss
-    loss = loss.to(torch.float32)
-    return loss, loss_dict
+        return real_loss_dict
+
+    elif loss_type == 'fft':
+        delta_fft_loss = fft_loss(inputs['delta'], outputs['delta'])
+        theta_fft_loss = fft_loss(inputs['theta'], outputs['theta'])
+        alpha_fft_loss = fft_loss(inputs['alpha'], outputs['alpha'])
+        beta_fft_loss = fft_loss(inputs['beta'], outputs['beta'])
+        gamma_fft_loss = fft_loss(inputs['gamma'], outputs['gamma'])
+
+        fft_loss_dict = {
+            'delta_fft_loss': delta_fft_loss.item(),
+            'theta_fft_loss': theta_fft_loss.item(),
+            'alpha_fft_loss': alpha_fft_loss.item(),
+            'beta_fft_loss': beta_fft_loss.item(),
+            'gamma_fft_loss': gamma_fft_loss.item(),
+        }
+
+        return fft_loss_dict
+    
+    # Otherwise combine real and fft losses
+    loss_dict = real_loss_dict | fft_loss_dict # New python 3.9 syntax
+    return loss_dict
 
 def fft_loss(output, target):
-    output_fft = torch.fft.fft(output, dim=-1)
+    hanning_window = torch.hann_window(output.shape[-1]).to(device)
+    output_windowed = output.clone() * hanning_window.expand_as(output)
+    target_windowed = target.clone() * hanning_window.expand_as(target)
+
+    output_fft = torch.fft.fft(output_windowed, dim=-1)
     output_amplitude = torch.abs(output_fft)
     output_angle = torch.angle(output_fft)
 
-    target_fft = torch.fft.fft(target, dim=-1)
+    target_fft = torch.fft.fft(target_windowed, dim=-1)
     target_amplitude = torch.abs(target_fft)
     target_angle = torch.abs(target_fft)
 
