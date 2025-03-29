@@ -14,6 +14,8 @@ from .MENDRContextualizerLarge import MENDRContextualizerLarge
 from .MENDRContextualizerTiny import MENDRContextualizerTiny
 from torchjd import mtl_backward
 from torchjd.aggregation import UPGrad
+from Explainability.embeddingVisualization import plotSPDEmbedding
+from Explainability.plotReconstruction import plotReconstruction
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
@@ -122,12 +124,15 @@ class MENDRPreTrainer(BaseModelTrainer):
 				raise ValueError("Unidentified Contextualizer Type")
 
 			if step_idx == 0: # Log only the first 44 of the first batch in the validation set
-				wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, input_batch['subject_name'], max_figs=44)
+				wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], max_figs=44)
 				for band, wavelet_fig in wavelet_figs.items():
 					mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
 					plt.close(wavelet_fig)
 				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
 				plt.close(combined_fig)
+
+				fig = plotReconstruction(input_batch, outputs['decodings'], f"epoch_{self.epoch}")
+
 			return eval_metrics
 
 	def _calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
