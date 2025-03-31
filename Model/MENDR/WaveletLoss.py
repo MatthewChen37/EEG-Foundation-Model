@@ -22,15 +22,12 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
     for band, input_data in inputs.items():
         inputs_copy[band] = input_data.clone().reshape(outputs[band].shape).float()
 
-    for band, output_data in outputs.items():
-        outputs_copy[band] = output_data.clone().reshape(outputs[band].shape).float()
-
     if loss_type == 'real':
-        delta_real_loss = loss_fn(inputs_copy['delta'], outputs_copy['delta'])
-        theta_real_loss = loss_fn(inputs_copy['theta'], outputs_copy['theta'])
-        alpha_real_loss = loss_fn(inputs_copy['alpha'], outputs_copy['alpha'])
-        beta_real_loss =  loss_fn(inputs_copy['beta'],  outputs_copy['beta'])
-        gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs_copy['gamma'])
+        delta_real_loss = loss_fn(inputs_copy['delta'], outputs['delta'])
+        theta_real_loss = loss_fn(inputs_copy['theta'], outputs['theta'])
+        alpha_real_loss = loss_fn(inputs_copy['alpha'], outputs['alpha'])
+        beta_real_loss =  loss_fn(inputs_copy['beta'],  outputs['beta'])
+        gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs['gamma'])
         
         real_loss_dict = {
             'delta_real_loss': delta_real_loss,
@@ -43,11 +40,11 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
         return real_loss_dict
 
     elif loss_type == 'fft':
-        delta_fft_loss = fft_loss(inputs_copy['delta'], outputs_copy['delta'])
-        theta_fft_loss = fft_loss(inputs_copy['theta'], outputs_copy['theta'])
-        alpha_fft_loss = fft_loss(inputs_copy['alpha'], outputs_copy['alpha'])
-        beta_fft_loss = fft_loss(inputs_copy['beta'], outputs_copy['beta'])
-        gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs_copy['gamma'])
+        delta_fft_loss = fft_loss(inputs_copy['delta'], outputs['delta'])
+        theta_fft_loss = fft_loss(inputs_copy['theta'], outputs['theta'])
+        alpha_fft_loss = fft_loss(inputs_copy['alpha'], outputs['alpha'])
+        beta_fft_loss = fft_loss(inputs_copy['beta'], outputs['beta'])
+        gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs['gamma'])
 
         fft_loss_dict = {
             'delta_fft_loss': delta_fft_loss,

@@ -80,7 +80,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 			return {
 					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
-					#'encodings': encodings_reshaped, # Need both for backward
 					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
@@ -266,7 +265,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return 0.2 * loss, correct, pairs
+		return loss, correct, pairs
 
 	'''
 	Currently not being used
