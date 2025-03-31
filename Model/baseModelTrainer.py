@@ -269,27 +269,32 @@ class BaseModelTrainer(object):
             self.epoch = epoch
 
             ''' TRAINING '''
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=450, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in train_pbar:
                 input_batch = self._get_batch(train_data_iterator)
                 train_metrics = self.train_step(input_batch)
-                pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=epoch*len(pbar) + iteration)
+                train_pbar.set_postfix(train_metrics)
+                mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
                 epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
                 if self.scheduler_after_batch:
-                    self.optimizer.scheduler_step(epoch*len(pbar) + iteration)
+                    self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
                 # Logging
-                self.logger.log_model_gradients(self.encoder, epoch=epoch * len(pbar) + iteration)
-                self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(pbar) + iteration)
-                self.logger.log_model_gradients(self.temp1, epoch=epoch * len(pbar) + iteration, name="Temperature")
-                self.logger.log_model_gradients(self.mask, epoch=epoch * len(pbar) + iteration, name="Mask")
+                self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
+                self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer, epoch=epoch * len(train_pbar) + iteration)
+                if self.mendr_model.contextualizer_size.upper() == "LARGE":
+                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.temp1, epoch=epoch * len(train_pbar) + iteration, name="Temperature")
+                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
+                elif self.mendr_model.contextualizer_size.upper() == "TINY":
+                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.Contextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
+                else:
+                    raise ValueError("Unidentified Contextualizer Type")
 
             ''' VALIDATION '''
             if validation_dataloader != None:
                 self.train(False)
-                pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=250)
+                pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=400)
                 val_data_iterator = iter(validation_dataloader)
                 for iteration in pbar:
                     input_batch = self._get_batch(val_data_iterator)
@@ -317,9 +322,10 @@ class BaseModelTrainer(object):
         self.logger.closeWriter()
 
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
-        for metric in metric_dict and metric != 'lr':
-            if metric not in aggregated_metrics:
-                aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
-            else:
-                aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+        for metric in metric_dict:
+            if metric != 'lr':
+                if metric not in aggregated_metrics :
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+                else:
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
         return aggregated_metrics

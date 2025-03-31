@@ -115,7 +115,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
-		train_metrics["lr"] = str(self.optimizer.scheduler.get_last_lr()[0])
+		train_metrics["lr"] = f"{str(self.optimizer.scheduler.get_last_lr()[0]):.7f}"
+
+		for metric in train_metrics: # Don't want tensors in the metrics
+			if isinstance(train_metrics[metric], torch.Tensor):
+				train_metrics[metric] = train_metrics[metric].item()
 		return train_metrics
 
 	def evaluate_step(self, inputs, step_idx):

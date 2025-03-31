@@ -29,15 +29,15 @@ class MENDRContextualizerTiny(nn.Module):
 		# Note that each wavelet band should be the same time length
 		signal = []
 		for band in x.keys():
-			signal.append(x[band].clone())
+			signal.append(x[band])
 		signal = torch.cat(signal, dim=2).to(self.device)
 		if self.position_encoder:
-			signal = self.position_encoder(signal.clone())
-		cov_matrices = self.e2r(signal).clone()
+			signal = self.position_encoder(signal)
+		cov_matrices = self.e2r(signal)
 		batch_size = cov_matrices.shape[0]
 		patches = cov_matrices.shape[1]
 		signal_transformed = self.pre_attention_transform(self.ract(cov_matrices.clone().reshape(batch_size*patches, self.encoded_h, self.encoded_h)))
-		signal_transformed = signal_transformed.clone().reshape(batch_size, patches, self.encoded_out, self.encoded_out)
+		signal_transformed = signal_transformed.reshape(batch_size, patches, self.encoded_out, self.encoded_out)
 		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), mask_ratio)
 		return signal, signal_transformed, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge
 	
