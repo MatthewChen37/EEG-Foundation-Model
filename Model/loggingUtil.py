@@ -23,7 +23,7 @@ class MENDRLogger(object):
             grad = model.grad.cpu()
             self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
         else:
-            raise Exception("Unknown object")
+            raise Exception(f"Unknown object type: {type(model)}")
  
         
     ''' 

@@ -26,7 +26,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 	'''
 	def __init__(self, MENDR, config, **kwargs):
 		self.negatives_loo = 20
-		self.mask_ratio = 0.1
+		self.mask_ratio = 0.5
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
@@ -183,10 +183,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
 		# Masked Reconstruction loss
-		riemannian_loss = 0
-		for batch_idx, batch_mask_idxes in enumerate(mask_idxes):
-			for batch_mask_idx in batch_mask_idxes: # Only compare loss of masked parts
-				riemannian_loss += criterion(combined_manifold_output[batch_idx, batch_mask_idx, :, :], combined_manifold_output_masked[batch_idx, batch_mask_idx, :, :])
+		# Only compare loss of masked parts
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
@@ -195,10 +193,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, mask_ratio=self.mask_ratio)
 
 		# Masked Reconstruction loss
-		riemannian_loss = 0
-		for batch_idx, batch_mask_idxes in enumerate(mask_idxes):
-			for batch_mask_idx in batch_mask_idxes: # Only compare loss of masked parts
-				riemannian_loss += criterion(combined_manifold_output[batch_idx, batch_mask_idx, :, :], combined_manifold_output_masked[batch_idx, batch_mask_idx, :, :])
+		# Only compare loss of masked parts
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
@@ -332,5 +328,5 @@ class MENDRPreTrainer(BaseModelTrainer):
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
 		inner_term = tensor_log_A[:, None, ...] - tensor_log_B[None, ...]
-		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.mendr_model.temp1)
+		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
 		return output

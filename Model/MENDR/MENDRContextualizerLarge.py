@@ -16,6 +16,7 @@ class MENDRContextualizerLarge(nn.Module):
                 beta_encoded_h,
                 gamma_encoded_h,
                 high_encoded_h,
+				temp,
 				encoded_out = 19):
 		super().__init__()
 		self.device = device
@@ -157,7 +158,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
-		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out))
+		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out)).float().to(self.device)
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, og_output_shape, mask_ratio=0.0):
@@ -168,16 +169,13 @@ class MENDRCombinedContextualizer(nn.Module):
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			for band, spd_batch in x.items():
-				x[band] = spd_batch.clone().view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2])
-
+				x[band] = spd_batch.view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2])
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-				for band in x.keys():
-					x[band][mask_idxes] = spd_mask
-
 			for band in x.keys():
+				x[band][mask_idxes] = spd_mask
 				x[band] = x[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
 
 		# Log Euclidean Mean

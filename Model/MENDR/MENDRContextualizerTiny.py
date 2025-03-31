@@ -59,8 +59,8 @@ class MENDRContextualizer(nn.Module):
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
-		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out))
-		self.mask = nn.Parameter(self.mask, requires_grad=True).float().to(self.device)
+		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out)).float().to(self.device)
+		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, x, mask_ratio=0.0):
 		batch_size = x.shape[0]

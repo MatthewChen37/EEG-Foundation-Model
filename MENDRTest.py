@@ -142,11 +142,11 @@ def testEncoder():
     assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
     assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
 
-    assert encodings['delta'].shape == torch.Size([44, 38, 37]), f"Actual Shape: {encodings['delta'].shape}" 
-    assert encodings['theta'].shape == torch.Size([44, 38, 37]), f"Actual Shape: {encodings['theta'].shape}" 
-    assert encodings['alpha'].shape == torch.Size([44, 38, 37]), f"Actual Shape: {encodings['alpha'].shape}" 
-    assert encodings['beta'].shape == torch.Size([44, 38, 37]), f"Actual Shape: {encodings['beta'].shape}" 
-    assert encodings['gamma'].shape == torch.Size([44, 76, 37]), f"Actual Shape: {encodings['gamma'].shape}"
+    assert encodings['delta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['delta'].shape}" 
+    assert encodings['theta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['theta'].shape}"
+    assert encodings['alpha'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['alpha'].shape}" 
+    assert encodings['beta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['beta'].shape}" 
+    assert encodings['gamma'].shape == torch.Size([4, 11, 76, 37]), f"Actual Shape: {encodings['gamma'].shape}"
 
 def testLargeContextualizerBatchLEM():
     # Eigenvalues are 1, 3
@@ -172,6 +172,7 @@ def testLargeContextualizerBatchLEM():
         beta_encoded_h=2,
         gamma_encoded_h=2,
         high_encoded_h=2,
+        temp=10.0,
         )
 
     batch_output = contextualizer.WaveletContextualizer._batch_LogEuclideanMean(example_input, 'delta')
@@ -210,6 +211,7 @@ def testLargeContextualizerWaveletLEM():
         beta_encoded_h=2,
         gamma_encoded_h=2,
         high_encoded_h=2,
+        temp=10.0,
     )
 
     combined_output = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
@@ -255,6 +257,7 @@ def testContextualizerLarge():
             beta_encoded_h=76,
             gamma_encoded_h=114,
             high_encoded_h=152,
+            temp=10.0,
         )
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=False) as prof:
             combined_manifold_output, wavelet_manifold_output, _ = contextualizer(example_input, batch_size=4, patch_num=11)
@@ -296,6 +299,7 @@ def testMENDRLargeCombinedContextualizerMasking():
             beta_encoded_h=76,
             gamma_encoded_h=114,
             high_encoded_h=152,
+            temp=10.0,
         )
         true_LEM = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
         combined_manifold_output, mask_idxes = contextualizer.CombinedContextualizer(
@@ -305,10 +309,10 @@ def testMENDRLargeCombinedContextualizerMasking():
         combined_manifold_output = combined_manifold_output.view(4, 11, 19, 19)
 
         assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
-        for batch_idx, batch_mask_idxes in enumerate(mask_idxes):
-            assert len(batch_mask_idxes) > 0, f"For batch {batch_idx} there are no masked indicies: {batch_mask_idxes}" 
-            for batch_mask_idx in batch_mask_idxes:
-                assert not torch.equal(true_LEM[batch_idx, batch_mask_idx, :, :], combined_manifold_output[batch_idx, batch_mask_idx, :, :])
+        for batch_idx in range(4):
+            for batch_mask_idx in range(11):
+                if mask_idxes[batch_idx, batch_mask_idx]:
+                    assert not torch.allclose(true_LEM[batch_idx, batch_mask_idx], combined_manifold_output[batch_idx, batch_mask_idx])
 
 def testMENDRPreTrainerLOOLoss():
     args = SimpleNamespace(
@@ -629,43 +633,43 @@ if __name__ == "__main__":
     print("MENDR Make Mask Idxes Test Passed!")
 
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    #testLargeContextualizerBatchLEM()
+    testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    #testLargeContextualizerWaveletLEM()
+    testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
-    #testContextualizerTiny()
+    testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
     print("Testing Large Contextualizer...")
-    #testContextualizerLarge()
+    testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
     print("Testing Large Contextualizer masking...")
-    #testMENDRLargeCombinedContextualizerMasking()
+    testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
     print("Testing pretrainer LOO contrastive loss...")
-    #testMENDRPreTrainerLOOLoss()
+    testMENDRPreTrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
     print("Testing pretrainer MAE Recon loss...")
-    #testMENDRPreTrainerMAEReconLoss()
+    testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
 
     print("Testing pretrainer Tiny MAE Recon loss...")
-    #testMENDRPreTrainerTinyMAEReconLoss()
+    testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
     print("Testing pretrainer with tiny contextualizer...")
-    #testMENDRPreTrainerWithTiny()
+    testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
     print("Testing pretrainer fit without validation...")
