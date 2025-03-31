@@ -29,16 +29,16 @@ class MENDRContextualizerTiny(nn.Module):
 		# Note that each wavelet band should be the same time length
 		signal = []
 		for band in x.keys():
-			signal.append(x[band])
+			signal.append(x[band].clone())
 		signal = torch.cat(signal, dim=2).to(self.device)
 		if self.position_encoder:
-			signal = self.position_encoder(signal)
-		cov_matrices = self.e2r(signal)
+			signal = self.position_encoder(signal.clone())
+		cov_matrices = self.e2r(signal).clone()
 		batch_size = cov_matrices.shape[0]
 		patches = cov_matrices.shape[1]
-		signal_transformed = self.pre_attention_transform(self.ract(cov_matrices.reshape(batch_size*patches, self.encoded_h, self.encoded_h)))
-		signal_transformed = signal_transformed.reshape(batch_size, patches, self.encoded_out, self.encoded_out)
-		signal, mask_idxes = self.Contextualizer(signal_transformed, mask_ratio)
+		signal_transformed = self.pre_attention_transform(self.ract(cov_matrices.clone().reshape(batch_size*patches, self.encoded_h, self.encoded_h)))
+		signal_transformed = signal_transformed.clone().reshape(batch_size, patches, self.encoded_out, self.encoded_out)
+		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), mask_ratio)
 		return signal, signal_transformed, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge
 	
 class MENDRContextualizer(nn.Module):
@@ -67,6 +67,7 @@ class MENDRContextualizer(nn.Module):
 		num_patches = x.shape[1]
 		# x is now with shape [Batch, #patch, #encoded_h, #encoded_h]
 		
+		x = x.clone()
 		mask_idxes = None
 		if mask_ratio > 0:
 			# Construct the mask at runtime
@@ -76,7 +77,7 @@ class MENDRContextualizer(nn.Module):
 				for masked_epoch_idx in masked_patch_idxes:
 					x[batch_idx, masked_epoch_idx, :, :] = spd_mask
 
-		res_x, shape = self.attention(x)
+		res_x, shape = self.attention(x.clone())
 		# Add and norm
 		x = res_x + x.clone().view(res_x.shape)
 		x = self.trace_normalization(x)

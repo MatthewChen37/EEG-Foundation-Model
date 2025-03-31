@@ -31,6 +31,7 @@ class MENDR_model(nn.Module):
         self.super_patch_seconds = super_patch_seconds
         self.device = device
         self.contextualizer_size=contextualizer_size
+        self.num_channels = num_channels
 
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {

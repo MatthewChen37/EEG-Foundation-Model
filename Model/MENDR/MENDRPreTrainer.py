@@ -50,11 +50,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 		Looks similar to MENDR_model forward
 		but is modified for the contrastive learning task(s)
 		'''
-		graphs = data['graphs']
+		graphs = data['graph']
 		patchified_inputs = self.mendr_model._super_patchify(data)
 		encodings, decodings = self.mendr_model.mendr_encoder(graphs, patchified_inputs)
-		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
-			wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			wavelet_manifold_output, epoched_shape = self.mendr_model.contextualizer.WaveletContextualizer(x)
 
 			# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
 			w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
@@ -62,6 +62,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			# Combined contrastive loss
 			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 			return {
+					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
 					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
@@ -71,12 +72,18 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'wavelet_loss': w_loss,
 					'wavelet_acc': w_correct / w_pairs
 			}
-
-		elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
+		elif self.mendr_model.contextualizer_size.upper() == "TINY":
+			batch_size = patchified_inputs['delta'].shape[0]
+			patches = patchified_inputs['delta'].shape[1]
+			encodings_reshaped = dict()
+			for band, encoding in encodings.items():
+				encodings_reshaped[band] =	encodings[band].clone().reshape(batch_size, patches, self.mendr_model.encoded_h[band], self.mendr_model.mendr_contextualizer.patch_len)
 			# Combined contrastive loss
-			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(wavelet_manifold_output, self.contrastive_loss_fn_combined)
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(encodings_reshaped, self.contrastive_loss_fn_combined)
 			return {
+					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
+					'encodings': encodings_reshaped, # Need both for backward
 					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
@@ -98,12 +105,12 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
-		recon_losses = self.WaveletReconstructionLoss(inputs, outputs['decodings']) # Reconstruction Loss returns a dictionary
+		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
-		if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss'], outputs['wavelet_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
-		elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
+		elif self.mendr_model.contextualizer_size.upper() == "TINY":
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
 		else:

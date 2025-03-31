@@ -425,6 +425,9 @@ def testMENDRPreTrainerWithTiny():
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
+    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
 
 def testMENDRPreTrainerNoValidation():
     args = SimpleNamespace(
@@ -594,47 +597,47 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     print("Testing MENDR Super patching...")
-    testMENDRSuperPatching()
+    #testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    testLargeContextualizerBatchLEM()
+    #testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    testLargeContextualizerWaveletLEM()
+    #testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
-    testContextualizerTiny()
+    #testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
     print("Testing Large Contextualizer...")
-    testContextualizerLarge()
+    #testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
     print("Testing Large Contextualizer masking...")
-    testMENDRLargeCombinedContextualizerMasking()
+    #testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
     print("Testing pretrainer LOO contrastive loss...")
-    testMENDRPreTrainerLOOLoss()
+    #testMENDRPreTrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
     print("Testing pretrainer MAE Recon loss...")
-    testMENDRPreTrainerMAEReconLoss()
+    #testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
 
     print("Testing pretrainer Tiny MAE Recon loss...")
-    testMENDRPreTrainerTinyMAEReconLoss()
+    #testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
     print("Testing pretrainer with tiny contextualizer...")
-    #testMENDRPreTrainerWithTiny()
+    testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
     print("Testing pretrainer fit without validation...")

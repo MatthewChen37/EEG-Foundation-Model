@@ -16,37 +16,45 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
     assert inputs['beta'].shape == outputs['beta'].shape, f"Input Shape {inputs['beta'].shape} Output Shape {outputs['beta'].shape}"
     assert inputs['gamma'].shape == outputs['gamma'].shape, f"Input Shape {inputs['gamma'].shape} Output Shape {outputs['gamma'].shape}"
     '''
+    inputs_copy = dict()
+    outputs_copy = dict()
+
+    for band, input_data in inputs.items():
+        inputs_copy[band] = input_data.clone().reshape(outputs[band].shape).float()
+
+    for band, output_data in outputs.items():
+        outputs_copy[band] = output_data.clone().reshape(outputs[band].shape).float()
 
     if loss_type == 'real':
-        delta_real_loss = loss_fn(inputs['delta'], outputs['delta'])
-        theta_real_loss = loss_fn(inputs['theta'], outputs['theta']) 
-        alpha_real_loss = loss_fn(inputs['alpha'], outputs['alpha'])
-        beta_real_loss =  loss_fn(inputs['beta'],  outputs['beta'])
-        gamma_real_loss = loss_fn(inputs['gamma'], outputs['gamma'])
-
+        delta_real_loss = loss_fn(inputs_copy['delta'], outputs_copy['delta'])
+        theta_real_loss = loss_fn(inputs_copy['theta'], outputs_copy['theta'])
+        alpha_real_loss = loss_fn(inputs_copy['alpha'], outputs_copy['alpha'])
+        beta_real_loss =  loss_fn(inputs_copy['beta'],  outputs_copy['beta'])
+        gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs_copy['gamma'])
+        
         real_loss_dict = {
-            'delta_real_loss': delta_real_loss.item(),
-            'theta_real_loss': theta_real_loss.item(),
-            'alpha_real_loss': alpha_real_loss.item(),
-            'beta_real_loss': beta_real_loss.item(),
-            'gamma_real_loss': gamma_real_loss.item(),
+            'delta_real_loss': delta_real_loss,
+            'theta_real_loss': theta_real_loss,
+            'alpha_real_loss': alpha_real_loss,
+            'beta_real_loss': beta_real_loss,
+            'gamma_real_loss': gamma_real_loss,
         }
 
         return real_loss_dict
 
     elif loss_type == 'fft':
-        delta_fft_loss = fft_loss(inputs['delta'], outputs['delta'])
-        theta_fft_loss = fft_loss(inputs['theta'], outputs['theta'])
-        alpha_fft_loss = fft_loss(inputs['alpha'], outputs['alpha'])
-        beta_fft_loss = fft_loss(inputs['beta'], outputs['beta'])
-        gamma_fft_loss = fft_loss(inputs['gamma'], outputs['gamma'])
+        delta_fft_loss = fft_loss(inputs_copy['delta'], outputs_copy['delta'])
+        theta_fft_loss = fft_loss(inputs_copy['theta'], outputs_copy['theta'])
+        alpha_fft_loss = fft_loss(inputs_copy['alpha'], outputs_copy['alpha'])
+        beta_fft_loss = fft_loss(inputs_copy['beta'], outputs_copy['beta'])
+        gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs_copy['gamma'])
 
         fft_loss_dict = {
-            'delta_fft_loss': delta_fft_loss.item(),
-            'theta_fft_loss': theta_fft_loss.item(),
-            'alpha_fft_loss': alpha_fft_loss.item(),
-            'beta_fft_loss': beta_fft_loss.item(),
-            'gamma_fft_loss': gamma_fft_loss.item(),
+            'delta_fft_loss': delta_fft_loss,
+            'theta_fft_loss': theta_fft_loss,
+            'alpha_fft_loss': alpha_fft_loss,
+            'beta_fft_loss': beta_fft_loss,
+            'gamma_fft_loss': gamma_fft_loss,
         }
 
         return fft_loss_dict
