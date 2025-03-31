@@ -110,20 +110,17 @@ class WaveletEncoderDecoder(nn.Module):
         x_res = self.patch_embedder2_lin(x)
         x = x + x_res
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
+        decoding = x.clone().detach() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
+        x = x.reshape(B, P, self.encoded_h, self.L_out_2)
+        # x: [Batch Size, Patches, self.encoded_h, self.L_out_2]
 
-        decoding = self.up1(x)
+        decoding = self.up1(decoding)
         decoding = self.channel_dropout(decoding)
         decoding = self.up2(decoding)
         decoding = self.up3(decoding)
         decoding = self.up4(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
 
-        '''
-        # Reshape is differentiable, which screws up TorchJDs computations
-        # Reshape before returning
-        x = x.reshape(B, P, self.encoded_h, self.L_out_2)
-        decoding = decoding.reshape(B, P, C, self.seq_len)
-        '''
         return x, decoding
 
 '''

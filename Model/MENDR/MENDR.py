@@ -104,9 +104,7 @@ class MENDR_model(nn.Module):
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
         
-        # Initialize temperature as a trainable parameter
-        self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
-
+        
 
     def forward(self, graphs, data):
         patchified_inputs = self._super_patchify(data)

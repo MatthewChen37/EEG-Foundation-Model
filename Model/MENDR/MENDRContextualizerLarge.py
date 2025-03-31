@@ -32,6 +32,9 @@ class MENDRContextualizerLarge(nn.Module):
 		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=37)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
+		# Initialize temperature as a trainable parameter
+		self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
+
 	def forward(self, x, batch_size, patch_num):
 		# Reshape encodings before passing into contextualizer
 		x_reshaped = dict()

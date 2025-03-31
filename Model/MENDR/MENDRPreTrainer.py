@@ -75,15 +75,12 @@ class MENDRPreTrainer(BaseModelTrainer):
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
 			batch_size = patchified_inputs['delta'].shape[0]
 			patches = patchified_inputs['delta'].shape[1]
-			encodings_reshaped = dict()
-			for band, encoding in encodings.items():
-				encodings_reshaped[band] =	encodings[band].clone().reshape(batch_size, patches, self.mendr_model.encoded_h[band], self.mendr_model.mendr_contextualizer.patch_len)
 			# Combined contrastive loss
-			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(encodings_reshaped, self.contrastive_loss_fn_combined)
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(encodings, self.contrastive_loss_fn_combined)
 			return {
 					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
-					'encodings': encodings_reshaped, # Need both for backward
+					#'encodings': encodings_reshaped, # Need both for backward
 					'decodings': decodings,
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
@@ -98,9 +95,12 @@ class MENDRPreTrainer(BaseModelTrainer):
 			assert len(contrastive_losses) + len(reconstruction_losses) == len((self.pref_vector)), f"Contrastive Losses: {len(contrastive_losses)} Reconstruction Losses: {len(reconstruction_losses)} Pref Vector: {len(self.pref_vector)}"
 		losses = contrastive_losses + list(reconstruction_losses.values())
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator)
-		# Clamp temperature to non-negative values
-		with torch.no_grad():
-			self.temp1.copy_(torch.clamp(self.temp1, min=0.0))
+
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			# Only large model has temp parameter, which is used in wavelet loss
+			# Clamp temperature to non-negative values
+			with torch.no_grad():
+				self.mendr_model.mendr_contextualizer.temp1.copy_(torch.clamp(self.mendr_model.mendr_contextualizer.temp1, min=0.0))
 
 	def train_step(self, inputs):
 		self.train(True)
