@@ -8,9 +8,10 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 class WaveletPretrainDataset(Dataset):
-	def __init__(self, root, frac=1.0, transform=None):
-		super(WaveletDataset, self).__init__(root, transform)
+	def __init__(self, root, frac=1.0, suffix="v128Hz", transform=None):
+		super().__init__(root, transform)
 		self.frac = frac
+		self.suffix = suffix
 
 		# Prevents the FutureWarning: from loading without setting weights_only to True
 		warnings.filterwarnings("ignore", category=FutureWarning)
@@ -30,10 +31,9 @@ class WaveletPretrainDataset(Dataset):
 				future.result()
 		self.length = len(self.epochs)
 			
-
 	def _process_subject(self, subject):
-		subject_graph_folder = os.path.join(self.root, subject, "graphs")
-		wavelet_path = os.path.join(self.root, subject, "wavelet_decompositions")
+		subject_graph_folder = os.path.join(self.root, subject, f"graphs_{self.suffix}")
+		wavelet_path = os.path.join(self.root, subject, f"wavelet_decompositions_{self.suffix}")
 		if os.path.exists(subject_graph_folder) and len(os.listdir(subject_graph_folder)) > 0 and os.path.exists(wavelet_path) and len(os.listdir(wavelet_path)) > 0:
 			subject_graph_path = os.listdir(subject_graph_folder)[0]
 			self.graphs[subject_graph_path.split("_")[0]] = torch.load(os.path.join(subject_graph_folder, subject_graph_path), weights_only=False)
@@ -48,9 +48,12 @@ class WaveletPretrainDataset(Dataset):
 					subject_epochs[epoch_idx]['graph_name'] = attributes[0]
 				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name), weights_only=False)
 			for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
-				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx, epoch_wavelet_dict['delta'],
-								epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'],
-								epoch_wavelet_dict['beta'], epoch_wavelet_dict['gamma'])
+				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx,
+							   epoch_wavelet_dict['delta'],
+								epoch_wavelet_dict['theta'],
+								epoch_wavelet_dict['alpha'],
+								epoch_wavelet_dict['beta'],
+								epoch_wavelet_dict['gamma'])
 				self.epochs.append(epoch_tuple)
 
 	def len(self):
@@ -72,12 +75,16 @@ class WaveletPretrainDataset(Dataset):
 
 
 if __name__ == "__main__":
-	dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.01)
+	dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
 
 	print("Length of dataset: ", len(dataset))
 
 	data = dataset[0]
 
-	#print("Data: ", len(data), data['graph'], data['wavelet_folder'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
+	for key, value in data.items():
+		print(key, value.shape)
 
-	print("Data: ", len(data), data['graph'], data['subject_name'], data['delta'].shape, data['gamma'].shape, "Data Label:", data['graph'].y)
+	print("Data: ", len(data),
+		data['graph'],
+		"Data Label:",
+		data['graph'].y)

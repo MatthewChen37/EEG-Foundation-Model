@@ -257,7 +257,9 @@ class SPDUnTangentSpace(nn.Module):
         return output
 
 class SPDRectifiedFunction(Function):
-
+    # I'm gonna be honest, I used ChatGPT (Co-Pilot) to write this function
+    # because I could not be arsed to learn/write it myself
+    # I'm not sure if it's correct, but it works
     @staticmethod
     def forward(ctx, input, epsilon):
         ctx.save_for_backward(input, epsilon)
