@@ -315,7 +315,7 @@ class BaseModelTrainer(object):
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
 
-        if self.ckpt_dir != None:
+        if self.ckpt_dir != None and validation_dataloader != None:
             print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
 
         mlflow.end_run()

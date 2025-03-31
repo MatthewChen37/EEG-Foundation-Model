@@ -454,8 +454,7 @@ def testMENDRPreTrainerWithTiny():
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
     dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
-    with torch.autograd.detect_anomaly():
-        trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
+    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
 
 def testMENDRPreTrainerNoValidation():
     args = SimpleNamespace(
