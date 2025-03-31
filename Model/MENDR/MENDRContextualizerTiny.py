@@ -36,9 +36,9 @@ class MENDRContextualizerTiny(nn.Module):
 		cov_matrices = self.e2r(signal)
 		batch_size = cov_matrices.shape[0]
 		patches = cov_matrices.shape[1]
-		signal_transformed = self.pre_attention_transform(self.ract(cov_matrices.clone().reshape(batch_size*patches, self.encoded_h, self.encoded_h)))
+		signal_transformed = self.pre_attention_transform(self.ract(cov_matrices.reshape(batch_size*patches, self.encoded_h, self.encoded_h)))
 		signal_transformed = signal_transformed.reshape(batch_size, patches, self.encoded_out, self.encoded_out)
-		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), mask_ratio)
+		signal, mask_idxes = self.Contextualizer(signal_transformed, mask_ratio)
 		return signal, signal_transformed, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge
 	
 class MENDRContextualizer(nn.Module):
@@ -60,7 +60,7 @@ class MENDRContextualizer(nn.Module):
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
 		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out))
-		self.mask = nn.Parameter(self.mask, requires_grad=True)
+		self.mask = nn.Parameter(self.mask, requires_grad=True).float().to(self.device)
 
 	def forward(self, x, mask_ratio=0.0):
 		batch_size = x.shape[0]
@@ -73,9 +73,7 @@ class MENDRContextualizer(nn.Module):
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			for batch_idx, masked_patch_idxes in enumerate(mask_idxes):
-				for masked_epoch_idx in masked_patch_idxes:
-					x[batch_idx, masked_epoch_idx, :, :] = spd_mask
+			x[mask_idxes] = spd_mask
 
 		res_x, shape = self.attention(x.clone())
 		# Add and norm

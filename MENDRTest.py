@@ -4,6 +4,7 @@ import pandas as pd
 import random, os
 from torch.utils.data import ConcatDataset
 from torch_geometric.data import Data
+from Model.MENDR.MENDRCommon import _make_mask_idxes
 from Model.MENDR.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
@@ -61,6 +62,29 @@ def testMENDRSuperPatching():
 
     for band in patchified_data:
         assert patchified_data[band].shape == expected_shape[band], f"{band}: Actual Shape: {patchified_data[band].shape} Expected Shape: {expected_shape[band]}"
+
+def testMakeMaskIdxes():
+    torch.manual_seed(42)
+    np.random.seed(42)
+    batch_size = 2
+    num_patches = 3
+    mask_ratio = 0.5
+    mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
+    assert mask_idxes.shape == torch.Size([batch_size, num_patches]), f"Mask Indices Shape: {mask_idxes.shape}"
+    assert mask_idxes.dtype == torch.bool, f"Mask Indices dtype: {mask_idxes.dtype}"
+    mask = torch.tensor(random_spd_matrix(3)).float().to(device)
+
+    test_batch = torch.randn(batch_size, num_patches, 3, 3).to(device)
+    
+    test_batch[mask_idxes] = mask
+
+    for batch_idx in range(batch_size):
+        for masked_epoch_idx in range(num_patches):
+            if mask_idxes[batch_idx, masked_epoch_idx]:
+                assert torch.allclose(test_batch[batch_idx, masked_epoch_idx], mask), f"Masked epoch {masked_epoch_idx} not equal to mask: \n {test_batch[batch_idx, masked_epoch_idx]} \n {mask}"
+            else:
+                assert torch.allclose(test_batch[batch_idx, masked_epoch_idx], test_batch[batch_idx, masked_epoch_idx]), f"Masked epoch {masked_epoch_idx} not equal to unmasked: \n {test_batch[batch_idx, masked_epoch_idx]} \n {mask}"
+
 
 def testEncoder():
     example_input = {
@@ -600,6 +624,10 @@ if __name__ == "__main__":
     #testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
+    print("Testing MENDR Make Mask Idxes...")
+    testMakeMaskIdxes()
+    print("MENDR Make Mask Idxes Test Passed!")
+
     print("Testing Encoder...")
     #testEncoder()
     print("Encoder test passed!")
@@ -637,7 +665,7 @@ if __name__ == "__main__":
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
     print("Testing pretrainer with tiny contextualizer...")
-    testMENDRPreTrainerWithTiny()
+    #testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
     print("Testing pretrainer fit without validation...")

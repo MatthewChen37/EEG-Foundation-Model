@@ -174,10 +174,8 @@ class MENDRCombinedContextualizer(nn.Module):
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			for batch_idx, masked_patch_idxes in enumerate(mask_idxes):
 				for band in x.keys():
-					for masked_epoch_idx in masked_patch_idxes:
-						x[band][batch_idx, masked_epoch_idx, :, :] = spd_mask
+					x[band][mask_idxes] = spd_mask
 
 			for band in x.keys():
 				x[band] = x[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])

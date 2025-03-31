@@ -61,13 +61,12 @@ class BatchTraceNormalization(nn.Module):
 		x = x + (self.epsilon * identity)
 		return x
 
-def _make_mask_idxes(batch_size, num_epochs, mask_ratio):
-		batch_mask_idxes = list()
+def _make_mask_idxes(batch_size, num_patches, mask_ratio):
+		num_masked = int(mask_ratio * num_patches)
+		batch_mask_idxes = torch.zeros(batch_size, num_patches, dtype=torch.bool)
 		for i in range(batch_size):
-			sample_mask_idxes = list()
-			while len(sample_mask_idxes) == 0 and mask_ratio > 0:
-				sample_mask_idxes = np.nonzero(np.random.rand(num_epochs) < mask_ratio)[0]
-			batch_mask_idxes.append(sample_mask_idxes)
+			indices = np.random.choice(num_patches, num_masked, replace=False)
+			batch_mask_idxes[i,indices] = True
 		return batch_mask_idxes
 
 if __name__ == "__main__":
