@@ -32,9 +32,8 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
         #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
-        self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=1, concat=False).to(self.device)
-        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1)).to(self.device)
-        self.gnn_lin2 = nn.Sequential(self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
+        self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=2, concat=False).to(self.device)
+        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1), self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
         self.layer_norm1 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
         self.layer_norm2 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
@@ -61,9 +60,8 @@ class WaveletEncoderDecoder(nn.Module):
         patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
         gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
         gnn_lin = sum(p.numel() for p in self.gnn_lin1.parameters() if p.requires_grad)
-        gnn_lin2 = sum(p.numel() for p in self.gnn_lin2.parameters() if p.requires_grad)
 
-        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin + gnn_lin2
+        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin
 
     def getDecoderParamCount(self):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
@@ -94,30 +92,25 @@ class WaveletEncoderDecoder(nn.Module):
             # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
             channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
             # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
-            channel_encoding = channel_encoding
-            x[:, patch_idx, :, :] += channel_encoding.reshape(B, C, 2 * self.L_out_1)
+            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, 2 * self.L_out_1)
 
         x = x.view(B*P, C, 2 * self.L_out_1)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         x = self.layer_norm2(x)
-        x_res = self.gnn_lin1(x)
-        x_res = self.gnn_lin2(x_res)
-        x = x + x_res
+        x = x + self.gnn_lin1(x)
         x = self.layer_norm3(x)
 
         x = self.patch_embedder2(x)
-        x_res = self.patch_embedder2_lin(x)
-        x = x + x_res
+        x = x + self.patch_embedder2_lin(x)
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
-        '''
         decoding = x.clone().detach() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
         decoding.requires_grad = True # Just to be safe
+        #decoding = x.clone() 
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
         # x: [Batch Size, Patches, self.encoded_h, self.L_out_2]
-        '''
-        #decoding = self.up1(decoding)
-        decoding = self.up1(x)
+        #decoding = self.up1(x)
+        decoding = self.up1(decoding)
         decoding = self.channel_dropout(decoding)
         decoding = self.up2(decoding)
         decoding = self.up3(decoding)

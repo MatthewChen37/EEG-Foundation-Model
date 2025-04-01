@@ -126,7 +126,7 @@ class SPDTangentSpaceFunction(Function):
     @staticmethod
     def forward(ctx, input):
         '''
-        
+        ctx.save_for_backward(input)
         output = input.new(input.size(0), input.size(1), input.size(2))
         for k, x in enumerate(input):
             s, u = torch.linalg.eigh(x)
@@ -238,7 +238,6 @@ class SPDUnTangentSpaceFunction(Function):
                 
                 grad_input[k] = u.mm(symmetric(P.t() * (u.t().mm(dLdV)))+dLdS).mm(u.t())
 
-
         return grad_input
 
 
@@ -263,9 +262,8 @@ class SPDRectifiedFunction(Function):
     @staticmethod
     def forward(ctx, input, epsilon):
         ctx.save_for_backward(input, epsilon)
-
+        
         output = input.new(input.size(0), input.size(1), input.size(2))
-
         # Perform batch SVD
         u, s, _ = torch.svd(input)
 
@@ -284,13 +282,12 @@ class SPDRectifiedFunction(Function):
             output[k] = u.mm(s.diag().mm(u.t()))
         return output
         '''
-
+    
     @staticmethod
     def backward(ctx, grad_output):
         input, epsilon = ctx.saved_variables
         grad_input = None
         if ctx.needs_input_grad[0]:
-            
             eye = torch.eye(input.size(1), device=input.device).unsqueeze(0)  # Create a batch of identity matrices
             grad_input = torch.zeros_like(input)
 
@@ -324,7 +321,7 @@ class SPDRectifiedFunction(Function):
                 )
             )
 
-            ''' 
+            '''
             eye = input.new(input.size(1))
             eye.fill_(1); eye = eye.diag()
             grad_input = input.new(input.size(0), input.size(1), input.size(2))

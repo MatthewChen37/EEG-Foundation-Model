@@ -119,18 +119,18 @@ class MENDRWaveletContextualizer(nn.Module):
 			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
-			res_output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].clone().view(batch_size, num_patches, self.encoded_out, self.encoded_out))
+			res_output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7)), "Attention Manifold"
 			# Skip Connection
 			epoched_shape = shape
 			og_output_shape = res_output.shape
-			wavelet_manifold_output[band] += res_output.view(wavelet_manifold_output[band].shape)
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + res_output.view(wavelet_manifold_output[band].shape)
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(og_output_shape)
 			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 
 			# Another skip connection
-			wavelet_manifold_output[band] += self.wavelet_spd_transforms[band](wavelet_manifold_output[band].clone()) # Just add, no norm
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms[band](wavelet_manifold_output[band]) # Just add, no norm
 
 		return wavelet_manifold_output, shape
 
@@ -181,18 +181,14 @@ class MENDRCombinedContextualizer(nn.Module):
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
 		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
-		combined_manifold_output_res = combined_manifold_output.clone()
-		combined_manifold_output, shape = self.combined_attention(combined_manifold_output)
+		combined_manifold_output_res, shape = self.combined_attention(combined_manifold_output)
 
 		# Add and norm
-		combined_manifold_output = combined_manifold_output + combined_manifold_output_res.view(combined_manifold_output.shape)
+		combined_manifold_output = combined_manifold_output.view(combined_manifold_output_res.shape) + combined_manifold_output_res
 		combined_manifold_output = self.trace_normalization(combined_manifold_output)
 
 		# Skip Connection
-		combined_manifold_output_res = combined_manifold_output.clone()
-		combined_manifold_output += self.combined_spd_transform(combined_manifold_output) # Just add, no norm
-		combined_manifold_output = combined_manifold_output_res + combined_manifold_output
-
+		combined_manifold_output = combined_manifold_output + self.combined_spd_transform(combined_manifold_output) # Just add, no norm
 		return combined_manifold_output, mask_idxes
 
 	def _wavelet_LogEuclideanMean(self, x):

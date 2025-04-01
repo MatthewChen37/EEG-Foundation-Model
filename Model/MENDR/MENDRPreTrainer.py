@@ -110,9 +110,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss'] + outputs['wavelet_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
+			self.optimizer.step()
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
 			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
+			self.optimizer.step()
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
 		train_metrics["lr"] = f"{self.optimizer.scheduler.get_last_lr()[0]:.7f}"
