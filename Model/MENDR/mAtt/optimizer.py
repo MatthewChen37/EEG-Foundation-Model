@@ -24,7 +24,6 @@ class MixOptimizer(object):
     def scheduler_step(self, iteration):
         self.scheduler.step(iteration)
 
-
     def step(self, closure=None):
         """Performs a single optimization step.
 

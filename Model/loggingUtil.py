@@ -16,7 +16,9 @@ class MENDRLogger(object):
 
     def log_model_gradients(self, model, epoch, name=None):
         if isinstance(model, torch.nn.Module):
-            for name, module in model.named_parameters():
+            for name, module in model.named_parameters(): # Sometimes skip "High"
+                if module.grad is None:
+                    continue
                 grad = module.grad.cpu()
                 self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
         elif isinstance(model, torch.nn.Parameter) and name != None:

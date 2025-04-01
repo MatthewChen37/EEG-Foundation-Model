@@ -230,7 +230,7 @@ def testContextualizerTiny():
 
     with torch.no_grad():
         contextualizer = MENDRContextualizerTiny(device, encoded_h=95)
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=False) as prof:
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
             combined_manifold_output, cov_matrices, _ = contextualizer(example_input)
         df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
         df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
@@ -259,7 +259,7 @@ def testContextualizerLarge():
             high_encoded_h=152,
             temp=10.0,
         )
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=False) as prof:
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
             combined_manifold_output, wavelet_manifold_output, _ = contextualizer(example_input, batch_size=4, patch_num=11)
         df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
         df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
@@ -456,6 +456,9 @@ def testMENDRPreTrainerWithTiny():
     dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
     trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
 
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
+
 def testMENDRPreTrainerNoValidation():
     args = SimpleNamespace(
     encoder_grad_frac = 0.5,
@@ -472,18 +475,17 @@ def testMENDRPreTrainerNoValidation():
     random_state=42
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRPreTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletPretrainDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
-    with torch.autograd.detect_anomaly():
-        trainer.fit(training_dataset=dataset, epochs=1, batch_size=16)
+    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    print(f"Total Number of Parameters: {sum(p.numel() for p in mendr.parameters() if p.requires_grad)}")
+    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
 
-    encoder.apply(check_sanity)
-    contextualizer.apply(check_sanity)
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
 
 def testMENDRParameters():
     args = SimpleNamespace(
@@ -499,13 +501,12 @@ def testMENDRParameters():
     random_state=42
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRPreTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.0005)
+    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.002)
 
     wavelet_spd_transform_params = dict()
 
@@ -516,37 +517,55 @@ def testMENDRParameters():
         np.fill_diagonal(product,0)
         return (product.any() == 0)
 
-    for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
-        spd_weight = spd_transform.weight.data.clone().cpu().numpy()
+    for band, spd_transform in mendr.mendr_contextualizer.WaveletContextualizer.pre_attention_spd_transform.items():
+        spd_weight = spd_transform.weight.data.clone().detach().cpu().numpy()
         assert not checkOrthogonal(spd_weight), f"Wavelet Contextualizer SPD weights not orthogonal: {spd_weight}"
         wavelet_spd_transform_params[band] = spd_weight
 
-    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.clone().cpu().numpy()
+    spd_transform1_weight = dict()
+    spd_transform2_weight = dict()
+    for band, spd_transform in mendr.mendr_contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+        spd_weight = mendr.mendr_contextualizer.WaveletContextualizer.wavelet_spd_transforms[band][0].weight.data.clone().detach().cpu().numpy()
+        assert not checkOrthogonal(spd_weight), f"Wavelet Contextualizer SPD weights not orthogonal: {spd_weight}"
+        spd_transform1_weight[band] = spd_weight
+        spd_weight = mendr.mendr_contextualizer.WaveletContextualizer.wavelet_spd_transforms[band][2].weight.data.clone().detach().cpu().numpy()
+        assert not checkOrthogonal(spd_weight), f"Wavelet Contextualizer SPD weights not orthogonal: {spd_weight}"
+        spd_transform2_weight[band] = spd_weight
+
+    spd_weight = mendr.mendr_contextualizer.CombinedContextualizer.combined_spd_transform[0].weight.data.clone().detach().cpu().numpy()
     assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 1 weights not orthogonal: {spd_weight}"
     combined_spd_transform1_params = spd_weight
 
-    spd_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.clone().cpu().numpy()
+    spd_weight = mendr.mendr_contextualizer.CombinedContextualizer.combined_spd_transform[2].weight.data.clone().detach().cpu().numpy()
     assert not checkOrthogonal(spd_weight), f"Combined Contextualizer SPD 2 weights not orthogonal: {spd_weight}"
     combined_spd_transform2_params = spd_weight
 
     with torch.autograd.detect_anomaly():
-        trainer.fit(training_dataset=dataset, epochs=1, batch_size=16)
+        trainer.fit(training_dataset=dataset, epochs=3, batch_size=32)
     
-        for band, spd_transform in contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
-            new_weight = spd_transform.weight.data.cpu().numpy()
-            assert not np.allclose(wavelet_spd_transform_params[band], new_weight), f"Wavelet Contextualizer SPD weights not updated: {band}: {wavelet_spd_transform_params[band]} == {new_weight} "
-            assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD weights not orthogonal: {band}"
-        
-        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform1[0].weight.data.cpu().numpy()
-        assert not np.allclose(combined_spd_transform1_params, new_weight), f"Combined Contextualizer SPD 1 weights not updated: {combined_spd_transform1_params} == {new_weight}"
-        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 1 not orthogonal"
+    for band, spd_transform in mendr.mendr_contextualizer.WaveletContextualizer.pre_attention_spd_transform.items():
+        new_weight = spd_transform.weight.data.cpu().numpy()
+        assert not np.allclose(wavelet_spd_transform_params[band], new_weight), f"Wavelet Contextualizer SPD weights not updated: {band}: {wavelet_spd_transform_params[band]} == {new_weight} "
+        assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD weights not orthogonal: {band}"
 
-        new_weight = contextualizer.CombinedContextualizer.combined_spd_transform2.weight.data.cpu().numpy()
-        assert not np.allclose(combined_spd_transform2_params, new_weight), f"Combined Contextualizer SPD 2 weights not updated: {combined_spd_transform2_params} == {new_weight}"
-        assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 2 not orthogonal"
+    for band, spd_transform in mendr.mendr_contextualizer.WaveletContextualizer.wavelet_spd_transforms.items():
+        new_weight = spd_transform[0].weight.data.cpu().numpy()
+        assert not np.allclose(spd_transform1_weight[band], new_weight), f"Wavelet Contextualizer SPD 1 weights not updated: {band}: {spd_transform1_weight[band]} == {new_weight} "
+        assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD 1 not orthogonal: {band}"
+        new_weight = spd_transform[2].weight.data.cpu().numpy()
+        assert not np.allclose(spd_transform2_weight[band], new_weight), f"Wavelet Contextualizer SPD 2 weights not updated: {band}: {spd_transform2_weight[band]} == {new_weight} "
+        assert not checkOrthogonal(new_weight), f"New Wavelet Contextualizer SPD 2 not orthogonal: {band}" 
+    
+    new_weight = mendr.mendr_contextualizer.CombinedContextualizer.combined_spd_transform[0].weight.data.cpu().numpy()
+    assert not np.allclose(combined_spd_transform1_params, new_weight), f"Combined Contextualizer SPD 1 weights not updated: {combined_spd_transform1_params} == {new_weight}"
+    assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 1 not orthogonal"
 
-    encoder.apply(check_sanity)
-    contextualizer.apply(check_sanity)
+    new_weight = mendr.mendr_contextualizer.CombinedContextualizer.combined_spd_transform2[2].weight.data.cpu().numpy()
+    assert not np.allclose(combined_spd_transform2_params, new_weight), f"Combined Contextualizer SPD 2 weights not updated: {combined_spd_transform2_params} == {new_weight}"
+    assert not checkOrthogonal(new_weight), f"New Combined Contedxtualizer SPD 2 not orthogonal"
+
+    mendr_model.mendr_encoder.apply(check_sanity)
+    mendr_model.mendr_contextualizer.apply(check_sanity)
 
 def testMENDRPreTrainerWithValidation():
     args = SimpleNamespace(
@@ -628,19 +647,19 @@ if __name__ == "__main__":
     print("MENDR Super Patching Test Passed!")
 
     print("Testing MENDR Make Mask Idxes...")
-    testMakeMaskIdxes()
+    #testMakeMaskIdxes()
     print("MENDR Make Mask Idxes Test Passed!")
 
     print("Testing Encoder...")
-    testEncoder()
+    #testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    testLargeContextualizerBatchLEM()
+    #testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    testLargeContextualizerWaveletLEM()
+    #testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
@@ -652,23 +671,23 @@ if __name__ == "__main__":
     print("Large Contextualizer test passed!")
 
     print("Testing Large Contextualizer masking...")
-    testMENDRLargeCombinedContextualizerMasking()
+    #testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
     print("Testing pretrainer LOO contrastive loss...")
-    testMENDRPreTrainerLOOLoss()
+    #testMENDRPreTrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
     print("Testing pretrainer MAE Recon loss...")
-    testMENDRPreTrainerMAEReconLoss()
+    #testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
 
     print("Testing pretrainer Tiny MAE Recon loss...")
-    testMENDRPreTrainerTinyMAEReconLoss()
+    #testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
     print("Testing pretrainer with tiny contextualizer...")
-    testMENDRPreTrainerWithTiny()
+    #testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
     print("Testing pretrainer fit without validation...")

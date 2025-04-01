@@ -41,7 +41,7 @@ class MENDRContextualizerLarge(nn.Module):
 		x_reshaped = dict()
 		for band in self.encoded_h.keys():
 			if band in x:
-				x_reshaped[band] = x[band].clone().reshape(batch_size, patch_num, self.encoded_h[band], -1)
+				x_reshaped[band] = x[band].reshape(batch_size, patch_num, self.encoded_h[band], -1)
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x_reshaped)
 		combined_manifold_output, mask_idxes = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
 		# Never mask when calling it from here
