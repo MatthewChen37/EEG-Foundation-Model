@@ -190,14 +190,14 @@ class BaseModelTrainer(object):
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
         if start_message.rstrip()[-1] != '|':
-            start_message = start_message.rstrip() + " |"
+            start_message = start_message.rstrip() + " |" + "\n"
         for m in metrics:
             if 'acc' in m.lower() or 'pct' in m.lower():
-                start_message += " {}: {:.2%} |".format(m, metrics[m])
+                start_message += " {}: {:.2%} |".format(m, metrics[m]) + "\n"
             elif m == 'lr':
-                start_message += " {}: {:.3e} |".format(m, metrics[m])
+                start_message += " {}: {:.3e} |".format(m, metrics[m]) + "\n"
             else:
-                start_message += " {}: {:.3f} |".format(m, metrics[m])
+                start_message += " {}: {:.3f} |".format(m, metrics[m]) + "\n"
         tqdm.tqdm.write(start_message)
 
     def save_best(self, epoch_ckpt_dir):
@@ -220,12 +220,11 @@ class BaseModelTrainer(object):
         for trainable_member in self._trainables:
                 module_weight_path = os.path.join(epoch_ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
-                self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path))
-        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth")))
+                self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path, weights_only=True))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=True))
         self.loaded_from_ckpt = True
 
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
-        print(metrics_to_check.keys())
         training_Combined_loss = metrics_to_check[f'total_epoch_training_Combined Riemannian Loss']
         validation_Combined_loss = metrics_to_check[f'total_epoch_validation_Combined Riemannian Loss']
         tqdm.tqdm.write(f"Training Riemannian Loss: {training_Combined_loss} Validation Riemannian Loss: {validation_Combined_loss}")
@@ -320,7 +319,7 @@ class BaseModelTrainer(object):
                 if self.mendr_model.contextualizer_size.upper() == 'LARGE':
                     self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.temp1, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, step=epoch)
                 elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-                    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
+                    self.logger.logMENDRTrainerParams(None, self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
                 else:
                     raise ValueError("Unidentified Contextualizer Type")
                 mlflow.log_metrics(epoch_metrics, step=epoch)

@@ -603,6 +603,39 @@ def testMENDRPreTrainerWithValidation():
 
     assert len(os.listdir("./checkpoint")), "Model Checkpoint Directory is empty"
 
+def testMENDRPretrainerTinyContextualizerWithValidation():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    train_frac=0.8,
+    val_frac=0.2,
+    ckpt_dir="./checkpoint",
+    random_state=42
+    )
+
+    mendr = MENDR_model(device, contextualizer_size="TINY")
+    trainer = MENDRPreTrainer(mendr, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    print(f"Total Number of Parameters: {sum(p.numel() for p in mendr.parameters() if p.requires_grad)}")
+    num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
+    num_val = len(dataset) - num_train
+    train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
+    print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
+    trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=1, batch_size=32)
+
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
+    assert len(os.listdir("./checkpoint")), "Model Checkpoint Directory is empty"
+
 
 def testMENDRPreTrainerLoadFromCheckpoint():
     args = SimpleNamespace(
@@ -618,19 +651,46 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     val_frac=0.2,
     ckpt_dir="./checkpoint",
     random_state=42,
-    load_from_ckpt="./checkpoint/MockCkpt"
+    load_from_ckpt="./checkpoint/MockCkptLarge"
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRPreTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
     trainer.load_from_ckpt(args.load_from_ckpt)
 
-    encoder.apply(check_sanity)
-    contextualizer.apply(check_sanity)
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
+
+def testMENDRPreTrainerLoadFromCheckpointTiny():
+    args = SimpleNamespace(
+    encoder_grad_frac = 0.5,
+    learning_rate = 0.001,
+    l2_weight_decay = 0.001,
+    save_model_directory = None,
+    temp = 0.01,
+    num_negatives=10,
+    enc_feat_l2 = 0.001,
+    multi_gpu = False,
+    train_frac=0.8,
+    val_frac=0.2,
+    ckpt_dir="./checkpoint",
+    random_state=42,
+    load_from_ckpt="./checkpoint/MockCkptTiny"
+    )
+
+    mendr = MENDR_model(device, contextualizer_size="TINY")
+    trainer = MENDRPreTrainer(mendr, args)
+    optimizer = torch.optim.Adam(trainer.parameters())
+    optimizer = MixOptimizer(optimizer)
+    trainer.set_optimizer(optimizer)
+    trainer.load_from_ckpt(args.load_from_ckpt)
+
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
+
 
 if __name__ == "__main__":
     ### Seed ###
@@ -703,10 +763,19 @@ if __name__ == "__main__":
     print("Testing MENDR Parameters passed!")
 
     print("Testing pretrainer fit with validation...")
-    testMENDRPreTrainerWithValidation()
+    #testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
 
+    print("Testing pretrainer fit with tiny contextualizer with validation...")
+    #testMENDRPretrainerTinyContextualizerWithValidation()
+    print("PreTrainer fit with tiny contextualizer with validation test passed!")
+
     print("Testing pretrainer load from checkpoint...")
-    #testMENDRPreTrainerLoadFromCheckpoint()
+    testMENDRPreTrainerLoadFromCheckpoint()
     print("PreTrainer load from checkpoint test passed!")
+
+    print("Testing pretrainer load from checkpoint tiny...")
+    testMENDRPreTrainerLoadFromCheckpointTiny()
+    print("PreTrainer load from checkpoint tiny test passed!")
+
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

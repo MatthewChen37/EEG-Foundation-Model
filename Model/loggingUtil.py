@@ -94,8 +94,9 @@ class MENDRLogger(object):
         '''
     def logMENDRTrainerParams(self, temp1, mask, step):
         torch.set_printoptions(precision=12)
+        if temp1 is not None:
+            mlflow.log_dict({"LOO Temperature 1": str(temp1.item())}, artifact_file=f"LOO_Temperature_{step}.json")
 
-        mlflow.log_dict({"LOO Temperature 1": str(temp1.item())}, artifact_file=f"LOO_Temperature_{step}.json")
         mlflow.log_dict({"Mask": mask.data}, artifact_file=f"Mask_{step}.json")
 
         torch.set_printoptions()

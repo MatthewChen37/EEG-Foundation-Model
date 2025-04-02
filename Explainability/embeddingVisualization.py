@@ -9,17 +9,18 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined
     assert B % num_patches == 0, f"Batch Size {B} is not divisible by {num_patches}"
     #print(f"B: {B} N: {N} num_patches: {num_patches} num_rows: {num_rows} num_cols: {num_cols}")
     wavelet_figs = dict()
-    # Wavelet Manifold Embeddings
-    for band, wavelet_batch in wavelet_manifold_output.items():
-        wavelet_fig, wavelet_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
+    if wavelet_manifold_output is not None:
+        # Wavelet Manifold Embeddings
+        for band, wavelet_batch in wavelet_manifold_output.items():
+            wavelet_fig, wavelet_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
 
-        _plotBatchWavelet(wavelet_axs, num_rows, num_cols,
-                        wavelet_batch.clone().reshape(B // num_patches,
-                        num_patches, N, N)[:len(subject_names)], 
-                        subject_names)
-        wavelet_fig.suptitle(f"{band} SPD Embeddings")
-        wavelet_fig.tight_layout()
-        wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
+            _plotBatchWavelet(wavelet_axs, num_rows, num_cols,
+                            wavelet_batch.clone().reshape(B // num_patches,
+                            num_patches, N, N)[:len(subject_names)], 
+                            subject_names)
+            wavelet_fig.suptitle(f"{band} SPD Embeddings")
+            wavelet_fig.tight_layout()
+            wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
     combined_fig, combined_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
     _plotBatchCombined(combined_axs, num_rows, num_cols,
