@@ -5,6 +5,7 @@ import numpy as np
 from Model.MENDR.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
+from Model.MENDR.mAtt.spd import SPDTangentSpace
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
@@ -56,7 +57,6 @@ class MENDR_model(nn.Module):
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
             self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
 
-
         self.encoded_h = {
             'delta': delta_encoded_h,
             'theta': theta_encoded_h,
@@ -104,9 +104,10 @@ class MENDR_model(nn.Module):
             self.mendr_contextualizer = MENDRContextualizerTiny(encoded_h=encoded_h_total, device=device)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
-        
-        
 
+        self.tangent_space = SPDTangentSpace(self.mendr_encoder.encoded_out, device=device)
+        
+        
     def forward(self, graphs, data):
         patchified_inputs = self._super_patchify(data)
         batch_size = patchified_inputs['delta'].shape[0]
