@@ -7,7 +7,7 @@ import seaborn as sns
 def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, subject_names, num_patches=11, num_rows=4, num_cols=11):
     B, N, N = combined_manifold_output.shape
     assert B % num_patches == 0, f"Batch Size {B} is not divisible by {num_patches}"
-    print(f"B: {B} N: {N} num_patches: {num_patches} num_rows: {num_rows} num_cols: {num_cols}")
+    #print(f"B: {B} N: {N} num_patches: {num_patches} num_rows: {num_rows} num_cols: {num_cols}")
     wavelet_figs = dict()
     # Wavelet Manifold Embeddings
     for band, wavelet_batch in wavelet_manifold_output.items():

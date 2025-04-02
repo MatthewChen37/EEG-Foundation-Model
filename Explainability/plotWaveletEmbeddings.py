@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
-from riemannien_dimension_reduction.src.riem_riem_algo import Riem_Riem_MDS, Riem_Riem_tSNE
-from riemannien_dimension_reduction.src.utils import plot_results_R
+from .riemannien_dimension_reduction.src.riem_riem_algo import Riem_Riem_MDS, Riem_Riem_tSNE
+from .riemannien_dimension_reduction.src.utils import plot_results_R
 from pyriemann.utils.test import is_sym_pos_def
 import numpy as np 
 import torch

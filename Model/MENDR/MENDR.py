@@ -105,7 +105,7 @@ class MENDR_model(nn.Module):
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
 
-        self.tangent_space = SPDTangentSpace(self.mendr_encoder.encoded_out, device=device)
+        self.tangent_space = SPDTangentSpace(self.mendr_contextualizer.encoded_out, device=device)
         
         
     def forward(self, graphs, data):

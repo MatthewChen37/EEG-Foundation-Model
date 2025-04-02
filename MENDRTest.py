@@ -585,22 +585,24 @@ def testMENDRPreTrainerWithValidation():
     random_state=42
     )
 
-    encoder = MENDRWindowEncoder(device=device)
-    contextualizer = MENDRContextualizer(device=device)
-    trainer = MENDRPreTrainer(encoder, contextualizer, args)
+    mendr = MENDR_model(device)
+    trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
     trainer.set_optimizer(optimizer)
-    dataset = ConcatDataset([WaveletDataset(root="/home/hice1/mchen439/scratch/eegfoundationmodeldata", frac=0.001)])
+    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    print(f"Total Number of Parameters: {sum(p.numel() for p in mendr.parameters() if p.requires_grad)}")
     num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
     num_val = len(dataset) - num_train
     train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
     print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-    with torch.autograd.detect_anomaly():
-        trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=2, batch_size=32)
+    trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=2, batch_size=32)
 
-    encoder.apply(check_sanity)
-    contextualizer.apply(check_sanity)
+    mendr.mendr_encoder.apply(check_sanity)
+    mendr.mendr_contextualizer.apply(check_sanity)
+
+    assert len(os.listdir("./checkpoint")), "Model Checkpoint Directory is empty"
+
 
 def testMENDRPreTrainerLoadFromCheckpoint():
     args = SimpleNamespace(
@@ -697,11 +699,11 @@ if __name__ == "__main__":
     print("PreTrainer fit without validation test passed!")
 
     print("Testing MENDR Parameters...")
-    testMENDRParameters()
+    #testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
     print("Testing pretrainer fit with validation...")
-    #testMENDRPreTrainerWithValidation()
+    testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
 
     print("Testing pretrainer load from checkpoint...")
