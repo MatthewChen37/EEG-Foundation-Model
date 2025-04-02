@@ -269,7 +269,7 @@ class BaseModelTrainer(object):
             self.epoch = epoch
 
             ''' TRAINING '''
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=450, position=0, leave=True)
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
             for iteration in train_pbar:
@@ -294,7 +294,7 @@ class BaseModelTrainer(object):
             ''' VALIDATION '''
             if validation_dataloader != None:
                 self.train(False)
-                pbar = tqdm.trange(len(dataset), desc="Predicting", ncols=400)
+                pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
                 val_data_iterator = iter(validation_dataloader)
                 for iteration in pbar:
                     input_batch = self._get_batch(val_data_iterator)

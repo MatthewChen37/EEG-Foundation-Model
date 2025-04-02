@@ -128,10 +128,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
-			recon_losses = self.WaveletReconstructionLoss(inputs, outputs['decodings']) # Reconstruction Loss returns a dictionary
-			if isinstance(self.mendr_model.contextualizer, MENDRContextualizerLarge):
-				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'].item(), recon_losses)
-			elif isinstance(self.mendr_model.contextualizer, MENDRContextualizerTiny):
+			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+			if self.mendr_model.contextualizer_size.upper() == 'LARGE':
+				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
+			elif self.mendr_model.contextualizer_size.upper() == 'TINY':
 				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), None, None, recon_losses)
 			else:
 				raise ValueError("Unidentified Contextualizer Type")
