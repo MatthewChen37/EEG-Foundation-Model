@@ -98,6 +98,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		losses = contrastive_losses + list(reconstruction_losses.values())
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False)
 
+		torch.nn.utils.clip_grad_value_(self.mendr_model.parameters(), clip_value=1e7)
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values

@@ -418,8 +418,8 @@ def testMENDRPreTrainerTinyMAEReconLoss():
             'delta': torch.randn(4, 11, 19, 37).to(device).float(),
             'theta': torch.randn(4, 11, 19, 37).to(device).float(),
             'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
+            'beta': torch.randn(4, 11, 38, 37).to(device).float(),
+            'gamma': torch.randn(4, 11, 76, 37).to(device).float()
         }
 
         riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
@@ -707,67 +707,67 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     print("Testing MENDR Super patching...")
-    #testMENDRSuperPatching()
+    testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
     print("Testing MENDR Make Mask Idxes...")
-    #testMakeMaskIdxes()
+    testMakeMaskIdxes()
     print("MENDR Make Mask Idxes Test Passed!")
 
     print("Testing Encoder...")
-    #testEncoder()
+    testEncoder()
     print("Encoder test passed!")
 
     print("Testing Large Contextualizer Batch LEM...")
-    #testLargeContextualizerBatchLEM()
+    testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    #testLargeContextualizerWaveletLEM()
+    testLargeContextualizerWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
-    #testContextualizerTiny()
+    testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
     print("Testing Large Contextualizer...")
-    #testContextualizerLarge()
+    testContextualizerLarge()
     print("Large Contextualizer test passed!")
 
     print("Testing Large Contextualizer masking...")
-    #testMENDRLargeCombinedContextualizerMasking()
+    testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
     print("Testing pretrainer LOO contrastive loss...")
-    #testMENDRPreTrainerLOOLoss()
+    testMENDRPreTrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
     print("Testing pretrainer MAE Recon loss...")
-    #testMENDRPreTrainerMAEReconLoss()
+    testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
 
     print("Testing pretrainer Tiny MAE Recon loss...")
-    #testMENDRPreTrainerTinyMAEReconLoss()
+    testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
     print("Testing pretrainer with tiny contextualizer...")
-    #testMENDRPreTrainerWithTiny()
+    testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
     print("Testing pretrainer fit without validation...")
-    #testMENDRPreTrainerNoValidation()
+    testMENDRPreTrainerNoValidation()
     print("PreTrainer fit without validation test passed!")
 
     print("Testing MENDR Parameters...")
-    #testMENDRParameters()
+    testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
     print("Testing pretrainer fit with validation...")
-    #testMENDRPreTrainerWithValidation()
+    testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
 
     print("Testing pretrainer fit with tiny contextualizer with validation...")
-    #testMENDRPretrainerTinyContextualizerWithValidation()
+    testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
 
     print("Testing pretrainer load from checkpoint...")
