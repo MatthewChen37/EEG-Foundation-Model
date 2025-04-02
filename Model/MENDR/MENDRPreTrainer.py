@@ -18,6 +18,7 @@ from Explainability.embeddingVisualization import plotSPDEmbedding
 from Explainability.plotReconstruction import plotReconstruction
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian, plotWaveletEmbeddingsEuclidean
 import mlflow
+import matplotlib.pyplot as plt
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
@@ -127,6 +128,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		return train_metrics
 
 	def evaluate_step(self, inputs, step_idx):
+		NUM_RECONS = 4
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
@@ -139,24 +141,41 @@ class MENDRPreTrainer(BaseModelTrainer):
 				raise ValueError("Unidentified Contextualizer Type")
 
 			if step_idx == 0: # Log only the first batch in the validation set
-				wavelet_manifold_output = outputs['wavelet_manifold_output']
-				combined_manifold_output = outputs['combined_manifold_output']
-				combined_manifold_output_masked = outputs['combined_manifold_output_masked']
-				batch_size = combined_manifold_output.shape[0]
-				num_patches = combined_manifold_output.shape[1]
-				combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)
-				combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)
-				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
-				wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
-				for band, wavelet_fig in wavelet_figs.items():
-					mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
-					plt.close(wavelet_fig)
-				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
-				plt.close(combined_fig)
+				if self.mendr_model.contextualizer_size.upper() == 'LARGE':
+					wavelet_manifold_output = outputs['wavelet_manifold_output']
+					combined_manifold_output = outputs['combined_manifold_output']
+					combined_manifold_output_masked = outputs['combined_manifold_output_masked']
+					batch_size = combined_manifold_output.shape[0]
+					num_patches = combined_manifold_output.shape[1]
+					combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)
+					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)
+					assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
 
-				fig = plotReconstruction(input_batch, outputs['decodings'], f"epoch_{self.epoch}")
-				mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.png")
-				plt.close(fig)
+					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
+					for band, wavelet_fig in wavelet_figs.items():
+						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+						plt.close(wavelet_fig)
+					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+					plt.close(combined_fig)
+					
+					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
+					mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
+
+					recon_enc = dict()
+					recon_dec = dict()
+					for band in ['delta', 'theta', 'alpha', 'beta', 'gamma']: # Just look at patches from first sample/subject
+						outputs['decodings'][band] = outputs['decodings'][band].view(outputs['patchified_inputs'][band].shape)
+						recon_enc[band] = outputs['patchified_inputs'][band][0, :NUM_RECONS].detach().cpu().numpy()
+						recon_dec[band] = outputs['decodings'][band][0, :NUM_RECONS].detach().cpu().numpy()
+
+					fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} reconstructions")
+					mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.png")
+					plt.close(fig)
+				elif self.mendr_model.contextualizer_size.upper() == 'TINY':
+					#TODO
+					pass
+				else:
+					raise ValueError("Unidentified Contextualizer Type")
 
 			return eval_metrics
 

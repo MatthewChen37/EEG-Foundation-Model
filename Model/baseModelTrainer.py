@@ -311,12 +311,11 @@ class BaseModelTrainer(object):
                 self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
                 mlflow.log_metrics(epoch_metrics, step=epoch)
                 print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
+                if self.ckpt_dir != None:
+                    print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
 
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
-
-        if self.ckpt_dir != None and validation_dataloader != None:
-            print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
 
         mlflow.end_run()
         self.logger.closeWriter()
