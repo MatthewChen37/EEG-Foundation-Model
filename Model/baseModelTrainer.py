@@ -224,13 +224,22 @@ class BaseModelTrainer(object):
         self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth")))
         self.loaded_from_ckpt = True
 
-    def _retain(self, epoch_idx : int, metrics_to_check: dict):
-        tqdm.tqdm.write(f"Riemannian Loss: {metrics_to_check['Combined Riemannian Loss']}. Retaining checkpoint...")
+    def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
+        print(metrics_to_check.keys())
+        training_Combined_loss = metrics_to_check[f'total_epoch_training_Combined Riemannian Loss']
+        validation_Combined_loss = metrics_to_check[f'total_epoch_validation_Combined Riemannian Loss']
+        tqdm.tqdm.write(f"Training Riemannian Loss: {training_Combined_loss} Validation Riemannian Loss: {validation_Combined_loss}")
+        if f"total_epoch_validation_Wavelet Loss" in metrics_to_check:
+            _training_validation_Wavelet_Loss = metrics_to_check[f'total_epoch_training_Wavelet Loss']
+            _validation_Wavelet_Loss = metrics_to_check[f'total_epoch_validation_Wavelet Loss']
+            tqdm.tqdm.write(f"Training Wavelet Loss: {_training_validation_Wavelet_Loss} Validation Wavelet Loss: {_validation_Wavelet_Loss}")
+        tqdm.tqdm.write(" Retaining checkpoint...")
+
         epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
         self.save_best(epoch_ckpt_dir)
+        torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
         self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
-        torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
 
     @staticmethod
     def _dataloader_args(dataset, training=False, **loader_kwargs):
@@ -304,16 +313,20 @@ class BaseModelTrainer(object):
 
                 
                 ''' SAVE '''
-                self._retain_best(epoch_metrics)
+                self._retain_best(epoch, epoch_metrics)
                 self.standard_logging(epoch_metrics, "End of Epoch")
-                self.logger.logEncoderParams(self.encoder, step=epoch)
-                self.logger.logContextualizerParams(self.contextualizer, step=epoch)
-                self.logger.logMENDRTrainerParams(self.temp1, self.mask, step=epoch)
+                self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
+                self.logger.logContextualizerParams(self.mendr_model.mendr_contextualizer, step=epoch)
+                if self.mendr_model.contextualizer_size.upper() == 'LARGE':
+                    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.temp1, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, step=epoch)
+                elif self.mendr_model.contextualizer_size.upper() == 'TINY':
+                    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
+                else:
+                    raise ValueError("Unidentified Contextualizer Type")
                 mlflow.log_metrics(epoch_metrics, step=epoch)
-                print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_loss'])
+                print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
                 if self.ckpt_dir != None:
                     print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
-
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
 

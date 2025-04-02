@@ -177,6 +177,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 				else:
 					raise ValueError("Unidentified Contextualizer Type")
 
+			for metric in eval_metrics:
+				if isinstance(eval_metrics[metric], torch.Tensor):
+					eval_metrics[metric] = eval_metrics[metric].item()
+
 			return eval_metrics
 
 	def _calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
