@@ -82,7 +82,27 @@ if __name__ == "__main__":
 	data = dataset[0]
 
 	for key, value in data.items():
-		print(key, value.shape)
+		if not isinstance(value, torch.Tensor):
+			print(key, value)
+		else:
+			print(key, value.shape)
+
+	print("Data: ", len(data),
+		data['graph'],
+		"Data Label:",
+		data['graph'].y)
+
+	hbn_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/HBN-128Hz", frac=1.0)
+
+	print("Length of dataset: ", len(hbn_dataset))
+
+	data = hbn_dataset[0]
+
+	for key, value in data.items():
+		if not isinstance(value, torch.Tensor):
+			print(key, value)
+		else:
+			print(key, value.shape)
 
 	print("Data: ", len(data),
 		data['graph'],

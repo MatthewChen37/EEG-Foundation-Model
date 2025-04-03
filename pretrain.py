@@ -15,8 +15,7 @@ import torch.utils.data as torchdata
 
 from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-
-from dataset import WaveletDataset
+from Datasets.datasetPretrain import WaveletPretrainDataset
 
 def main(args):
 	# Start Run
@@ -29,7 +28,11 @@ def main(args):
 	if args.ckpt_dir is not None:
 		if args.val_frac <= 0:
 			raise Exception("Must have validation dataset to save to dir")
-		Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
+
+	if args.model_size == "LARGE" and args.negatives_loo == None:
+		raise Exception("Must specify number of negatives for LARGE model")
+	
+	Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
 	
 	### Seed ###
@@ -48,10 +51,10 @@ def main(args):
 	if args.train_frac + args.val_frac > 1:
 		raise ValueError("Train and Val Fraction should not exceed 1.")
 	# Load Dataset
-	dataset = WaveletDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
+	dataset = WaveletPretrainDataset(root=args.input_dir, frac=args.train_frac + args.val_frac)
 	if args.input_dir_2:
 		print(f"Second Data Dir specified: {args.input_dir_2}")
-		dataset2 = WaveletDataset(root=args.input_dir_2, frac=args.train_frac + args.val_frac)
+		dataset2 = WaveletPretrainDataset(root=args.input_dir_2, frac=args.train_frac + args.val_frac)
 		dataset = torchdata.ConcatDataset([dataset, dataset2])
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
@@ -60,15 +63,24 @@ def main(args):
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 	print("Starting training.")
+
 	### Training ###
-	trainer = MENDRPreTrainer(encoder, contextualizer, args)
+	mendr = MENDR_model(device, contextualizer_size=args.model_size)
+	trainer = MENDRPreTrainer(mendr, args)
+	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=args.l2_weight_decay)
+	optimizer = MixOptimizer(optimizer)
+	trainer.set_optimizer(optimizer)
 
-	for band, encoder in encoder.encoder_decoders.items():
-		print(f"{band} Encoder Number of Params: {encoder.getEncoderParamCount()}")
-		print(f"{band} Decoder Number of Params: {encoder.getDecoderParamCount()}")
-	print("Contextualizer parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
+	for band in BANDS:
+		print(f'{band} Encoder Params: {model.mendr_encoder.encoder_decoders[band].getEncoderParamCount()}')
+		print(f'{band} Decoder Params: {model.mendr_encoder.encoder_decoders[band].getDecoderParamCount()}')
+		total_encoder_params += model.mendr_encoder.encoder_decoders[band].getEncoderParamCount()
+		total_decoder_params += model.mendr_encoder.encoder_decoders[band].getDecoderParamCount()
+	print(f'Wavelet Contextualizer Params: {sum(p.numel() for p in model.mendr_contextualizer.WaveletContextualizer.parameters() if p.requires_grad)}')
+	print(f'Combined Contextualizer Params: {sum(p.numel() for p in model.mendr_contextualizer.CombinedContextualizer.parameters() if p.requires_grad)}')
+	print("Total Encoder Params: ", total_encoder_params)
+	print("Total Decoder Params: ", total_decoder_params)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-
 
 	parameters = list(trainer.parameters())
 	parameters.append(trainer.temp1)
@@ -77,6 +89,7 @@ def main(args):
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
 
+	'''
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
@@ -98,7 +111,7 @@ def main(args):
 
 	print("*" * 50)
 	print("Cleaning up resources...")
-
+	'''
 	# Clear the PyTorch cache (for GPU)
 	torch.cuda.empty_cache()
 	# Force garbage collection (for CPU and GPU tensors)
@@ -140,19 +153,6 @@ def parse_args():
 		"--val_frac", type=float, help="Fraction of dataset to use for validation", default=0.0
 	)
 
-	# MENDR Contextualizer Configs
-	parser.add_argument(
-		"--in_features", type=int, help="Input Features for Contextualizer", default=32
-	)
-
-	parser.add_argument(
-		"--dropout", type=float, help="Dropout Rate for Contextualizer", default=0.1
-	)
-
-	parser.add_argument(
-		"--epochs", type=int, help="Number of Epochs for mATT", default=4
-	)
-
 	# Trainer Configs
 	parser.add_argument(
 		"--learning_rate", type=float, help="Learning Rate", default=0.01
@@ -167,8 +167,16 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--enc_feat_l2", type=float, help="Encoder Feature L2", default=1e-5
+		"--mask_ratio", type=float, help="Ratio of patches to mask", default=0.5
 	)
+
+	parser.add_argument(
+		"--negatives_loo", type=int, help="Number of negatives to use for loss", default=20
+	)
+
+	parser.add_argument(
+		"--model_size", type=str, help="Model size", default="LARGE"
+	)	
 
 	parser.add_argument(
 		"--ckpt_dir", type=str, help="If not none, save after each epoch if validation loss decreases.", required=True, default=None

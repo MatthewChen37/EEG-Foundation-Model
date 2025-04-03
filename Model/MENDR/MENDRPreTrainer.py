@@ -28,8 +28,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, MENDR, config, **kwargs):
-		self.negatives_loo = 20
-		self.mask_ratio = 0.5
+		self.negatives_loo = config.negatives_loo
+		self.mask_ratio = config.mask_ratio
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
