@@ -9,5 +9,5 @@ python pretrain.py --input_dir=/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-
  --training_epochs=40 \
  --temp=10.0 \
  --mask_ratio=0.5\
- --model_size=LARGE \
+ --model_size=TINY \
  --ckpt_dir=./checkpoint \

@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as torchdata
 
+from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
@@ -23,6 +24,7 @@ def main(args):
 	print(" \n".join(f"{k}={v}" for k, v in vars(args).items()))
 	print(" \n".join(f"type({k})={type(v)}" for k, v in vars(args).items()))
 
+	BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 	# Create input directory if it doesn't exist
 	if args.ckpt_dir is not None:
@@ -47,7 +49,8 @@ def main(args):
 	torch.backends.cudnn.enabled = True
 	torch.backends.cudnn.benchmark = False
 	torch.backends.cudnn.deterministic = True
-
+	
+	'''
 	if args.train_frac + args.val_frac > 1:
 		raise ValueError("Train and Val Fraction should not exceed 1.")
 	# Load Dataset
@@ -58,6 +61,7 @@ def main(args):
 		dataset = torchdata.ConcatDataset([dataset, dataset2])
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
+	'''
 
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -71,24 +75,25 @@ def main(args):
 	optimizer = MixOptimizer(optimizer)
 	trainer.set_optimizer(optimizer)
 
+	total_encoder_params = 0
+	total_decoder_params = 0
 	for band in BANDS:
-		print(f'{band} Encoder Params: {model.mendr_encoder.encoder_decoders[band].getEncoderParamCount()}')
-		print(f'{band} Decoder Params: {model.mendr_encoder.encoder_decoders[band].getDecoderParamCount()}')
-		total_encoder_params += model.mendr_encoder.encoder_decoders[band].getEncoderParamCount()
-		total_decoder_params += model.mendr_encoder.encoder_decoders[band].getDecoderParamCount()
-	print(f'Wavelet Contextualizer Params: {sum(p.numel() for p in model.mendr_contextualizer.WaveletContextualizer.parameters() if p.requires_grad)}')
-	print(f'Combined Contextualizer Params: {sum(p.numel() for p in model.mendr_contextualizer.CombinedContextualizer.parameters() if p.requires_grad)}')
+		print(f'{band} Encoder Params: {mendr.mendr_encoder.encoder_decoders[band].getEncoderParamCount()}')
+		print(f'{band} Decoder Params: {mendr.mendr_encoder.encoder_decoders[band].getDecoderParamCount()}')
+		total_encoder_params += mendr.mendr_encoder.encoder_decoders[band].getEncoderParamCount()
+		total_decoder_params += mendr.mendr_encoder.encoder_decoders[band].getDecoderParamCount()
+	if args.model_size.upper() == 'TINY':
+		print(f'Wavelet Contextualizer Params: {sum(p.numel() for p in mendr.mendr_contextualizer.Contextualizer.parameters() if p.requires_grad)}')
+	elif args.model_size.upper() == 'LARGE':
+		print(f'Wavelet Contextualizer Params: {sum(p.numel() for p in mendr.mendr_contextualizer.WaveletContextualizer.parameters() if p.requires_grad)}')
+		print(f'Combined Contextualizer Params: {sum(p.numel() for p in mendr.mendr_contextualizer.CombinedContextualizer.parameters() if p.requires_grad)}')
+	else:
+		raise ValueError("Unidentified Contextualizer Type")
+
 	print("Total Encoder Params: ", total_encoder_params)
 	print("Total Decoder Params: ", total_decoder_params)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-
-	parameters = list(trainer.parameters())
-	parameters.append(trainer.temp1)
-	parameters.append(trainer.mask)
-	optimizer = torch.optim.AdamW(parameters, lr=args.learning_rate, weight_decay=5e-4)
-	optimizer = MixOptimizer(optimizer)
-	trainer.set_optimizer(optimizer)
-
+	
 	'''
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
