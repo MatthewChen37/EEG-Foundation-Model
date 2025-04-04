@@ -21,7 +21,7 @@ class WaveletTUABDataset(Dataset):
 		folders = os.listdir(self.root)
 		folders = folders[:int(len(folders) * self.frac)]
 		print(f"Loading {len(folders)} folders")
-		with ThreadPoolExecutor() as executor:
+		with ThreadPoolExecutor(max_workers=16) as executor:
 			futures = [executor.submit(self._process_folder, curr_folder, os.path.join(self.root, curr_folder, "wavelet_decompositions"), os.path.join(self.root, curr_folder, "graphs")) for curr_folder in folders]
 			for future in tqdm(futures):
 				future.result()

@@ -45,15 +45,14 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
-        self.decode_L_out = (self.L_out_2 - 1) * 2 - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
-        self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=2, groups=1).to(self.device), self.act)
+        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
+        self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
         self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
-        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (4 - 1)
+        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
         self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
-        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=4, stride=self.stride, groups=1).to(self.device), self.act)
+        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=encoded_h, stride=self.stride, groups=1).to(self.device), self.act)
         self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
-        self.up5 = nn.Sequential(self.act, nn.Linear(self.seq_len, self.seq_len)).to(self.device)
                
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
@@ -69,8 +68,7 @@ class WaveletEncoderDecoder(nn.Module):
         up2_count = sum(p.numel() for p in self.up2.parameters() if p.requires_grad)
         up3_count = sum(p.numel() for p in self.up3.parameters() if p.requires_grad)
         up4_count = sum(p.numel() for p in self.up4.parameters() if p.requires_grad)
-        up5_count = sum(p.numel() for p in self.up5.parameters() if p.requires_grad)
-        return up1_count + up2_count + up3_count + up4_count + up5_count
+        return up1_count + up2_count + up3_count + up4_count
 
     def forward(self, graph, x):
         # x: [Batch Size, Patches, Channels, Time Steps]
@@ -123,7 +121,6 @@ class WaveletEncoderDecoder(nn.Module):
         #print(decoding.shape)
         decoding = self.up4(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
-        decoding = decoding + self.up5(decoding)
 
         return x, decoding
 

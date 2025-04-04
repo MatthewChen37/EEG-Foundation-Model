@@ -20,7 +20,7 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
     outputs_copy = dict()
 
     for band, input_data in inputs.items():
-        inputs_copy[band] = input_data.clone().reshape(outputs[band].shape).float()
+        inputs_copy[band] = input_data.reshape(outputs[band].shape).float()
 
     if loss_type == 'real':
         delta_real_loss = loss_fn(inputs_copy['delta'], outputs['delta'])

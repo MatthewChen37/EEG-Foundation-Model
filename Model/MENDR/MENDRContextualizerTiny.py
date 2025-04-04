@@ -67,7 +67,6 @@ class MENDRContextualizer(nn.Module):
 		num_patches = x.shape[1]
 		# x is now with shape [Batch, #patch, #encoded_h, #encoded_h]
 		
-		x = x.clone()
 		mask_idxes = None
 		if mask_ratio > 0:
 			# Construct the mask at runtime
@@ -75,12 +74,12 @@ class MENDRContextualizer(nn.Module):
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
 			x[mask_idxes] = spd_mask
 
-		res_x, shape = self.attention(x.clone())
+		res_x, shape = self.attention(x)
 		# Add and norm
-		x = res_x + x.clone().view(res_x.shape)
+		x = res_x + x.view(res_x.shape)
 		x = self.trace_normalization(x)
 
-		x += self.spd_transform(x.clone()) # Just add, no norm
+		x += self.spd_transform(x) # Just add, no norm
 		x = x.reshape(shape[0], shape[1], self.encoded_out, self.encoded_out)
 		return x, mask_idxes
 	
