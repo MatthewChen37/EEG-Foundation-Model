@@ -91,7 +91,6 @@ def main(args):
 	print("Total Decoder Params: ", total_decoder_params)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
 	
-	'''
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
@@ -113,7 +112,7 @@ def main(args):
 
 	print("*" * 50)
 	print("Cleaning up resources...")
-	'''
+
 	# Clear the PyTorch cache (for GPU)
 	torch.cuda.empty_cache()
 	# Force garbage collection (for CPU and GPU tensors)
