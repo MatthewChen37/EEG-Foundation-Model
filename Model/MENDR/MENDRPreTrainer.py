@@ -28,14 +28,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, MENDR, config, **kwargs):
-		if hasattr(config, "negatives_loo"):
-			self.negatives_loo = config.negatives_loo
-		else:
-			self.negatives_loo = 20
-		if hasattr(config, "mask_ratio"):
-			self.mask_ratio = config.mask_ratio
-		else:
-			self.mask_ratio = 0.5
+		self.negatives_loo = 20
+		self.mask_ratio = config.mask_ratio
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
@@ -51,8 +45,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
 		# Clamp gradients
+		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
 		for p in self.parameters():
-			p.register_hook(lambda grad: torch.clamp(grad, -1e7, 1e7))
+			p.register_hook(lambda grad: torch.clamp(grad, -args.gradient_clip_value, args.gradient_clip_value))
 
 		''' Unused
 		self.RandomGaussianNoise = RandomGaussianNoise()
@@ -108,7 +103,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 		losses = contrastive_losses + list(reconstruction_losses.values())
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False)
 
-		torch.nn.utils.clip_grad_value_(self.mendr_model.parameters(), clip_value=1e7)
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values

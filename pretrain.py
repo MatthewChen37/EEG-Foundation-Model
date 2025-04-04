@@ -191,6 +191,34 @@ def parse_args():
 		"--load_from_ckpt", type=str, help="Initializes weights of encoder and contextualizer with weights from folder. If it cannot throws an error.", required=False, default=None
 	)
 
+	parser.add_argument(
+		"--contrastive_loss_pref", type=float, help="Weight of contrastive loss in Jacobian Descent", default=1e3
+	)
+
+	parser.add_argument(
+		"--delta_reconstructive_loss_pref", type=float, help="Weight of delta reconstructive loss in Jacobian Descent", default=1.0
+	)
+
+	parser.add_argument(
+		"--theta_reconstructive_loss_pref", type=float, help="Weight of theta reconstructive loss in Jacobian Descent", default=1.0
+	)
+
+	parser.add_argument(
+		"--alpha_reconstructive_loss_pref", type=float, help="Weight of alpha reconstructive loss in Jacobian Descent", default=1.0
+	)
+
+	parser.add_argument(
+		"--beta_reconstructive_loss_pref", type=float, help="Weight of beta reconstructive loss in Jacobian Descent", default=1.0
+	)
+
+	parser.add_argument(
+		"--gamma_reconstructive_loss_pref", type=float, help="Weight of gamma reconstructive loss in Jacobian Descent", default=1.0
+	)
+
+	parser.add_argument(
+		"--gradient_clip_value", type=float, help="Gradient Clipping Value", default=1e7
+	)
+
 	# parse args
 	args = parser.parse_args()
 	return args
