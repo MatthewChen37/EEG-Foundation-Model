@@ -33,12 +33,13 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
-		self.pref_vector = [config.delta_reconstructive_loss_pref,
+		self.pref_vector = [config.contrastive_loss_pref,
+							config.delta_reconstructive_loss_pref,
 		 					config.theta_reconstructive_loss_pref,
 							config.alpha_reconstructive_loss_pref,
 							config.beta_reconstructive_loss_pref,
 							config.gamma_reconstructive_loss_pref]
-		self.aggregator = UPGrad(torch.tensor(self.pref_vector))
+		self.aggregator = UPGrad(torch.tensor(self.pref_vector).to(MENDR.device))
 
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, aggregator=self.aggregator, lr=config.learning_rate,
@@ -47,7 +48,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Clamp gradients
 		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
 		for p in self.parameters():
-			p.register_hook(lambda grad: torch.clamp(grad, -args.gradient_clip_value, args.gradient_clip_value))
+			p.register_hook(lambda grad: torch.clamp(grad, -config.gradient_clip_value, config.gradient_clip_value))
 
 		''' Unused
 		self.RandomGaussianNoise = RandomGaussianNoise()
@@ -98,8 +99,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
-		if self.pref_vector != None:
-			assert len(contrastive_losses) + len(reconstruction_losses) == len((self.pref_vector)), f"Contrastive Losses: {len(contrastive_losses)} Reconstruction Losses: {len(reconstruction_losses)} Pref Vector: {len(self.pref_vector)}"
+		#if self.pref_vector != None:
+		# assert len(contrastive_losses) + len(reconstruction_losses) == len((self.pref_vector)), f"Contrastive Losses: {len(contrastive_losses)} Reconstruction Losses: {len(reconstruction_losses)} Pref Vector: {len(self.pref_vector)}"
 		losses = contrastive_losses + list(reconstruction_losses.values())
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False)
 

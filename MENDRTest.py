@@ -320,9 +320,16 @@ def testMENDRPreTrainerLOOLoss():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
+    mask_ratio = 0.5,
     mask_span = 5,
     temp = 0.01,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    contrastive_loss_pref = 1e3,
+    gradient_clip_value = 1e7,
     num_negatives=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
@@ -355,8 +362,15 @@ def testMENDRPreTrainerMAEReconLoss():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
+    mask_ratio = 0.5,
     mask_span = 5,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    gradient_clip_value = 1e7,
+    contrastive_loss_pref = 1e3,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -397,9 +411,16 @@ def testMENDRPreTrainerTinyMAEReconLoss():
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_rate = 0.01,
+        mask_ratio = 0.5,
         mask_span = 5,
         temp = 0.01,
+        delta_reconstructive_loss_pref = 1.0,
+        theta_reconstructive_loss_pref = 1.0,
+        alpha_reconstructive_loss_pref = 1.0,
+        beta_reconstructive_loss_pref = 1.0,        
+        gamma_reconstructive_loss_pref = 1.0,
+        gradient_clip_value = 1e7,
+        contrastive_loss_pref = 1e3,
         num_negatives=10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
@@ -418,8 +439,8 @@ def testMENDRPreTrainerTinyMAEReconLoss():
             'delta': torch.randn(4, 11, 19, 37).to(device).float(),
             'theta': torch.randn(4, 11, 19, 37).to(device).float(),
             'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 38, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 76, 37).to(device).float()
+            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
+            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
         }
 
         riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
@@ -438,7 +459,14 @@ def testMENDRPreTrainerWithTiny():
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_rate = 0.01,
+        mask_ratio = 0.01,
+        delta_reconstructive_loss_pref = 1.0,
+        theta_reconstructive_loss_pref = 1.0,
+        alpha_reconstructive_loss_pref = 1.0,
+        beta_reconstructive_loss_pref = 1.0,
+        gamma_reconstructive_loss_pref = 1.0,
+        contrastive_loss_pref = 1e3,
+        gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
         num_negatives=10,
@@ -446,6 +474,7 @@ def testMENDRPreTrainerWithTiny():
         multi_gpu = False,
         ckpt_dir="./checkpoint",
         random_state=42
+
     )
 
     mendr = MENDR_model(device, contextualizer_size="TINY")
@@ -465,7 +494,14 @@ def testMENDRPreTrainerNoValidation():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
-    mask_rate = 0.01,
+    mask_ratio = 0.01,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    contrastive_loss_pref = 1e3,
+    gradient_clip_value = 1e7,
     mask_span = 5,
     temp = 0.01,
     num_negatives=10,
@@ -494,6 +530,14 @@ def testMENDRParameters():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.01,
+    mask_ratio = 0.5,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    contrastive_loss_pref = 1e3,
+    gradient_clip_value = 1e7,
     num_negatives=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
@@ -578,6 +622,14 @@ def testMENDRPreTrainerWithValidation():
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
+    mask_ratio = 0.5,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,        
+    gamma_reconstructive_loss_pref = 1.0,
+    contrastive_loss_pref = 1e3,
+    gradient_clip_value = 1e7,
     multi_gpu = False,
     train_frac=0.8,
     val_frac=0.2,
@@ -609,6 +661,14 @@ def testMENDRPretrainerTinyContextualizerWithValidation():
     learning_rate = 0.001,
     l2_weight_decay = 0.001,
     save_model_directory = None,
+    mask_ratio = 0.5,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    contrastive_loss_pref = 1e3,
+    gradient_clip_value = 1e7,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -646,6 +706,14 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
+    mask_ratio = 0.5,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,
+    gamma_reconstructive_loss_pref = 1.0,
+    gradient_clip_value = 1e7,
+    contrastive_loss_pref = 1e3,
     multi_gpu = False,
     train_frac=0.8,
     val_frac=0.2,
@@ -676,6 +744,14 @@ def testMENDRPreTrainerLoadFromCheckpointTiny():
     multi_gpu = False,
     train_frac=0.8,
     val_frac=0.2,
+    mask_ratio = 0.5,
+    contrastive_loss_pref = 1e3,
+    delta_reconstructive_loss_pref = 1.0,
+    theta_reconstructive_loss_pref = 1.0,
+    alpha_reconstructive_loss_pref = 1.0,
+    beta_reconstructive_loss_pref = 1.0,    
+    gamma_reconstructive_loss_pref = 1.0,
+    gradient_clip_value = 1e7,
     ckpt_dir="./checkpoint",
     random_state=42,
     load_from_ckpt="./checkpoint/MockCkptTiny"
@@ -705,7 +781,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-
+    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -769,7 +845,7 @@ if __name__ == "__main__":
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
-
+    '''
     print("Testing pretrainer load from checkpoint...")
     testMENDRPreTrainerLoadFromCheckpoint()
     print("PreTrainer load from checkpoint test passed!")

@@ -50,7 +50,6 @@ def main(args):
 	torch.backends.cudnn.benchmark = False
 	torch.backends.cudnn.deterministic = True
 	
-	'''
 	if args.train_frac + args.val_frac > 1:
 		raise ValueError("Train and Val Fraction should not exceed 1.")
 	# Load Dataset
@@ -61,11 +60,9 @@ def main(args):
 		dataset = torchdata.ConcatDataset([dataset, dataset2])
 	print("*" * 50)
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", args.train_frac + args.val_frac)
-	'''
 
 	### Model ###
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 	print("Starting training.")
 
 	### Training ###
