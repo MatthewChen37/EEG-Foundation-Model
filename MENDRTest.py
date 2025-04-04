@@ -826,7 +826,6 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -838,12 +837,11 @@ if __name__ == "__main__":
     print("Testing Encoder...")
     testEncoder()
     print("Encoder test passed!")
-    '''
+
     print("Testing Batchwise Matrix Similarity...")
     testMENDRBatchWiseMatrixSimilarity()
     print("Batchwise Matrix Similarity test passed!")
 
-    '''
     print("Testing Large Contextualizer Batch LEM...")
     testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
@@ -905,4 +903,3 @@ if __name__ == "__main__":
     print("PreTrainer load from checkpoint tiny test passed!")
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
-    '''
