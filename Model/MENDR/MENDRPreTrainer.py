@@ -39,8 +39,12 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
-		self.pref_vector = None
-		self.aggregator = UPGrad(self.pref_vector) # TODO: include pref_vector
+		self.pref_vector = [config.delta_reconstructive_loss_pref,
+		 					config.theta_reconstructive_loss_pref,
+							config.alpha_reconstructive_loss_pref,
+							config.beta_reconstructive_loss_pref,
+							config.gamma_reconstructive_loss_pref]
+		self.aggregator = UPGrad(torch.tensor(self.pref_vector))
 
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, aggregator=self.aggregator, lr=config.learning_rate,
