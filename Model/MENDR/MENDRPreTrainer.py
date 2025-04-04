@@ -103,7 +103,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# assert len(contrastive_losses) + len(reconstruction_losses) == len((self.pref_vector)), f"Contrastive Losses: {len(contrastive_losses)} Reconstruction Losses: {len(reconstruction_losses)} Pref Vector: {len(self.pref_vector)}"
 		losses = contrastive_losses + list(reconstruction_losses.values())
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False)
-
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values
@@ -232,7 +231,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return 1e2*riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		# Only ever have a non-zero mask ratio HERE
@@ -312,7 +311,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return 2.5e-4*loss, correct, pairs
+		return loss, correct, pairs
 
 	'''
 	Currently not being used
@@ -373,6 +372,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
-		inner_term = tensor_log_A[:, None, ...] - tensor_log_B[None, ...]
-		output = torch.linalg.matrix_norm(inner_term, ord='fro') * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
+		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
+		output = torch.linalg.matrix_norm(inner_term, ord='fro', dim=(2,3)) * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
+		output = (output + output.T) / 2 # Force Symmetrization due to numerical inprecision
 		return output

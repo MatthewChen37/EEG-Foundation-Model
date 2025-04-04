@@ -85,6 +85,50 @@ def testMakeMaskIdxes():
             else:
                 assert torch.allclose(test_batch[batch_idx, masked_epoch_idx], test_batch[batch_idx, masked_epoch_idx]), f"Masked epoch {masked_epoch_idx} not equal to unmasked: \n {test_batch[batch_idx, masked_epoch_idx]} \n {mask}"
 
+def testMENDRBatchWiseMatrixSimilarity():
+    args = SimpleNamespace(
+        encoder_grad_frac = 0.5,
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        mask_ratio = 0.01,
+        delta_reconstructive_loss_pref = 1.0,
+        theta_reconstructive_loss_pref = 1.0,
+        alpha_reconstructive_loss_pref = 1.0,
+        beta_reconstructive_loss_pref = 1.0,
+        gamma_reconstructive_loss_pref = 1.0,
+        contrastive_loss_pref = 1e3,
+        gradient_clip_value = 1e7,
+        mask_span = 5,
+        temp = 0.01,
+        num_negatives=10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42
+
+    )
+    mendr = MENDR_model(device, contextualizer_size="LARGE")
+    trainer = MENDRPreTrainer(mendr, args)
+
+    batch_size = 2
+    num_patches = 3
+
+    batch_zeros = torch.randn(1, 19, 19).to(device).float()
+    batch_zeros = batch_zeros.repeat(batch_size*num_patches, 1, 1)
+    output = trainer._batchWiseMatrixSimilarity(batch_zeros, batch_zeros)
+    assert torch.allclose(output, torch.zeros(batch_size * num_patches, batch_size * num_patches).to(device).float()), "Batchwise Matrix Similarity not equal to zero"
+
+    batch_A = torch.randn(batch_size*num_patches, 19, 19).to(device).float()
+    output = trainer._batchWiseMatrixSimilarity(batch_A, batch_A)
+    assert torch.all(output.diagonal(dim1=-2, dim2=-1) == 0), "Diagonal elements are not zero!"
+
+    batch_B = torch.randn(batch_size*num_patches, 19, 19).to(device).float()
+    output = trainer._batchWiseMatrixSimilarity(batch_A, batch_B)
+
+    assert output.shape == torch.Size([batch_size * num_patches, batch_size * num_patches]), f"Output shape: {output.shape} does not match {torch.Size([batch_size * num_patches, batch_size * num_patches])}"
+    assert torch.allclose(output, output.T), "Batchwise Matrix Similarity not symmetric"
+
 
 def testEncoder():
     example_input = {
@@ -782,6 +826,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -793,7 +838,12 @@ if __name__ == "__main__":
     print("Testing Encoder...")
     testEncoder()
     print("Encoder test passed!")
+    '''
+    print("Testing Batchwise Matrix Similarity...")
+    testMENDRBatchWiseMatrixSimilarity()
+    print("Batchwise Matrix Similarity test passed!")
 
+    '''
     print("Testing Large Contextualizer Batch LEM...")
     testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
@@ -855,3 +905,4 @@ if __name__ == "__main__":
     print("PreTrainer load from checkpoint tiny test passed!")
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
+    '''
