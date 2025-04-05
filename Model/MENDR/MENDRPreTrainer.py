@@ -229,9 +229,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
+		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
-		return 1e2*riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		# Only ever have a non-zero mask ratio HERE
@@ -239,7 +239,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
+		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
@@ -375,4 +375,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro', dim=(2,3)) * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
 		output = (output + output.T) / 2 # Force Symmetrization due to numerical inprecision
+
+		output = 1 / (1 + torch.log(1 + output))
 		return output
