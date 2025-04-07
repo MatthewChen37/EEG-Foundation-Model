@@ -10,7 +10,7 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
 class MENDR_model(nn.Module):
-    def __init__(self, device, num_channels=19, 
+    def __init__(self, device, temp, num_channels=19, 
                 sampling_rate=128, hop_length=0.5,
                 delta_encoded_h=19,
                 theta_encoded_h=19,
@@ -19,7 +19,6 @@ class MENDR_model(nn.Module):
                 gamma_encoded_h=114,
                 high_encoded_h=152,
                 super_patch_seconds=10,
-                temp=10.0,
                 contextualizer_size="LARGE"):
         '''
         Sampling rate is in Hertz
