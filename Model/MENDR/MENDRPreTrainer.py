@@ -12,8 +12,6 @@ from .safeSVD import SVD, svdv2
 from scipy.linalg import orth
 from .MENDRContextualizerLarge import MENDRContextualizerLarge
 from .MENDRContextualizerTiny import MENDRContextualizerTiny
-from torchjd import mtl_backward
-from torchjd.aggregation import UPGrad
 from Explainability.embeddingVisualization import plotSPDEmbedding
 from Explainability.plotReconstruction import plotReconstruction
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian, plotWaveletEmbeddingsEuclidean
@@ -28,21 +26,23 @@ class MENDRPreTrainer(BaseModelTrainer):
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, MENDR, config, **kwargs):
-		self.negatives_loo = 20
+		self.negatives_loo = config.num_negatives
 		self.mask_ratio = config.mask_ratio
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
 		self.contrastive_loss_fn_combined = nn.MSELoss()
-		self.pref_vector = [config.contrastive_loss_pref,
-							config.delta_reconstructive_loss_pref,
-		 					config.theta_reconstructive_loss_pref,
-							config.alpha_reconstructive_loss_pref,
-							config.beta_reconstructive_loss_pref,
-							config.gamma_reconstructive_loss_pref]
-		self.aggregator = UPGrad(torch.tensor(self.pref_vector).to(MENDR.device))
+		self.contrastive_combined_loss_pref = config.contrastive_combined_loss_pref
+		self.contrastive_wavelet_loss_pref = config.contrastive_wavelet_loss_pref
+		self.recon_loss_pref = {
+			'delta': config.delta_reconstructive_loss_pref,
+			'theta': config.theta_reconstructive_loss_pref,
+			'alpha': config.alpha_reconstructive_loss_pref,
+			'beta': config.beta_reconstructive_loss_pref,
+			'gamma': config.gamma_reconstructive_loss_pref
+		}
 
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
-			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, aggregator=self.aggregator, lr=config.learning_rate,
+			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
 		# Clamp gradients
@@ -69,7 +69,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
 
 			# Combined contrastive loss
-			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.epochMaskedRecon(wavelet_manifold_output, epoched_shape, self.contrastive_loss_fn_combined)
 			return {
 					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
@@ -99,10 +99,18 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
-		#if self.pref_vector != None:
-		# assert len(contrastive_losses) + len(reconstruction_losses) == len((self.pref_vector)), f"Contrastive Losses: {len(contrastive_losses)} Reconstruction Losses: {len(reconstruction_losses)} Pref Vector: {len(self.pref_vector)}"
-		losses = contrastive_losses + list(reconstruction_losses.values())
-		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False)
+
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			losses = constrastive_losses[0] + contrastive_losses[1]
+		elif self.mendr_model.contextualizer_size.upper() == "TINY":
+			losses = contrastive_losses[0]
+		else:
+			raise ValueError("Unidentified Contextualizer Type")
+		
+		for band in reconstruction_losses:
+			losses = losses + self.recon_loss_pref[band] * reconstruction_losses[band]
+
+		losses.backward()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values
@@ -116,7 +124,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
-			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss'] + outputs['wavelet_loss']], reconstruction_losses=recon_losses)
+			self.backward(shared_features=shared_features, contrastive_losses=[outputs['wavelet_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
 			self.optimizer.step()
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
@@ -231,7 +239,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		# Only ever have a non-zero mask ratio HERE
@@ -264,20 +272,20 @@ class MENDRPreTrainer(BaseModelTrainer):
 		loss = 0.0
 		correct = 0
 		pairs = 0
+
 		for i in range(num_targets):
 			# Average embeddings of all other modalities
 			other_embeddings = []
-
-			with torch.no_grad(): # Gradients don't need to be calculated for indices
-				negative_selection = torch.randperm(batch_size)
-				negative_indices = negative_selection[:negatives]
-
+			negative_selection = torch.randperm(batch_size)
+			negative_indices = negative_selection[:negatives]
 			for j in list(range(i)) + list(range(i + 1, num_targets)):
 				embedding_tensor = embeddings[frequency_bands[j]] # [Batch * epochs, C, C]
 				embedding_tensor = embedding_tensor[negative_indices]
 				other_embeddings.append(embedding_tensor)
 
 			curr_target = embeddings[frequency_bands[i]][negative_indices]
+			#other_embeddings_mean = torch.stack(other_embeddings, dim=0).sum(0) / (num_targets - 1)
+
 			other_embeddings_mean = self.mendr_model.mendr_contextualizer.WaveletContextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
 
 			# Why does this fail for higher precisions?
@@ -294,10 +302,16 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 			# Compute logits
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
-			#print(curr_target.shape, other_embeddings.shape)
-			#logits = torch.matmul(curr_target, other_embeddings.T) * torch.exp(self.temp1)
+			#logits = torch.matmul(curr_target, other_embeddings_mean.T) * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
+			#logits = (logits + logits.T) * 0.5
+			#logits = torch.matmul(curr_target, other_embeddings_mean.T) * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
 			labels = torch.arange(logits.shape[0], device=self.device)
 
+			#print("Logits:", logits)
+			#print("Labels:", labels)
+			#print("Predictions:", torch.argmax(logits, axis=0))
+			#print("Predictions2:", torch.argmax(logits, axis=1))
+			#print("Temperature:", self.mendr_model.mendr_contextualizer.temp1)
 			# Forward loss
 			forward_logits = logits
 			l = criterion(forward_logits, labels)
@@ -369,12 +383,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 		'''
 		a_u, a_s, a_v = self.svd(batch_A)
 		b_u, b_s, b_v = self.svd(batch_B)
-
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
 		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
-		output = torch.linalg.matrix_norm(inner_term, ord='fro', dim=(2,3)) * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
-		output = (output + output.T) / 2 # Force Symmetrization due to numerical inprecision
+		output = torch.linalg.matrix_norm(inner_term, ord='fro')
 
 		output = 1 / (1 + torch.log(1 + output))
+		output = output * torch.exp(self.mendr_model.mendr_contextualizer.temp1)
 		return output
