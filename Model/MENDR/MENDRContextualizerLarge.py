@@ -26,7 +26,7 @@ class MENDRContextualizerLarge(nn.Module):
 			'alpha': alpha_encoded_h,
 			'beta': beta_encoded_h,
 			'gamma': gamma_encoded_h,
-			'high': high_encoded_h
+			#'high': high_encoded_h
 		}
 		self.encoded_out = encoded_out
 
@@ -89,18 +89,28 @@ class MENDRWaveletContextualizer(nn.Module):
 				self.wavelet_attention_manifolds[band] = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
 		self.wavelet_attention_manifolds = nn.ParameterDict(self.wavelet_attention_manifolds).to(self.device)
 
-		self.trace_normalization = BatchTraceNormalization(self.device)
+		self.trace_normalization = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.trace_normalization[band] = BatchTraceNormalization(self.device)
+		self.trace_normalization = nn.ParameterDict(self.trace_normalization).to(self.device)
+
+		self.wavelet_tangent_space = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_tangent_space[band] = SPDTangentSpace(self.encoded_out, self.device)
+		self.wavelet_tangent_space = nn.ParameterDict(self.wavelet_tangent_space).to(self.device)
 
 		# SPD Transformations
 		self.wavelet_spd_transforms = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
 				self.wavelet_spd_transforms[band] = nn.Sequential(SPDTransform(self.encoded_out, int(1.5 * self.encoded_out), self.device),
-																self.ract,
+																SPDRectified(),
 																SPDTransform(int(1.5 *self.encoded_out), self.encoded_out, self.device))
 		self.wavelet_spd_transforms = nn.ParameterDict(self.wavelet_spd_transforms).to(self.device)
 
-
+		
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
@@ -126,7 +136,7 @@ class MENDRWaveletContextualizer(nn.Module):
 			og_output_shape = res_output.shape
 			wavelet_manifold_output[band] = wavelet_manifold_output[band] + res_output.view(wavelet_manifold_output[band].shape)
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(og_output_shape)
-			wavelet_manifold_output[band] = self.trace_normalization(wavelet_manifold_output[band])
+			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 
 			# Another skip connection
