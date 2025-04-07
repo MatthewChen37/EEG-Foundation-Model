@@ -322,7 +322,6 @@ class SPDRectifiedFunction(Function):
     def forward(ctx, input, epsilon):
         ctx.save_for_backward(input, epsilon)
         output = input.new(input.size(0), input.size(1), input.size(2))
-        '''
 
         # Perform batch SVD
         u, s, _ = torch.svd(input)
@@ -334,6 +333,7 @@ class SPDRectifiedFunction(Function):
         output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
 
         return output
+
         '''
         for k, x in enumerate(input):
             u, s, v = x.svd()
@@ -341,6 +341,7 @@ class SPDRectifiedFunction(Function):
 
             output[k] = u.mm(s.diag().mm(u.t()))
         return output
+        '''
     
     @staticmethod
     def backward(ctx, grad_output):

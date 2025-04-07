@@ -99,17 +99,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
-
-		if self.mendr_model.contextualizer_size.upper() == "LARGE":
-			losses = constrastive_losses[0] + contrastive_losses[1]
-		elif self.mendr_model.contextualizer_size.upper() == "TINY":
-			losses = contrastive_losses[0]
-		else:
-			raise ValueError("Unidentified Contextualizer Type")
-		
 		for band in reconstruction_losses:
-			losses = losses + self.recon_loss_pref[band] * reconstruction_losses[band]
-
+			losses = losses + self.recon_loss_pref[band.split("_")[0]] * reconstruction_losses[band]
 		losses.backward()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
@@ -120,11 +111,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
-		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], self.recon_loss_pref) # Reconstruction Loss returns a dictionary
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
-			self.backward(shared_features=shared_features, contrastive_losses=[outputs['wavelet_loss']], reconstruction_losses=recon_losses)
+			self.backward(shared_features=shared_features, contrastive_losses=[outputs['riemannian_loss'], outputs['wavelet_loss']], reconstruction_losses=recon_losses)
 			train_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
 			self.optimizer.step()
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
@@ -239,7 +230,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		# Only ever have a non-zero mask ratio HERE
@@ -249,7 +240,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked
 
 	def leave_one_out(self, embeddings, criterion, negatives=20):
 		"""
@@ -325,7 +316,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return loss, correct, pairs
+		return self.contrastive_wavelet_loss_pref * loss, correct, pairs
 
 	'''
 	Currently not being used
