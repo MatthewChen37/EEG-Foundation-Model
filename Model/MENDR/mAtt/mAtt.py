@@ -137,7 +137,7 @@ class AttentionManifold(nn.Module):
     
         K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1 )
         K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
-        
+
         atten_energy = self.log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
         atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
 

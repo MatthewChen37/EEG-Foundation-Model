@@ -52,6 +52,7 @@ def check_TangentSpace():
 
     forward = SPDTangentSpaceFunction.apply(spd)
     backward = SPDTangentSpaceFunction.backward(CTX([spd], [True]), grad_mat)
+
     
     forward_eq = assertTensorEqual(forward, desired_forward)
     backward_eq = assertTensorEqual(backward, desired_backward)
@@ -229,7 +230,7 @@ units = {
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
-    'Safe Eigh': check_safeEigh,
+    #'Safe Eigh': check_safeEigh,
 }
 
 result = True

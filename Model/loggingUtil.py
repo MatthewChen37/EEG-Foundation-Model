@@ -22,8 +22,9 @@ class MENDRLogger(object):
                 grad = module.grad.cpu()
                 self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
         elif isinstance(model, torch.nn.Parameter) and name != None:
-            grad = model.grad.cpu()
-            self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
+            if model.grad is not None:
+                grad = model.grad.cpu()
+                self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
         else:
             raise Exception(f"Unknown object type: {type(model)}")
  

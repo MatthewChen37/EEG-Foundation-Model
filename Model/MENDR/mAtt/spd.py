@@ -144,6 +144,7 @@ class SPDTangentSpaceFunction(Function):
         output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
         return output
 
+    '''
     @staticmethod
     def backward(ctx, grad_output):
         input = ctx.saved_variables
@@ -157,14 +158,23 @@ class SPDTangentSpaceFunction(Function):
             for k, g in enumerate(grad_output):
                 x = input[k]
                 s, u = torch.linalg.eigh(x)
+
+                print(f"Matrix {k}:")
+                print(f"s (eigenvalues): {s}")
+                print(f"u (eigenvectors): {u}")
                 
                 g = symmetric(g)
+                print(f"g (symmetrized grad_output): {g}")
                 
                 s_log_diag = s.log().diag()
                 s_inv_diag = (1/s).diag()
                 
                 dLdV = 2*(g.mm(u.mm(s_log_diag)))
                 dLdS = eye * (s_inv_diag.mm(u.t().mm(g.mm(u))))
+
+
+                print(f"dLdV: {dLdV}")
+                print(f"dLdS: {dLdS}")
                 
                 P = s.unsqueeze(1)
                 P = P.expand(-1, P.size(0))
@@ -172,12 +182,61 @@ class SPDTangentSpaceFunction(Function):
                 mask_zero = torch.abs(P) == 0
                 P = 1 / P
                 P[mask_zero] = 0
+
+                print(f"P: {P}")
                 
                 grad_input[k] = u.mm(symmetric(P.t() * (u.t().mm(dLdV)))+dLdS).mm(u.t())
-
-
+                
+                print(f"grad_input[{k}]: {grad_input[k]}")
+        print("TRUE", grad_input)
         return grad_input
+    '''
 
+    @staticmethod
+    def backward(ctx, grad_output):
+        input = ctx.saved_variables[0]
+        grad_input = None
+
+        if ctx.needs_input_grad[0]:
+            # Create a batch of identity matrices
+            eye = torch.eye(input.size(1), device=input.device).unsqueeze(0).expand(input.size(0), -1, -1)
+
+            # Perform batch eigen decomposition
+            s, u = torch.linalg.eigh(input)
+            #print(f"s (eigenvalues): {s}")
+            #print(f"u (eigenvectors): {u}")
+
+            # Symmetrize grad_output
+            grad_output = (grad_output + grad_output.transpose(-2, -1)) / 2
+            #print(f"grad_output (symmetrized): {grad_output}")
+
+            # Compute diagonal matrices for s.log() and 1/s
+            s_log_diag = s.log().diag_embed()
+            s_inv_diag = (1 / s).diag_embed()
+
+            # Compute dLdV and dLdS
+            dLdV = 2 * torch.bmm(grad_output, torch.bmm(u, s_log_diag))
+            #dLdS = torch.bmm(eye, torch.bmm(s_inv_diag, torch.bmm(u.transpose(1, 2), torch.bmm(grad_output, u))))
+            dLdS = eye * torch.bmm(s_inv_diag, torch.bmm(u.transpose(1, 2), torch.bmm(grad_output, u)))
+
+            # Compute P matrix
+            P = s.unsqueeze(2) - s.unsqueeze(1)
+            mask_zero = torch.abs(P) == 0
+            P = 1 / P
+            P[mask_zero] = 0
+
+            # Compute grad_input
+            grad_input = torch.bmm(
+                u,
+                torch.bmm(
+                    symmetric(P.transpose(1, 2) * torch.bmm(u.transpose(1, 2), dLdV) + dLdS),
+                    u.transpose(1, 2)
+                )
+            )
+
+        #print(f"grad_input: {grad_input}")
+        return grad_input
+    
 class SPDTangentSpace(nn.Module):
 
     def __init__(self, input_size, device, vectorize=True):
@@ -262,8 +321,9 @@ class SPDRectifiedFunction(Function):
     @staticmethod
     def forward(ctx, input, epsilon):
         ctx.save_for_backward(input, epsilon)
-        
         output = input.new(input.size(0), input.size(1), input.size(2))
+        '''
+
         # Perform batch SVD
         u, s, _ = torch.svd(input)
 
@@ -281,7 +341,6 @@ class SPDRectifiedFunction(Function):
 
             output[k] = u.mm(s.diag().mm(u.t()))
         return output
-        '''
     
     @staticmethod
     def backward(ctx, grad_output):
@@ -320,7 +379,6 @@ class SPDRectifiedFunction(Function):
                     u.transpose(1, 2)
                 )
             )
-
             '''
             eye = input.new(input.size(1))
             eye.fill_(1); eye = eye.diag()
