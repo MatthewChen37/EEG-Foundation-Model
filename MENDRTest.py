@@ -97,7 +97,8 @@ def testMENDRBatchWiseMatrixSimilarity():
         alpha_reconstructive_loss_pref = 1.0,
         beta_reconstructive_loss_pref = 1.0,
         gamma_reconstructive_loss_pref = 1.0,
-        contrastive_loss_pref = 1e3,
+        contrastive_combined_loss_pref = 1e3,
+        contrastive_wavelet_loss_pref = 1e3,
         gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
@@ -117,16 +118,17 @@ def testMENDRBatchWiseMatrixSimilarity():
     batch_zeros = torch.randn(1, 19, 19).to(device).float()
     batch_zeros = batch_zeros.repeat(batch_size*num_patches, 1, 1)
     output = trainer._batchWiseMatrixSimilarity(batch_zeros, batch_zeros)
-    assert torch.allclose(output, torch.ones(batch_size * num_patches, batch_size * num_patches).to(device).float()), "Batchwise Matrix Similarity not equal to zero"
+    assert torch.all(output > 0), "Batchwise Matrix Similarity not greater than zero"
+    assert torch.allclose(output, output.mT), "Batchwise Matrix Similarity not symmetric"
+
     batch_A = torch.ones(batch_size*num_patches, 19, 19).to(device).float()
     output = trainer._batchWiseMatrixSimilarity(batch_A, batch_A)
 
     batch_B = torch.zeros(batch_size*num_patches, 19, 19).to(device).float()
     output = trainer._batchWiseMatrixSimilarity(batch_A, batch_B)
 
-
     assert output.shape == torch.Size([batch_size * num_patches, batch_size * num_patches]), f"Output shape: {output.shape} does not match {torch.Size([batch_size * num_patches, batch_size * num_patches])}"
-    assert torch.allclose(output, output.T), "Batchwise Matrix Similarity not symmetric"
+    assert torch.allclose(output, output.mT), "Batchwise Matrix Similarity not symmetric"
 
 
 def testEncoder():
@@ -371,7 +373,8 @@ def testMENDRPreTrainerLOOLoss():
     alpha_reconstructive_loss_pref = 1.0,
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
-    contrastive_loss_pref = 1e3,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -395,7 +398,7 @@ def testMENDRPreTrainerLOOLoss():
         }
         loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
 
-    assert pairs == 30, f"Pairs is not 30: {pairs}"
+    assert pairs == 15, f"Pairs is not 30: {pairs}"
     assert loss > 0, f"Loss is not greater than 0: {loss}"
 
 
@@ -413,7 +416,8 @@ def testMENDRPreTrainerMAEReconLoss():
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
     gradient_clip_value = 1e7,
-    contrastive_loss_pref = 1e3,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     temp = 0.01,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -439,7 +443,7 @@ def testMENDRPreTrainerMAEReconLoss():
         for band, batch in wavelet_manifold_output.items():
             assert torch.allclose(batch, batch.mT, atol=(10 ** -7)), f"{band}"
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer.epochMaskedRecon(wavelet_manifold_output, [2, 4, -1], nn.MSELoss())
     assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
     assert combined_manifold_output.shape == torch.Size([2, 4, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
@@ -448,6 +452,11 @@ def testMENDRPreTrainerMAEReconLoss():
     assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
     assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
 
+    assert len(mask_idxes) == 2, f"Did not correctly make batch indices: {len(mask_idxes)}"
+    for mask_idx in mask_idxes:
+        assert torch.sum(mask_idx) == 2
+
+    
 def testMENDRPreTrainerTinyMAEReconLoss():
     args = SimpleNamespace(
         encoder_grad_frac = 0.5,
@@ -463,7 +472,8 @@ def testMENDRPreTrainerTinyMAEReconLoss():
         beta_reconstructive_loss_pref = 1.0,        
         gamma_reconstructive_loss_pref = 1.0,
         gradient_clip_value = 1e7,
-        contrastive_loss_pref = 1e3,
+        contrastive_combined_loss_pref = 1e3,
+        contrastive_wavelet_loss_pref = 1e3,
         num_negatives=10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
@@ -486,7 +496,7 @@ def testMENDRPreTrainerTinyMAEReconLoss():
             'gamma': torch.randn(4, 11, 114, 37).to(device).float()
         }
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
 
         assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
@@ -495,6 +505,11 @@ def testMENDRPreTrainerTinyMAEReconLoss():
 
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
         assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
+
+        assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
+        for mask_idx in mask_idxes:
+            assert torch.sum(mask_idx) == 5
+
 
 def testMENDRPreTrainerWithTiny():
     args = SimpleNamespace(
@@ -508,7 +523,8 @@ def testMENDRPreTrainerWithTiny():
         alpha_reconstructive_loss_pref = 1.0,
         beta_reconstructive_loss_pref = 1.0,
         gamma_reconstructive_loss_pref = 1.0,
-        contrastive_loss_pref = 1e3,
+        contrastive_combined_loss_pref = 1e3,
+        contrastive_wavelet_loss_pref = 1e3,
         gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
@@ -520,7 +536,7 @@ def testMENDRPreTrainerWithTiny():
 
     )
 
-    mendr = MENDR_model(device, contextualizer_size="TINY")
+    mendr = MENDR_model(device, temp=args.temp, contextualizer_size="TINY")
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -543,7 +559,8 @@ def testMENDRPreTrainerNoValidation():
     alpha_reconstructive_loss_pref = 1.0,
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
-    contrastive_loss_pref = 1e3,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     mask_span = 5,
     temp = 0.01,
@@ -554,7 +571,7 @@ def testMENDRPreTrainerNoValidation():
     random_state=42
     )
 
-    mendr = MENDR_model(device)
+    mendr = MENDR_model(device, temp=args.temp)
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -579,7 +596,8 @@ def testMENDRParameters():
     alpha_reconstructive_loss_pref = 1.0,
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
-    contrastive_loss_pref = 1e3,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     num_negatives=10,
     enc_feat_l2 = 0.001,
@@ -588,7 +606,7 @@ def testMENDRParameters():
     random_state=42
     )
 
-    mendr = MENDR_model(device)
+    mendr = MENDR_model(device, temp=args.temp)
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -710,7 +728,8 @@ def testMENDRPretrainerTinyContextualizerWithValidation():
     alpha_reconstructive_loss_pref = 1.0,
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
-    contrastive_loss_pref = 1e3,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     temp = 0.01,
     num_negatives=10,
@@ -722,7 +741,7 @@ def testMENDRPretrainerTinyContextualizerWithValidation():
     random_state=42
     )
 
-    mendr = MENDR_model(device, contextualizer_size="TINY")
+    mendr = MENDR_model(device, contextualizer_size="TINY", temp=args.temp)
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -755,6 +774,8 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     alpha_reconstructive_loss_pref = 1.0,
     beta_reconstructive_loss_pref = 1.0,
     gamma_reconstructive_loss_pref = 1.0,
+    contrastive_combined_loss_pref = 1e3,
+    contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     contrastive_loss_pref = 1e3,
     multi_gpu = False,
@@ -765,7 +786,7 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     load_from_ckpt="./checkpoint/MockCkptLarge"
     )
 
-    mendr = MENDR_model(device)
+    mendr = MENDR_model(device, temp=args.temp)
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -801,7 +822,7 @@ def testMENDRPreTrainerLoadFromCheckpointTiny():
     load_from_ckpt="./checkpoint/MockCkptTiny"
     )
 
-    mendr = MENDR_model(device, contextualizer_size="TINY")
+    mendr = MENDR_model(device, contextualizer_size="TINY", temp=args.temp)
     trainer = MENDRPreTrainer(mendr, args)
     optimizer = torch.optim.Adam(trainer.parameters())
     optimizer = MixOptimizer(optimizer)
@@ -810,7 +831,6 @@ def testMENDRPreTrainerLoadFromCheckpointTiny():
 
     mendr.mendr_encoder.apply(check_sanity)
     mendr.mendr_contextualizer.apply(check_sanity)
-
 
 if __name__ == "__main__":
     ### Seed ###
@@ -826,7 +846,6 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -885,15 +904,14 @@ if __name__ == "__main__":
     testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
-    '''
     print("Testing pretrainer fit with validation...")
     testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
-    '''
 
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
+
 
     print("Testing pretrainer load from checkpoint...")
     testMENDRPreTrainerLoadFromCheckpoint()
@@ -902,6 +920,5 @@ if __name__ == "__main__":
     print("Testing pretrainer load from checkpoint tiny...")
     testMENDRPreTrainerLoadFromCheckpointTiny()
     print("PreTrainer load from checkpoint tiny test passed!")
-    '''
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

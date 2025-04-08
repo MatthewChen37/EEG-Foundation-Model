@@ -234,7 +234,7 @@ class BaseModelTrainer(object):
             tqdm.tqdm.write(f"Training Wavelet Loss: {_training_validation_Wavelet_Loss} Validation Wavelet Loss: {_validation_Wavelet_Loss}")
         tqdm.tqdm.write(" Retaining checkpoint...")
 
-        epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
+        epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}_{self.mendr_model.contextualizer_size.upper()}'
         self.save_best(epoch_ckpt_dir)
         torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
         self.load_best(epoch_ckpt_dir)

@@ -42,9 +42,9 @@ def plotWaveletEmbeddingsEuclidean(wavelet_manifold_output, combined_manifold_ou
 def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, title, num_sample_patches=4, reduction="TSNE"):
     with torch.no_grad():
         if reduction == "TSNE":
-            riemannian_reducer = Riem_Riem_tSNE(perplexity=int(0.75 * num_sample_patches * 6), max_it=2000, max_time=600)
+            riemannian_reducer = Riem_Riem_tSNE(perplexity=int(0.75 * num_sample_patches * 6), max_it=10000, max_time=6000)
         elif reduction == "MDS":
-            riemannian_reducer = Riem_Riem_MDS(max_it=1000, max_time=6000)
+            riemannian_reducer = Riem_Riem_MDS(max_it=100000, max_time=6000)
         else:
             raise ValueError("Reduction must be either 'TSNE' or 'MDS'")
 

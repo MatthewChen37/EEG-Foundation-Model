@@ -85,7 +85,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			batch_size = patchified_inputs['delta'].shape[0]
 			patches = patchified_inputs['delta'].shape[1]
 			# Combined contrastive loss
-			riemannian_loss, combined_manifold_output, combined_manifold_output_masked = self.epochMaskedReconTiny(encodings, self.contrastive_loss_fn_combined)
+			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.epochMaskedReconTiny(encodings, self.contrastive_loss_fn_combined)
 			return {
 					'patchified_inputs': patchified_inputs,
 					'encodings': encodings,
@@ -99,8 +99,16 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			losses = contrastive_losses[0] + contrastive_losses[1]
+		elif self.mendr_model.contextualizer_size.upper() == "TINY":
+			losses = contrastive_losses[0]
+		else:
+			raise ValueError("Unidentified Contextualizer Type")
+
 		for band in reconstruction_losses:
-			losses = losses + self.recon_loss_pref[band.split("_")[0]] * reconstruction_losses[band]
+			losses = losses + reconstruction_losses[band]
+	
 		losses.backward()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
@@ -136,7 +144,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
-			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], recon_loss_pref=self.recon_loss_pref) # Reconstruction Loss returns a dictionary
 			if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
 			elif self.mendr_model.contextualizer_size.upper() == 'TINY':
@@ -156,9 +164,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)
 					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
 					for band, wavelet_fig in wavelet_figs.items():
-						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.png")
+						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
 						plt.close(wavelet_fig)
-					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 					
 					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
@@ -167,7 +175,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 					combined_manifold_output = combined_manifold_output.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
 					combined_manifold_output_masked = combined_manifold_output_masked.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
 					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
-					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.png")
+					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 				else:
 					raise ValueError("Unidentified Contextualizer Type")
@@ -180,7 +188,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 					recon_dec[band] = outputs['decodings'][band][0, :NUM_RECONS].detach().cpu().numpy()
 
 				fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} reconstructions")
-				mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.png")
+				mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.pdf")
 				plt.close(fig)
 
 
@@ -240,7 +248,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
 
-		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked
+		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def leave_one_out(self, embeddings, criterion, negatives=20):
 		"""
@@ -311,11 +319,13 @@ class MENDRPreTrainer(BaseModelTrainer):
 			pairs += forward_logits.size(0)
 
 			# Reverse loss - Ensure logits are symmetric
+			'''
 			reverse_logits = logits.T
 			l = criterion(reverse_logits, labels)
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
+			'''
 		return self.contrastive_wavelet_loss_pref * loss, correct, pairs
 
 	'''
@@ -337,7 +347,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		diff = torch.abs(singular_values[:, :-1] - singular_values[:, 1:])
 		return torch.any(diff < tol), torch.where(diff < tol)
 
-	def _batchWiseMatrixSimilarity(self, batch_A, batch_B):
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, eps=1e-12):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		# Based on the Log-Euclidean metric
@@ -372,10 +382,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 			b_u[i], b_s[i], b_v[i] = self.svd(batch_B[i])
 
 		'''
-		a_u, a_s, a_v = self.svd(batch_A)
-		b_u, b_s, b_v = self.svd(batch_B)
-		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s)) @ a_v.permute(0, 2, 1)
-		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s)) @ b_v.permute(0, 2, 1)
+		a_u, a_s, a_v = self.svd(batch_A + eps)
+		b_u, b_s, b_v = self.svd(batch_B + eps)
+		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s + eps)) @ a_v.permute(0, 2, 1)
+		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s + eps)) @ b_v.permute(0, 2, 1)
 		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro')
 

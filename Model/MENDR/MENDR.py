@@ -10,7 +10,7 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
 class MENDR_model(nn.Module):
-    def __init__(self, device, temp, num_channels=19, 
+    def __init__(self, device, temp=0.5, num_channels=19, 
                 sampling_rate=128, hop_length=0.5,
                 delta_encoded_h=19,
                 theta_encoded_h=19,
