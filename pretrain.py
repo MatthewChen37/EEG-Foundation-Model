@@ -188,7 +188,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--contrastive_loss_pref", type=float, help="Weight of contrastive loss in Jacobian Descent", default=1e3
+		"--contrastive_combined_loss_pref", type=float, help="Weight of combined contrastive loss", default=1e3
+	)
+
+	parser.add_argument(
+		"--contrastive_wavelet_loss_pref", type=float, help="Weight of wavelet contrastive loss", default=1e3
 	)
 
 	parser.add_argument(

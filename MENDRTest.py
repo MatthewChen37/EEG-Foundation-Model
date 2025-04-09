@@ -398,7 +398,7 @@ def testMENDRPreTrainerLOOLoss():
         }
         loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
 
-    assert pairs == 15, f"Pairs is not 30: {pairs}"
+    assert pairs == 30, f"Pairs is not 30: {pairs}"
     assert loss > 0, f"Loss is not greater than 0: {loss}"
 
 

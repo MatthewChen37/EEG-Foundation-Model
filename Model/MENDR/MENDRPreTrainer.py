@@ -26,7 +26,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 	Based on BENDRTrainer.py	
 	'''
 	def __init__(self, MENDR, config, **kwargs):
-		self.negatives_loo = config.num_negatives
+		self.negatives_loo = config.negatives_loo
 		self.mask_ratio = config.mask_ratio
 		self.svd = SVD.apply
 		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
@@ -319,13 +319,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 			pairs += forward_logits.size(0)
 
 			# Reverse loss - Ensure logits are symmetric
-			'''
 			reverse_logits = logits.T
 			l = criterion(reverse_logits, labels)
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-			'''
 		return self.contrastive_wavelet_loss_pref * loss, correct, pairs
 
 	'''
