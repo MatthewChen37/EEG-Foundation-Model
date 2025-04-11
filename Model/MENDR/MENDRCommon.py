@@ -32,6 +32,7 @@ class PositionalEncoding(nn.Module):
 		"""
 		x = x.permute(0, 3, 1, 2)
 		# x is now [Batch, #time_step, #patch, encoded_h]
+		#print(x.shape, x, "Is Nan: ", torch.isnan(x).any())
 		positional_encoding = self.conv(x)
 		positional_encoding = self.act(positional_encoding)
 		# Positional Encoding is now [Batch, 1, #patch, W_out]

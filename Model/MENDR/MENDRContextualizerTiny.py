@@ -24,7 +24,7 @@ class MENDRContextualizerTiny(nn.Module):
 											encoded_out=encoded_out)
 
 		
-	def forward(self, x, mask_ratio=0.0):
+	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #encoded_h, #time_step] 
 		# Note that each wavelet band should be the same time length
 		signal = []
@@ -34,12 +34,10 @@ class MENDRContextualizerTiny(nn.Module):
 		if self.position_encoder:
 			signal = self.position_encoder(signal)
 		cov_matrices = self.e2r(signal)
-		batch_size = cov_matrices.shape[0]
-		patches = cov_matrices.shape[1]
-		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*patches, self.encoded_h, self.encoded_h))
-		signal_transformed = signal_transformed.reshape(batch_size, patches, self.encoded_out, self.encoded_out)
-		signal, mask_idxes = self.Contextualizer(signal_transformed, mask_ratio)
-		return signal, signal_transformed, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge
+		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
+		signal_transformed = signal_transformed.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
+		signal, mask_idxes = self.Contextualizer(signal_transformed, batch_size, num_patches, mask_ratio)
+		return signal_transformed, signal, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge, but mask_idxes is None
 	
 class MENDRContextualizer(nn.Module):
 	def __init__(self, device, encoded_out):
@@ -62,9 +60,7 @@ class MENDRContextualizer(nn.Module):
 		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out)).float().to(self.device)
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
-	def forward(self, x, mask_ratio=0.0):
-		batch_size = x.shape[0]
-		num_patches = x.shape[1]
+	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is now with shape [Batch, #patch, #encoded_h, #encoded_h]
 		
 		mask_idxes = None
