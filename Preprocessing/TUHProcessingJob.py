@@ -74,6 +74,8 @@ def _process_subject(args, subject):
 			except Exception as e:
 				print(f"Failed to process {bp}, error: {e}")
 				return (bp, e, traceback.format_exc())
+			
+
 					
 def _correct_path(bp):
 	path_str = str(bp.fpath)

@@ -5,14 +5,12 @@ import pandas as pd
 import os, argparse
 from pathlib import Path
 from tqdm import tqdm
-from preprocessingPipeline import simplePipeline
+import numpy as np
+from preprocessingPipeline import simplePipeline, group_list, simplePipelineNoEpoch
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import warnings
 import traceback
 from convertTUHtoBIDS import _rename_channels, CHANNELS_TO_KEEP
-from ..utils import group_list
-
-failed_files = []
 
 def main(args):
 	sessions = [f.path for f in os.scandir(args.input_directory) if f.is_dir()]
@@ -22,20 +20,27 @@ def main(args):
 	# Define the columns for the empty DataFrame
 	columns = ['f_path', 'error', 'traceback']
 
+	failed_files = []
 	with ProcessPoolExecutor() as executor:
 		futures = [executor.submit(_process_file_group, args, session_group) for session_group in session_grouped]
 		for future in tqdm(futures):
-			future.result()
+			result = future.result()
+			failed_files.extend(result)
 
 	failed_files_df = pd.DataFrame(failed_files, columns=columns)
 	print(f"Failed files: {len(failed_files)}")
 	failed_files_df.to_csv(os.path.join(args.output_dir, "failed_files.csv"), index=False)
 
 def _process_file_group(args, session_group):
+	failed_files = []
 	with ThreadPoolExecutor() as executor:
 		futures = [executor.submit(process_session, os.path.join(args.input_directory, session)) for session in session_group]
 		for future in futures:
-			future.result()
+			result = future.result()
+			if result is not None:
+				failed_files.append(result)
+
+	return failed_files
 
 # From https://github.com/fjssharpsword/MedIR/blob/3d1eef266e8ad82a0cfad7a6111076028b8d42fa/EEG/TUSZ/dsts/tuev_spsw.py#L87
 def parse_annotation(ann_path):
@@ -57,12 +62,8 @@ def process_session(session_path):
 	file_list = os.listdir(session_path)
 	for file in file_list:
 		if file.endswith('.edf'):
-			file_ouput_path = os.path.join(args.output_dir, f"{file[:-4]}_epo.fif")
-			if os.path.exists(file_ouput_path):
-				continue
 			try: 
-				raw = mne.io.read_raw_edf(os.path.join(session_path, file), preload=True)
-				assert raw.times[-1] > 60, f"Duration is {raw.times[-1]} {session_path} {file}"
+				raw = mne.io.read_raw_edf(os.path.join(session_path, file), preload=True, verbose=False)
 				_rename_channels(raw)
 				raw.info['line_freq'] = 60
 				annotations_file = file[:-4] + '.rec'
@@ -81,18 +82,36 @@ def process_session(session_path):
 					raw = raw.drop_channels(['A1', 'A2'])
 				assert len(raw.ch_names) == 19, f"Number of channels is {len(raw.ch_names)}"
 
-				epochs = simplePipeline(raw)
-				epochs.save(file_ouput_path, overwrite=False)
+				raw = simplePipelineNoEpoch(raw, sample_rate=128, low_pass=75)
+				for idx, annotation in enumerate(annotations):
+					raw_annotation_event = build_events(raw.copy(), annotation)
+					if raw_annotation_event.times[-1] - raw_annotation_event.times[0] != 10:
+						print(f"Annotation {annotation} is not 10 seconds long ------------------------------------")
+					if args.split == "train":
+						file_ouput_path = os.path.join(args.output_dir, f"{annotation['description']}_{file[:-4]}_event_{idx}.fif")
+					else:
+						file_ouput_path = os.path.join(args.output_dir, f"{file[:-4]}_event_{idx}.fif")
+					if os.path.exists(file_ouput_path):
+						continue
+					else:
+						raw_annotation_event.save(file_ouput_path, overwrite=False)
 			except Exception as e:
-				print(f"Failed to process {file, session_path}, error: {e}")
-				failed_files.append((os.path.join(file, session_path), e, traceback.format_exc()))
+				print(f"Failed to process {file, session_path}, error: {e} {traceback.format_exc()}")
+				return (os.path.join(file, session_path), e, traceback.format_exc())
 		else:
 			pass # ignore other files
+
+def build_events(raw, annotation):
+	offset = raw.times[-1]
+	raw_modified = mne.concatenate_raws([raw, raw, raw])
+	raw_annotation_event = raw_modified.copy().crop(offset + annotation['onset'] - 4, offset + annotation['onset'] + round(annotation['duration']) + 5)
+	return raw_annotation_event
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='Preprocess TUEV data')
 	parser.add_argument('--input_directory', type=str, help='Path to the directory containing the TUEV data')
 	parser.add_argument('--output_dir', type=str, help='Path to the directory where the preprocessed data will be stored')
+	parser.add_argument('--split', type=str, default='train')
 	args = parser.parse_args()
 	return args
 
@@ -104,14 +123,3 @@ if __name__ == '__main__':
 	Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 	main(args)
 
-
-'''
-eval
-
-
-error: Duration is 19.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/031 bckg_031_a_.edf
-error: Duration is 9.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/040 bckg_040_a_.edf
-error: Duration is 34.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/028 bckg_028_a_.edf
-error: Duration is 41.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/006 pled_006_a_.edf
-error: Duration is 37.996 /home/azureuser/mycontainer/TUEV/v2.0.1/edf/eval/093 bckg_093_a_2.edf
-'''

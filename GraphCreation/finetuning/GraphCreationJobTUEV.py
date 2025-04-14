@@ -36,11 +36,11 @@ def group_list(data, size):
 def main(args):
 	files = os.listdir(args.input_directory)
 	files.remove("failed_files.csv")
-	assert len(files) == 154
+	#assert len(files) == 154
 	
 	# Define the columns for the empty DataFrame
 	columns = ['f_path', 'error', 'traceback'] 
-	files_grouped = group_list(files, 20)
+	files_grouped = group_list(files, 30)
 	print(f"Processing {len(files_grouped)} groups")
 
 	with ProcessPoolExecutor() as executor:
@@ -58,13 +58,14 @@ def _process_file_thread(args, file):
 	base_path = os.path.join(args.input_directory, file)
 	if os.path.exists(base_path):
 		try:
-			subject = file.split("/")[-1]
-			output_dir = os.path.join(args.output_directory, f"{subject[:-4]}")
+			file_class = file.split("_")[0]
+			epoch_idx = int(file[:-4].split("_")[-1])
+			output_dir = os.path.join(args.output_directory, file[:-4])
 			Path(os.path.join(output_dir, "wavelet_decompositions")).mkdir(parents=True, exist_ok=True)
-			Path(os.path.join(output_dir, "graphs_v2")).mkdir(parents=True, exist_ok=True)
-			raw_epoch = mne.read_epochs(base_path, preload=True, verbose=False)
-			annotations_per_epoch = raw_epoch.get_annotations_per_epoch()
-			raw_data = raw_epoch.get_data(copy=True)
+			Path(os.path.join(output_dir, "graphs")).mkdir(parents=True, exist_ok=True)
+			raw = mne.io.read_raw_fif(base_path, preload=True, verbose=False)
+			#annotations_per_epoch = raw_epoch.get_annotations_per_epoch()
+			raw_data = raw.get_data()
 			dbt = pywt.WaveletPacket(raw_data, wavelet='db4', maxlevel=5, axis=-1)
 			relevant_bands = {
 				'delta': dbt['aaaaa'].data,
@@ -74,21 +75,26 @@ def _process_file_thread(args, file):
 				'gamma': dbt['ad'].data,
 				'high_freq': dbt['d'].data
 			}
-
-			dist_feat = createDistanceMatrix(raw_epoch.info)
-			electrode_pos = createPositionMatrix(raw_epoch.info)
+			dist_feat = createDistanceMatrix(raw.info)
+			electrode_pos = createPositionMatrix(raw.info)
 			# Fully connected graph
 			edge_indices, edge_weights = createEdges([dist_feat])
-			for epoch in range(len(annotations_per_epoch)):
-				if len(annotations_per_epoch[epoch]) > 0: # Only save epochs with annotations
-					for band, data in relevant_bands.items():
-						assert data.shape[0] == len(annotations_per_epoch), f"Number of epochs {data.shape[0]} does not match number of annotations {len(annotations_per_epoch)}"
-						curr_epoch = torch.tensor(data[epoch])
-						torch.save(curr_epoch, os.path.join(output_dir, "wavelet_decompositions", f"{file[:-4]}_{band}_band_epoch_{epoch}.pt"))
-						# Create graph
-						data = Data(x=raw_data[0], edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos, y=process_annotation(annotations_per_epoch[epoch]))
-						torch.save(data, os.path.join(output_dir, "graphs_v2", f"{file[:-4]}_graph_epoch_{epoch}.pt"))
-	
+			#for epoch in range(len(annotations_per_epoch)):
+				# if len(annotations_per_epoch[epoch]) > 0: # Only save epochs with annotations
+			for band, data in relevant_bands.items():
+				#assert data.shape[0] == len(annotations_per_epoch), f"Number of epochs {data.shape[0]} does not match number of annotations {len(annotations_per_epoch)}"
+				# Save the wavelet decomposition
+				curr_epoch = torch.tensor(data)
+				torch.save(curr_epoch, os.path.join(output_dir, "wavelet_decompositions", f"{file[:-4]}_{band}_epoch_{epoch_idx}.pt"))
+
+			# Create graph
+			if args.split == "train":
+				subject_int_class = int(file_class) - 1 # To match with the intClass function
+			else:
+				subject_int_class = intClass(file_class)
+			data = Data(x=raw_data[0], edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos)
+			data.y = torch.tensor([subject_int_class])
+			torch.save(data, os.path.join(output_dir, "graphs", f"{file[:-4]}_graph_epoch_{epoch_idx}.pt"))
 		except Exception as e:
 			print(f"Failed to process {file}, error: {e}")
 
@@ -107,6 +113,7 @@ def parse_args():
 					  help='Path to epoched data.')
 	parser.add_argument('--output_directory', type=str, required=True,
 					  help='Output directory for the graphs.')
+	parser.add_argument('--split', type=str, default='train')
 	args = parser.parse_args()
 	return args
 
