@@ -70,8 +70,8 @@ class WaveletTUABDataset(Dataset):
 		return data
 
 if __name__ == "__main__":
-	train_dataset = WaveletTUABDataset(root="/home/hice1/mchen439/scratch/TUAB/train", frac=1.0)
-	eval_dataset = WaveletTUABDataset(root="/home/hice1/mchen439/scratch/TUAB/eval", frac=1.0)
+	train_dataset = WaveletTUABDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train", frac=1.0)
+	eval_dataset = WaveletTUABDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval", frac=1.0)
 	print("Length of train dataset: ", len(train_dataset))
 	print("Length of val dataset: ", len(eval_dataset))
 	data = train_dataset[0]
