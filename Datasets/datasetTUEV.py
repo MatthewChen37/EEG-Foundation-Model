@@ -33,7 +33,7 @@ class WaveletTUEVDataset(Dataset):
         folder_bands = dict()
         folder_graph_path = os.listdir(graph_folder)[0]
         split_path = folder_graph_path.split("_")
-        graph = torch.load(os.path.join(graph_folder, folder_graph_path))
+        graph = torch.load(os.path.join(graph_folder, folder_graph_path)).clone() # I hypothesize that this might be the cause of cloning for the MENDREncoder comment
         graph.x = None
         if self.split == "train":
             graph_name = "_".join(split_path[0:5])
