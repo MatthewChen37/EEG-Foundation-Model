@@ -82,3 +82,21 @@ if __name__ == "__main__":
 
 	print("Val Graphs: ", len(eval_dataset.graphs)) # Should be 276
 	print("Val Epochs: ", len(eval_dataset.epochs)) # Should be 6067
+
+	from torch_geometric.loader import DataLoader
+	finetune_train_loader = DataLoader(train_dataset, batch_size=4, num_workers=1, shuffle=True, persistent_workers=True)
+	finetune_eval_loader = DataLoader(eval_dataset, batch_size=4, num_workers=1, shuffle=True, persistent_workers=True)
+
+	data = next(iter(finetune_train_loader))
+	edge_index = data['graph'].edge_index
+	edge_dist = data['graph'].edge_attr
+	assert edge_index[0].min() == 0 and edge_index[0].max() <= 76, f"{edge_index[0].min()}, {edge_index[0].max()}"
+	assert edge_index[1].min() == 0 and edge_index[1].max() <= 76, f"{edge_index[1].min()}, {edge_index[1].max()}"
+	assert edge_dist.min() == 0 and edge_dist.max() <= 1
+
+	data = next(iter(finetune_eval_loader))
+	edge_index = data['graph'].edge_index
+	edge_dist = data['graph'].edge_attr
+	assert edge_index[0].min() == 0 and edge_index[0].max() <= 76, f"{edge_index[0].min()}, {edge_index[0].max()}"
+	assert edge_index[1].min() == 0 and edge_index[1].max() <= 76, f"{edge_index[1].min()}, {edge_index[1].max()}"
+	assert edge_dist.min() == 0 and edge_dist.max() <= 1

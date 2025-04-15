@@ -86,7 +86,6 @@ class WaveletEncoderDecoder(nn.Module):
 
         x = x.view(B, P, C, 2*self.L_out_1)
         # x: [Batch Size, Patches, Channels, self.L_out_1]
-
         for patch_idx in range(x.shape[1]):
             gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, 2 * self.L_out_1)
             # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
