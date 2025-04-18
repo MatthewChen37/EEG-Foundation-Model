@@ -38,7 +38,7 @@ class WaveletTUEVDataset(Dataset):
         if self.split == "train":
             graph_name = "_".join(split_path[0:5])
         else:
-            graph_name = "_".join(split_path[0:6])
+            graph_name = "_".join(split_path[0:7])
         self.graphs[graph_name] = graph
         wavelet_files = os.listdir(wavelet_folder)
         for file_name in wavelet_files:
