@@ -70,6 +70,9 @@ class WaveletEncoderDecoder(nn.Module):
         up4_count = sum(p.numel() for p in self.up4.parameters() if p.requires_grad)
         return up1_count + up2_count + up3_count + up4_count
 
+    def getDecoderParams(self):
+        return list(self.up1.parameters()) + list(self.up2.parameters()) + list(self.up3.parameters()) + list(self.up4.parameters())
+
     def forward(self, graph, x):
         # x: [Batch Size, Patches, Channels, Time Steps]
         B, P, C, T = x.shape
