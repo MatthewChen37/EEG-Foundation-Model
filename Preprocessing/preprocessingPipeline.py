@@ -50,7 +50,6 @@ def simplePipelineNoEpoch(raw, sample_rate=128, low_pass=75):
 	'''
 	Version 3
 	'''
-
 	raw.filter(0.1, low_pass, verbose=False)
 	raw.notch_filter((60, 120), verbose=False)
 	raw = raw.load_data()

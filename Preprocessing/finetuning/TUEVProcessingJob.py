@@ -85,12 +85,14 @@ def process_session(session_path):
 				raw = simplePipelineNoEpoch(raw, sample_rate=128, low_pass=75)
 				for idx, annotation in enumerate(annotations):
 					raw_annotation_event = build_events(raw.copy(), annotation)
-					if raw_annotation_event.times[-1] - raw_annotation_event.times[0] != 10:
-						print(f"Annotation {annotation} is not 10 seconds long ------------------------------------")
+					if raw_annotation_event.times[-1] - raw_annotation_event.times[0] != 20:
+						print(f"Annotation {annotation} is not 20 seconds long ------------------------------------")
 					if args.split == "train":
 						file_ouput_path = os.path.join(args.output_dir, f"{annotation['description']}_{file[:-4]}_event_{idx}.fif")
 					else:
-						file_ouput_path = os.path.join(args.output_dir, f"{file[:-4]}_event_{idx}.fif")
+						# Turns out the eval impromperly labels the classes, i.e. there are artf and eyem 
+						# labels inside backg .rec files - can't trust shit
+						file_ouput_path = os.path.join(args.output_dir, f"{annotation['description']}_{file[:-4]}_event_{idx}.fif")
 					if os.path.exists(file_ouput_path):
 						continue
 					else:
@@ -104,7 +106,7 @@ def process_session(session_path):
 def build_events(raw, annotation):
 	offset = raw.times[-1]
 	raw_modified = mne.concatenate_raws([raw, raw, raw])
-	raw_annotation_event = raw_modified.copy().crop(offset + annotation['onset'] - 4, offset + annotation['onset'] + round(annotation['duration']) + 5)
+	raw_annotation_event = raw_modified.copy().crop(offset + annotation['onset'] - 9, offset + annotation['onset'] + round(annotation['duration']) + 10)
 	return raw_annotation_event
 
 def parse_args():

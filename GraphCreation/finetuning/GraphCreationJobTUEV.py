@@ -13,7 +13,7 @@ from torch_geometric.data import Data
 from GenerateConnectivityGraphs import createDistanceMatrix, createEdges, createPositionMatrix
 import pywt
 
-
+'''
 def intClass(class_name):
 	if class_name == "spsw":
 		return 0
@@ -29,6 +29,7 @@ def intClass(class_name):
 		return 5
 	else:
 		raise ValueError(f"Unknown class {class_name}")
+'''
 
 def group_list(data, size):
     return [data[i:i + size] for i in range(0, len(data), size)]
@@ -88,10 +89,13 @@ def _process_file_thread(args, file):
 				torch.save(curr_epoch, os.path.join(output_dir, "wavelet_decompositions", f"{file[:-4]}_{band}_epoch_{epoch_idx}.pt"))
 
 			# Create graph
+			'''
 			if args.split == "train":
 				subject_int_class = int(file_class) - 1 # To match with the intClass function
 			else:
 				subject_int_class = intClass(file_class)
+			'''
+			subject_int_class = int(file_class) - 1
 			data = Data(x=raw_data[0], edge_index=edge_indices, edge_attr=edge_weights, pos=electrode_pos)
 			data.y = torch.tensor([subject_int_class])
 			torch.save(data, os.path.join(output_dir, "graphs", f"{file[:-4]}_graph_epoch_{epoch_idx}.pt"))
