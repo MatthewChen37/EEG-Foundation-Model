@@ -89,6 +89,13 @@ class MENDRWaveletContextualizer(nn.Module):
 				self.wavelet_attention_manifolds[band] = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
 		self.wavelet_attention_manifolds = nn.ParameterDict(self.wavelet_attention_manifolds).to(self.device)
 
+		# Second Attention Manifold
+		self.wavelet_attention_manifolds2 = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_attention_manifolds2[band] = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
+		self.wavelet_attention_manifolds2 = nn.ParameterDict(self.wavelet_attention_manifolds2).to(self.device)
+
 		self.trace_normalization = dict()
 		for band in self.encoded_h:
 			if self.encoded_h[band]:
@@ -110,7 +117,16 @@ class MENDRWaveletContextualizer(nn.Module):
 																SPDTransform(int(1.5 *self.encoded_out), self.encoded_out, self.device))
 		self.wavelet_spd_transforms = nn.ParameterDict(self.wavelet_spd_transforms).to(self.device)
 
-		
+		# Second SPD Transformations
+		self.wavelet_spd_transforms2 = dict()
+		for band in self.encoded_h:
+			if self.encoded_h[band]:
+				self.wavelet_spd_transforms2[band] = nn.Sequential(SPDTransform(self.encoded_out, int(1.5 * self.encoded_out), self.device),
+																SPDRectified(),
+																SPDTransform(int(1.5 *self.encoded_out), self.encoded_out, self.device))
+		self.wavelet_spd_transforms2 = nn.ParameterDict(self.wavelet_spd_transforms2).to(self.device)
+
+				
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
@@ -140,8 +156,19 @@ class MENDRWaveletContextualizer(nn.Module):
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 
 			# Another skip connection
-			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms[band](wavelet_manifold_output[band]) # Just add, no norm
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms[band](wavelet_manifold_output[band]) # Add and norm
+			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 
+			# Second layer
+			res_output2, shape2 = self.wavelet_attention_manifolds2[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
+			epoched_shape = shape2
+			og_output_shape = res_output2.shape
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + res_output2.view(wavelet_manifold_output[band].shape)
+			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(og_output_shape)
+			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
+
+			# Another skip connection
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms2[band](wavelet_manifold_output[band]) # Just add, no norm
 		return wavelet_manifold_output, shape
 
 	def _batch_LogEuclideanMean(self, x, band):
@@ -164,6 +191,12 @@ class MENDRCombinedContextualizer(nn.Module):
 													SPDTransform(int(1.5*self.encoded_out), self.encoded_out, self.device))
 
 		self.trace_normalization = BatchTraceNormalization(self.device)
+
+		self.combined_attention2 = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
+		self.ract2 = SPDRectified()
+		self.combined_spd_transform2 = nn.Sequential(SPDTransform(self.encoded_out, int(1.5*self.encoded_out), self.device),
+													self.ract2,
+													SPDTransform(int(1.5*self.encoded_out), self.encoded_out, self.device))
 
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
@@ -196,9 +229,20 @@ class MENDRCombinedContextualizer(nn.Module):
 		# Add and norm
 		combined_manifold_output = combined_manifold_output.view(combined_manifold_output_res.shape) + combined_manifold_output_res
 		combined_manifold_output = self.trace_normalization(combined_manifold_output)
-
 		# Skip Connection
-		combined_manifold_output = combined_manifold_output + self.combined_spd_transform(combined_manifold_output) # Just add, no norm
+		combined_manifold_output = combined_manifold_output + self.combined_spd_transform(combined_manifold_output) # Add and norm
+		combined_manifold_output = self.trace_normalization(combined_manifold_output)
+
+		# Second layer
+		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+		combined_manifold_output_res2, shape2 = self.combined_attention2(combined_manifold_output)
+
+		# Add and norm
+		combined_manifold_output = combined_manifold_output.view(combined_manifold_output_res2.shape) + combined_manifold_output_res2
+		combined_manifold_output = self.trace_normalization(combined_manifold_output)
+		# Skip Connection
+		combined_manifold_output = combined_manifold_output + self.combined_spd_transform2(combined_manifold_output) # Just add, no norm
+
 		return combined_manifold_output, mask_idxes
 
 	def _wavelet_LogEuclideanMean(self, x):
