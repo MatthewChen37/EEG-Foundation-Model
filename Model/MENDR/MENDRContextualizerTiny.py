@@ -16,6 +16,13 @@ class MENDRContextualizerTiny(nn.Module):
 		self.encoded_out = encoded_out
 		self.patch_len = patch_len
 
+		self.learnable_padding = None
+		if self.encoded_h % 2 == 0:
+			self.encoded_h += 1
+			print(f"Encoded_H {self.encoded_h - 1} is even, adding 1 to make it odd")
+			self.learnable_padding = nn.Parameter(torch.zeros(1, 1, 1, self.patch_len), requires_grad=True).to(self.device)
+
+
 		self.position_encoder = PositionalEncoding(self.device, self.encoded_h, self.patch_len, 0.1)
 		self.e2r = E2R(device=self.device)
 		self.ract = SPDRectified()
@@ -31,8 +38,10 @@ class MENDRContextualizerTiny(nn.Module):
 		for band in x.keys():
 			signal.append(x[band])
 		signal = torch.cat(signal, dim=2).to(self.device)
+		if self.learnable_padding is not None:
+			signal = torch.cat([signal, self.learnable_padding.repeat(batch_size, num_patches, 1, 1)], dim=2)
 		if self.position_encoder:
-			signal = self.position_encoder(signal)
+			signal = signal + self.position_encoder(signal)
 		cov_matrices = self.e2r(signal)
 		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
 		signal_transformed = signal_transformed.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)

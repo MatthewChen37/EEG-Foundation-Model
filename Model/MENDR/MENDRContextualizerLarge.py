@@ -28,8 +28,24 @@ class MENDRContextualizerLarge(nn.Module):
 			'gamma': gamma_encoded_h,
 			#'high': high_encoded_h
 		}
-		self.encoded_out = encoded_out
 
+		self.learnable_padding = {
+			'delta': None,
+			'theta': None,
+			'alpha': None,
+			'beta': None,
+			'gamma': None
+		}
+
+		for band in self.encoded_h:
+			if self.encoded_h[band] and self.encoded_h[band] % 2 == 0:
+				self.encoded_h[band] += 1
+				print(f"Encoded_H {band} {self.encoded_h[band] - 1} is even, adding 1 to make it odd")
+				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, 37), requires_grad=True)
+
+		self.learnable_padding = nn.ParameterDict(self.learnable_padding)
+
+		self.encoded_out = encoded_out
 		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=37)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
@@ -37,12 +53,11 @@ class MENDRContextualizerLarge(nn.Module):
 		self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
 
 	def forward(self, x, batch_size, patch_num):
-		# Reshape encodings before passing into contextualizer
-		x_reshaped = dict()
 		for band in self.encoded_h.keys():
 			if band in x:
-				x_reshaped[band] = x[band].reshape(batch_size, patch_num, self.encoded_h[band], -1)
-		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x_reshaped)
+				if self.learnable_padding[band] is not None:
+					x[band] = torch.cat([x[band], self.learnable_padding[band].repeat(batch_size, patch_num, 1, 1)], dim=2)
+		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
 		combined_manifold_output, mask_idxes = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
 		# Never mask when calling it from here
 
@@ -133,8 +148,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		x_input = dict()
 		if self.position_encoder:
 			for band in x.keys():
-					x_input[band] = self.position_encoder[band](x[band])
-
+				x_input[band] = x[band] + self.position_encoder[band](x[band])
 		epoched_shape = None
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():

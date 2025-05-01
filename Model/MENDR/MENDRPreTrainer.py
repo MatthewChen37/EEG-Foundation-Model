@@ -258,8 +258,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
+		batch_size = wavelet_manifold_output['delta'].shape[0]
+		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, mask_ratio=self.mask_ratio)
+		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
