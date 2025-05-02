@@ -529,7 +529,7 @@ def testMENDRPreTrainerWithTiny():
         gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
-        num_negatives=10,
+        negatives_loo=10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
@@ -565,7 +565,7 @@ def testMENDRPreTrainerNoValidation():
     gradient_clip_value = 1e7,
     mask_span = 5,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -600,7 +600,7 @@ def testMENDRParameters():
     contrastive_combined_loss_pref = 1e3,
     contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -681,7 +681,7 @@ def testMENDRPreTrainerWithValidation():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.1,
-    num_negatives=20,
+    negatives_loo=20,
     enc_feat_l2 = 0.001,
     mask_ratio = 0.5,
     delta_reconstructive_loss_pref = 1.0,
@@ -733,7 +733,7 @@ def testMENDRPretrainerTinyContextualizerWithValidation():
     contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     train_frac=0.8,
@@ -767,7 +767,7 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     mask_ratio = 0.5,
     delta_reconstructive_loss_pref = 1.0,
@@ -804,7 +804,7 @@ def testMENDRPreTrainerLoadFromCheckpointTiny():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     train_frac=0.8,
@@ -893,10 +893,10 @@ if __name__ == "__main__":
     testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
-    '''
     print("Testing pretrainer with tiny contextualizer...")
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
+
 
     print("Testing pretrainer fit without validation...")
     testMENDRPreTrainerNoValidation()
@@ -914,7 +914,6 @@ if __name__ == "__main__":
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
 
-
     print("Testing pretrainer load from checkpoint...")
     testMENDRPreTrainerLoadFromCheckpoint()
     print("PreTrainer load from checkpoint test passed!")
@@ -922,6 +921,5 @@ if __name__ == "__main__":
     print("Testing pretrainer load from checkpoint tiny...")
     testMENDRPreTrainerLoadFromCheckpointTiny()
     print("PreTrainer load from checkpoint tiny test passed!")
-    '''
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

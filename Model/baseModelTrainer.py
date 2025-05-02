@@ -325,7 +325,7 @@ class BaseModelTrainer(object):
                 mlflow.log_metrics(epoch_metrics, step=epoch)
                 print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
                 if self.ckpt_dir != None:
-                    print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
+                    print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch)
 

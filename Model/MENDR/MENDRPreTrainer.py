@@ -167,9 +167,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
 				if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 					wavelet_manifold_output = outputs['wavelet_manifold_output']
-					combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)[outputs['mask_idxes']]
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)[outputs['mask_idxes']]
-					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
+					combined_manifold_output = combined_manifold_output[outputs['mask_idxes']]
+					num_masked_patches = combined_manifold_output.shape[0] // batch_size	
+					combined_manifold_output = combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+					combined_manifold_output_masked = combined_manifold_output_masked[outputs['mask_idxes']].reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
 					for band, wavelet_fig in wavelet_figs.items():
 						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
 						plt.close(wavelet_fig)
@@ -179,9 +181,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 					mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
 				elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-					combined_manifold_output = combined_manifold_output.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[outputs['mask_idxes']]
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[outputs['mask_idxes']]
-					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
+					combined_manifold_output = combined_manifold_output[outputs['mask_idxes']]
+					num_masked_patches = combined_manifold_output.shape[0] // batch_size
+					combined_manifold_output = combined_manifold_output.reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
+					combined_manifold_output_masked = combined_manifold_output_masked[outputs['mask_idxes']].reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
+					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
 					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 				else:

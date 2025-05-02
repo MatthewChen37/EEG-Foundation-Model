@@ -43,6 +43,7 @@ class MENDRContextualizerLarge(nn.Module):
 				print(f"Encoded_H {band} {self.encoded_h[band] - 1} is even, adding 1 to make it odd")
 				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, 37), requires_grad=True).to(self.device)
 
+
 		self.learnable_padding = nn.ParameterDict(self.learnable_padding)
 
 		self.encoded_out = encoded_out
