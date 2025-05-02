@@ -1,7 +1,7 @@
 import torch
 loss_fn = torch.nn.MSELoss()
 
-def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
+def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_type='real'):
     '''
     for band, input_data in inputs.items():
         if isinstance(input_data, torch.Tensor):
@@ -30,12 +30,13 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
         gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs['gamma'])
         
         real_loss_dict = {
-            'delta_real_loss': delta_real_loss,
-            'theta_real_loss': theta_real_loss,
-            'alpha_real_loss': alpha_real_loss,
-            'beta_real_loss':  beta_real_loss,
-            'gamma_real_loss': gamma_real_loss,
+            'delta_real_loss': recon_less_ref['delta'] * delta_real_loss,
+            'theta_real_loss': recon_less_ref['theta'] * theta_real_loss,
+            'alpha_real_loss': recon_less_ref['alpha'] * alpha_real_loss,
+            'beta_real_loss':  recon_less_ref['beta'] * beta_real_loss,
+            'gamma_real_loss': recon_less_ref['gamma'] * gamma_real_loss,
         }
+        
         return real_loss_dict
 
     elif loss_type == 'fft':
@@ -46,13 +47,13 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
         gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs['gamma'])
 
         fft_loss_dict = {
-            'delta_fft_loss': delta_fft_loss,
-            'theta_fft_loss': theta_fft_loss,
-            'alpha_fft_loss': alpha_fft_loss,
-            'beta_fft_loss':  beta_fft_loss,
-            'gamma_fft_loss': gamma_fft_loss,
+            'delta_fft_loss': recon_less_ref['delta'] * delta_fft_loss,
+            'theta_fft_loss': recon_less_ref['theta'] * theta_fft_loss,
+            'alpha_fft_loss': recon_less_ref['alpha'] * alpha_fft_loss,
+            'beta_fft_loss':  recon_less_ref['beta'] * beta_fft_loss,
+            'gamma_fft_loss': recon_less_ref['gamma'] * gamma_fft_loss,
         }
-
+        
         return fft_loss_dict
     
     # Otherwise combine real and fft losses

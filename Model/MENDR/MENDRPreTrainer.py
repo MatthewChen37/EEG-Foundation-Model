@@ -62,7 +62,14 @@ class MENDRPreTrainer(BaseModelTrainer):
 		graphs = data['graph']
 		patchified_inputs = self.mendr_model._super_patchify(data)
 		encodings, decodings = self.mendr_model.mendr_encoder(graphs, patchified_inputs)
+		batch_size = patchified_inputs['delta'].shape[0]
+		patch_num = patchified_inputs['delta'].shape[1]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			for band in self.mendr_model.mendr_contextualizer.encoded_h.keys():
+				if band in encodings.keys():
+					if self.mendr_model.mendr_contextualizer.learnable_padding[band] is not None:
+						encodings[band] = torch.cat([encodings[band], self.mendr_model.mendr_contextualizer.learnable_padding[band].repeat(batch_size, patch_num, 1, 1)], dim=2)
+
 			wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
 
 			# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
@@ -83,8 +90,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'mask_idxes': mask_idxes
 			}
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
-			batch_size = patchified_inputs['delta'].shape[0]
-			patches = patchified_inputs['delta'].shape[1]
 			# Combined contrastive loss
 			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.epochMaskedReconTiny(encodings, self.contrastive_loss_fn_combined)
 			return {
@@ -102,33 +107,16 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
-			losses = [contrastive_losses[0], contrastive_losses[1]] + list(reconstruction_losses.values())
-			pref_vector = torch.tensor([self.contrastive_combined_loss_pref,
-										self.contrastive_wavelet_loss_pref,
-										self.recon_loss_pref['delta'],
-										self.recon_loss_pref['theta'],
-										self.recon_loss_pref['alpha'],
-										self.recon_loss_pref['beta'],
-										self.recon_loss_pref['gamma']]).to(self.device)
+			losses = contrastive_losses[0] + contrastive_losses[1]
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
-			losses = [contrastive_losses[0]] + list(reconstruction_losses.values())
-			pref_vector = torch.tensor([self.contrastive_combined_loss_pref,
-										self.recon_loss_pref['delta'],
-										self.recon_loss_pref['theta'],
-										self.recon_loss_pref['alpha'],
-										self.recon_loss_pref['beta'],
-										self.recon_loss_pref['gamma']]).to(self.device)
+			losses = contrastive_losses[0]
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
 
-		task_params = [self.mendr_model.mendr_contextualizer.parameters()]
-		for band in BANDS:
-			model_params = self.mendr_model.mendr_encoder.encoder_decoders[band].getDecoderParams()
-			task_params.append(model_params)
+		for band in reconstruction_losses:
+			losses = losses + reconstruction_losses[band]
 
-		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False, task_params=task_params, pref_vector=pref_vector)
-
-		#losses.backward()
+		losses.backward()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values
@@ -138,7 +126,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
-		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], self.recon_loss_pref) # Reconstruction Loss returns a dictionary
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
@@ -257,7 +245,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		batch_size = wavelet_manifold_output['delta'].shape[0]
@@ -269,7 +257,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def leave_one_out(self, embeddings, criterion, negatives=20):
 		"""
@@ -345,7 +333,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return loss, correct, pairs
+		return self.contrastive_wavelet_loss_pref * loss, correct, pairs
 
 	'''
 	Currently not being used
