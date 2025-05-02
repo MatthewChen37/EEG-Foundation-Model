@@ -253,7 +253,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
@@ -265,7 +265,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
