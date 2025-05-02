@@ -35,9 +35,14 @@ class WaveletEncoderDecoder(nn.Module):
         self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=2, concat=False).to(self.device)
         self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1), self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
 
+        self.gnn_channel_encoder2 = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=2, concat=False).to(self.device)
+        self.gnn_lin2 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1), self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
+
         self.layer_norm1 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
         self.layer_norm2 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
         self.layer_norm3 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
+        self.layer_norm4 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
+        self.layer_norm5 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
 
         self.L_out_2 = 2 * self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
@@ -60,8 +65,10 @@ class WaveletEncoderDecoder(nn.Module):
         patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
         gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
         gnn_lin = sum(p.numel() for p in self.gnn_lin1.parameters() if p.requires_grad)
+        gnn_encoder_count2 = sum(p.numel() for p in self.gnn_channel_encoder2.parameters() if p.requires_grad)
+        gnn_lin2 = sum(p.numel() for p in self.gnn_lin2.parameters() if p.requires_grad)
 
-        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin
+        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin + gnn_encoder_count2 + gnn_lin2
 
     def getDecoderParamCount(self):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
@@ -96,12 +103,31 @@ class WaveletEncoderDecoder(nn.Module):
             # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
             x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, 2 * self.L_out_1)
 
+
         x = x.view(B*P, C, 2 * self.L_out_1)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         x = self.layer_norm2(x)
         x = x + self.gnn_lin1(x)
         x = self.layer_norm3(x)
+
+        # Second GNN Encoder Layer
+        x = x.view(B, P, C, 2*self.L_out_1)
+        # x: [Batch Size, Patches, Channels, self.L_out_1]
+        for patch_idx in range(x.shape[1]):
+            gnn_channel_encoder_input2 = x[:, patch_idx, :, :].reshape(B * C, 2 * self.L_out_1).clone() # TODO: without this clone I get an inplace modification error, why?
+            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
+            channel_encoding2 = self.gnn_channel_encoder2(gnn_channel_encoder_input2, edge_index, edge_dist)
+            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
+            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding2.reshape(B, C, 2 * self.L_out_1)
+
+        x = x.view(B*P, C, 2 * self.L_out_1)
+        # x: [Batch Size * Patches, Channels, self.L_out_1]
+
+        x = self.layer_norm4(x)
+        x = x + self.gnn_lin1(x)
+        x = self.layer_norm5(x)
+
 
         x = self.patch_embedder2(x)
         x = x + self.patch_embedder2_lin(x)

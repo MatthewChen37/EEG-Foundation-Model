@@ -79,7 +79,8 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'riemannian_loss': riemannian_loss,
 					'wavelet_manifold_output': wavelet_manifold_output,
 					'wavelet_loss': w_loss,
-					'wavelet_acc': w_correct / w_pairs
+					'wavelet_acc': w_correct / w_pairs,
+					'mask_idxes': mask_idxes
 			}
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
 			batch_size = patchified_inputs['delta'].shape[0]
@@ -93,6 +94,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
 					'riemannian_loss': riemannian_loss,
+					'mask_idxes': mask_idxes
 			}
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
@@ -177,9 +179,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
 				if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 					wavelet_manifold_output = outputs['wavelet_manifold_output']
-					combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)
-					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
+					combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)[outputs['mask_idxes']]
+					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)[outputs['mask_idxes']]
+					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
 					for band, wavelet_fig in wavelet_figs.items():
 						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
 						plt.close(wavelet_fig)
@@ -189,9 +191,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 					mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
 				elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-					combined_manifold_output = combined_manifold_output.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
+					combined_manifold_output = combined_manifold_output.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[outputs['mask_idxes']]
+					combined_manifold_output_masked = combined_manifold_output_masked.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[outputs['mask_idxes']]
+					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
 					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 				else:
@@ -255,7 +257,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
-		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		batch_size = wavelet_manifold_output['delta'].shape[0]

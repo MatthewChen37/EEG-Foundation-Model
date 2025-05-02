@@ -41,7 +41,7 @@ class MENDRContextualizerLarge(nn.Module):
 			if self.encoded_h[band] and self.encoded_h[band] % 2 == 0:
 				self.encoded_h[band] += 1
 				print(f"Encoded_H {band} {self.encoded_h[band] - 1} is even, adding 1 to make it odd")
-				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, 37), requires_grad=True)
+				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, 37), requires_grad=True).to(self.device)
 
 		self.learnable_padding = nn.ParameterDict(self.learnable_padding)
 
@@ -222,21 +222,22 @@ class MENDRCombinedContextualizer(nn.Module):
 		batch_size = og_output_shape[0]
 		num_patches = og_output_shape[1]
 		mask_idxes = None
+		x_input = x
 		if mask_ratio > 0:
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			for band, spd_batch in x.items():
-				x[band] = spd_batch.view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2])
+				x_input[band] = spd_batch.view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2]).clone()
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
 			for band in x.keys():
-				x[band][mask_idxes] = spd_mask
-				x[band] = x[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
+				x_input[band][mask_idxes] = spd_mask
+				x_input[band] = x_input[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
 
 		# Log Euclidean Mean
-		combined_manifold_output = self._wavelet_LogEuclideanMean(x)
+		combined_manifold_output = self._wavelet_LogEuclideanMean(x_input)
 		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 		combined_manifold_output_res, shape = self.combined_attention(combined_manifold_output)
 
