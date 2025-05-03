@@ -224,7 +224,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		num_patches = og_output_shape[1]
 		mask_idxes = None
 		x_input = dict()
-		if mask_ratio > 0:
+		if mask_ratio > 0.0:
 			for band in x.keys():
 				x_input[band] = x[band].clone()
 
