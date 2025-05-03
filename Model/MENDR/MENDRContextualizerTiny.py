@@ -73,13 +73,15 @@ class MENDRContextualizer(nn.Module):
 		# x is now with shape [Batch, #patch, #encoded_h, #encoded_h]
 		
 		mask_idxes = None
-		x_input = x
+		x_input = {}
 		if mask_ratio > 0:
 			x_input = x.clone()
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
 			x_input[mask_idxes] = spd_mask
+		else:
+			x_input = x # No need to clone
 
 		res_x, shape = self.attention(x_input)
 		# Add and norm

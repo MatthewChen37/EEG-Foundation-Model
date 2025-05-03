@@ -223,19 +223,25 @@ class MENDRCombinedContextualizer(nn.Module):
 		batch_size = og_output_shape[0]
 		num_patches = og_output_shape[1]
 		mask_idxes = None
-		x_input = x
+		x_input = dict()
 		if mask_ratio > 0:
+			for band in x.keys():
+				x_input[band] = x[band].clone()
+
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
-			for band, spd_batch in x.items():
+			for band, spd_batch in x_input.items():
 				x_input[band] = spd_batch.view(batch_size, num_patches, spd_batch.shape[1], spd_batch.shape[2]).clone()
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			for band in x.keys():
+			for band in x_input.keys():
 				x_input[band][mask_idxes] = spd_mask
 				x_input[band] = x_input[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
+		else:
+			for band in x.keys(): # No need to clone
+				x_input[band] = x[band]
 
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x_input)
