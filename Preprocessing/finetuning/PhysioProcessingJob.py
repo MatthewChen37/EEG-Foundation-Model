@@ -78,7 +78,7 @@ def process_subject(args, subject):
 			to_drop = [ch for ch in raw.ch_names if ch not in channels_to_keep_upper]
 			raw.drop_channels(to_drop)
 			raw.info["line_freq"] = 60
-			raw.set_montage("standard_1005", on_missing="ignore")
+			raw.set_montage("standard_1005", on_missing="ignore", match_case=False)
 			raw.set_meas_date(None)
 			ch_names = raw.ch_names
 			if 'A1' and 'A2' in ch_names:
