@@ -56,6 +56,8 @@ def _rename_channels_eegmmidb(raw):
 
 def process_subject(args, subject):
 	subject_idx = int(subject[1:])
+	if subject_idx >= 10:
+		sys.exit(0)
 	if subject_idx < 70: # Train
 		subject_output_directory = os.path.join(args.output_dir, "train")
 	elif subject_idx >= 70 and subject_idx < 89: # Validation
