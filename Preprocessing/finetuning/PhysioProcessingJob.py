@@ -56,8 +56,6 @@ def _rename_channels_eegmmidb(raw):
 
 def process_subject(args, subject):
 	subject_idx = int(subject[1:])
-	if subject_idx >= 10:
-		sys.exit(0)
 	if subject_idx < 70: # Train
 		subject_output_directory = os.path.join(args.output_dir, "train")
 	elif subject_idx >= 70 and subject_idx < 89: # Validation
@@ -98,7 +96,7 @@ def process_subject(args, subject):
 					label = event  - 2 if task in ['04', '06', '12'] else event # TODO: What does this line mean? I think its a smart way of getting the label
 					raw_annotation_event = mne.io.RawArray(sample, info=raw.info, verbose=False)
 					raw_annotation_event.set_annotations(mne.Annotations(onset=10, duration=4, description=str(label)))
-					raw.save(os.path.join(subject_output_path, f"{file[:-4]}_event_{i}.fif"), overwrite=True)
+					raw_annotation_event.save(os.path.join(subject_output_path, f"{file[:-4]}_event_{i}.fif"), overwrite=True)
 
 		except Exception as e:
 			traceback.print_exc()
