@@ -44,6 +44,7 @@ def process_file(subject_path, output_split_dir, file):
 	base_path = os.path.join(subject_path, file)
 	if os.path.exists(base_path):
 		output_dir = os.path.join(output_split_dir, file)
+		epoch_idx = int(file[:-4].split("_")[-1])
 		Path(os.path.join(output_dir, "wavelet_decompositions")).mkdir(parents=True, exist_ok=True)
 		Path(os.path.join(output_dir, "graphs")).mkdir(parents=True, exist_ok=True)
 		raw = mne.io.read_raw_fif(base_path, preload=True, verbose=False)
@@ -57,19 +58,21 @@ def process_file(subject_path, output_split_dir, file):
 			'gamma': dbt['ad'].data,
 			'high_freq': dbt['d'].data
 		}
-		'''
+
 		for band, data in relevant_bands.items():
-			for epoch_idx in range(data.shape[0]):
-				torch.save(torch.tensor(data[epoch_idx]), os.path.join(output_dir, "wavelet_decompositions", f"{file[:-4]}_{band}_band_epoch_{epoch_idx}.pt"))
+			curr_epoch = torch.tensor(data)
+			torch.save(curr_epoch, os.path.join(output_dir, "wavelet_decompositions", f"{file[:-4]}_{band}_band_epoch_{epoch_idx}.pt"))
 
-		dist_feat = createDistanceMatrix(raw_epoch.info)
-		electrode_pos = createPositionMatrix(raw_epoch.info)
+		dist_feat = createDistanceMatrix(raw.info)
+		electrode_pos = createPositionMatrix(raw.info)
+		edge_indices, edge_weights = createEdges([dist_feat])
 
-		for epoch_idx in range(raw_data.shape[0]):
-			data_graph = Data(x=torch.tensor(raw_data[epoch_idx]), edge_index=createEdges(dist_feat), pos=torch.tensor(electrode_pos))
-			torch.save(data_graph, os.path.join(output_dir, "graphs", f"{file[:-4]}_epoch_{epoch_idx}.pt"))
-		'''
-		
+		annotation = raw.annotations
+		label = annotation.description
+
+		data_graph = Data(edge_index=edge_indices, pos=electrode_pos, y = torch.tensor([int(label[0])]), edge_attr=edge_weights)
+		torch.save(data_graph, os.path.join(output_dir, "graphs", f"{file[:-4]}_epoch_{epoch_idx}.pt"))
+
 def parse_args():
 	parser = argparse.ArgumentParser(description='Create graphs for Physio data.')
 	parser.add_argument('--input_dir', type=str, required=True, help='Path to epoched data.', )
