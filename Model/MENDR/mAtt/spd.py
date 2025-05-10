@@ -359,7 +359,7 @@ class SPDRectifiedFunction(Function):
 
             # Compute masks and diagonal matrices
             max_mask = s > epsilon
-            s_max_diag = torch.where(max_mask, s, epsilon.expand_as(s)).diag_embed()
+            s_max_diag = torch.where(max_mask, s.clone(), epsilon.expand_as(s.clone())).diag_embed()
             Q = max_mask.float().diag_embed()
 
             # Compute dLdV and dLdS

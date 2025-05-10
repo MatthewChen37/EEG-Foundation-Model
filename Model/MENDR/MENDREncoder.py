@@ -29,24 +29,15 @@ class WaveletEncoderDecoder(nn.Module):
         self.L_out_1 = self.seq_len + 2 * (0) - 1 * ((self.patch_size) - 1) - 1
         self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
         self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, 2 * self.L_out_1)).to(self.device)
+        self.patch_norm1 = nn.LayerNorm((19, self.L_out_1))
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
 
-        #self.gnn_channel_encoder = SplineConv(L_out, self.seq_len, dim=1, kernel_size=3).to(self.device)
-        self.gnn_channel_encoder = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=2, concat=False).to(self.device)
-        self.gnn_lin1 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1), self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
+        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.L_out_1, device=self.device, n_gnn_transformer_layers=3, heads=2)
 
-        self.gnn_channel_encoder2 = GATConv(2 * self.L_out_1, 2 * self.L_out_1, heads=2, concat=False).to(self.device)
-        self.gnn_lin2 = nn.Sequential(self.act, nn.Linear(2 * self.L_out_1, 4 * self.L_out_1), self.act, nn.Linear(4 * self.L_out_1, 2 * self.L_out_1)).to(self.device)
-
-        self.layer_norm1 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
-        self.layer_norm2 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
-        self.layer_norm3 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
-        self.layer_norm4 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
-        self.layer_norm5 = nn.LayerNorm((19, 2 * self.L_out_1)).to(self.device)
-
-        self.L_out_2 = 2 * self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
+        self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
         self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
@@ -61,14 +52,13 @@ class WaveletEncoderDecoder(nn.Module):
                
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
+        patch_norm1_count = sum(p.numel() for p in self.patch_norm1.parameters() if p.requires_grad)
         patch_embedder_lin_count = sum(p.numel() for p in self.patch_embedder_lin.parameters() if p.requires_grad)
+        patch_embedder2_count = sum(p.numel() for p in self.patch_embedder2.parameters() if p.requires_grad)
+        patch_norm2_count = sum(p.numel() for p in self.patch_norm2.parameters() if p.requires_grad)
         patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
-        gnn_encoder_count = sum(p.numel() for p in self.gnn_channel_encoder.parameters() if p.requires_grad)
-        gnn_lin = sum(p.numel() for p in self.gnn_lin1.parameters() if p.requires_grad)
-        gnn_encoder_count2 = sum(p.numel() for p in self.gnn_channel_encoder2.parameters() if p.requires_grad)
-        gnn_lin2 = sum(p.numel() for p in self.gnn_lin2.parameters() if p.requires_grad)
-
-        return patch_embedder_count + gnn_encoder_count + patch_embedder_lin_count + patch_embedder2_lin_count + gnn_lin + gnn_encoder_count2 + gnn_lin2
+        gnn_spatial_harmonizer_count = sum(p.numel() for p in self.gnn_spatial_harmonizer.parameters() if p.requires_grad)
+        return patch_embedder_count + patch_norm1_count + patch_embedder_lin_count + patch_embedder2_count + patch_norm2_count + patch_embedder2_lin_count + gnn_spatial_harmonizer_count
 
     def getDecoderParamCount(self):
         up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
@@ -77,6 +67,16 @@ class WaveletEncoderDecoder(nn.Module):
         up4_count = sum(p.numel() for p in self.up4.parameters() if p.requires_grad)
         return up1_count + up2_count + up3_count + up4_count
 
+    def getEncoderParams(self):
+        patch_embedder_params = list(self.patch_embedder.parameters())
+        patch_norm1_params = list(self.patch_norm1.parameters())
+        patch_embedder_lin_params = list(self.patch_embedder_lin.parameters())
+        patch_embedder2_params = list(self.patch_embedder2.parameters())
+        patch_norm2_params = list(self.patch_norm2.parameters())
+        patch_embedder2_lin_params = list(self.patch_embedder2_lin.parameters())
+        gnn_encoder_params = list(self.gnn_spatial_harmonizer.parameters())
+        return patch_embedder_params + patch_norm1_params + patch_embedder_lin_params + patch_embedder2_params + patch_norm2_params + patch_embedder2_lin_params + gnn_encoder_params
+                
     def getDecoderParams(self):
         return list(self.up1.parameters()) + list(self.up2.parameters()) + list(self.up3.parameters()) + list(self.up4.parameters())
 
@@ -87,70 +87,80 @@ class WaveletEncoderDecoder(nn.Module):
         # x: [Batch Size * Patches, Channels, Time Steps]
         x = self.channel_dropout(x)
         x = self.patch_embedder(x)
-        x = self.patch_embedder_lin(x)
-        x = self.layer_norm1(x)
+        x = self.patch_norm1(x)
+        x = self.patch_embedder_lin(x) # No residual here because dimensions are different
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
-
-        x = x.view(B, P, C, 2*self.L_out_1)
-        # x: [Batch Size, Patches, Channels, self.L_out_1]
-        for patch_idx in range(x.shape[1]):
-            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, 2 * self.L_out_1).clone() # TODO: without this clone I get an inplace modification error, why?
-            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
-            channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
-            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
-            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, 2 * self.L_out_1)
-
-
-        x = x.view(B*P, C, 2 * self.L_out_1)
-        # x: [Batch Size * Patches, Channels, self.L_out_1]
-
-        x = self.layer_norm2(x)
-        x = x + self.gnn_lin1(x)
-        x = self.layer_norm3(x)
-
-        # Second GNN Encoder Layer
-        x = x.view(B, P, C, 2*self.L_out_1)
-        # x: [Batch Size, Patches, Channels, self.L_out_1]
-        for patch_idx in range(x.shape[1]):
-            gnn_channel_encoder_input2 = x[:, patch_idx, :, :].reshape(B * C, 2 * self.L_out_1).clone() # TODO: without this clone I get an inplace modification error, why?
-            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
-            channel_encoding2 = self.gnn_channel_encoder2(gnn_channel_encoder_input2, edge_index, edge_dist)
-            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
-            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding2.reshape(B, C, 2 * self.L_out_1)
-
-        x = x.view(B*P, C, 2 * self.L_out_1)
-        # x: [Batch Size * Patches, Channels, self.L_out_1]
-
-        x = self.layer_norm4(x)
-        x = x + self.gnn_lin1(x)
-        x = self.layer_norm5(x)
-
-
+        x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
+        
         x = self.patch_embedder2(x)
+        x = self.patch_norm2(x)
         x = x + self.patch_embedder2_lin(x)
+
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         decoding = x.clone().detach() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
         decoding.requires_grad = True # Just to be safe
-        #decoding = x.clone() 
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
         # x: [Batch Size, Patches, self.encoded_h, self.L_out_2]
-        #decoding = self.up1(x)
-        #print(decoding.shape)
-        #print(decoding.shape)
         decoding = self.up1(decoding)
-        #print(decoding.shape)
-        decoding = self.channel_dropout(decoding)
         decoding = self.up2(decoding)
-        #print(decoding.shape)
         decoding = self.up3(decoding)
-        #print(decoding.shape)
         decoding = self.up4(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
 
         return x, decoding
+
+
+class GNNSpatialHarmonizer(nn.Module):
+    def __init__(self, num_channels, num_features, device, n_gnn_transformer_layers = 2, heads=2):
+        super().__init__()
+        self.num_channels = num_channels
+        self.num_features = num_features
+        self.n_gnn_transformer_layers = n_gnn_transformer_layers
+        self.gnn_transformers = nn.ModuleList([GNNTransformer(num_features=self.num_features, num_channels=num_channels, 
+                                               device=device, hidden_ratio=2, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
+
+    def forward(self, x, edge_index, edge_dist, B, P, C):
+        # x: [Batch Size*Patches, Channels, num_features]
+        for gnn_transformer in self.gnn_transformers:
+            x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
+        return x
+
+class GNNTransformer(nn.Module):
+    def __init__(self, num_features, num_channels, device, hidden_ratio=2, heads=2):
+        super().__init__()
+        self.num_channels = num_channels
+        self.num_features = num_features
+        self.heads = heads
+        self.device = device
+        self.hidden_ratio = hidden_ratio
+        self.act = nn.GELU()
+
+        self.gnn_channel_encoder = GATConv(num_features, num_features, heads=self.heads, concat=False).to(self.device)
+        self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
+        self.gnn_lin = nn.Sequential(self.act, nn.Linear(self.num_features, self.hidden_ratio * self.num_features),
+                                     self.act, nn.Linear(self.hidden_ratio * self.num_features, self.num_features)
+                                     ).to(self.device)
+        self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
+
+    def forward(self, x, edge_index, edge_dist, B, P, C):
+        # x: [Batch Size*Patches, Channels, num_features]
+        x = x.view(B, P, C, self.num_features)
+        for patch_idx in range(x.shape[1]):
+            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.num_features).clone()
+            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
+            channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
+            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
+            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, self.num_features)
+
+        x = x.view(B*P, C, self.num_features)
+        # x: [Batch Size * Patches, Channels, self.hidden_ratio * self.num_features]
+        x = self.layer_norm1(x)
+        x = x + self.gnn_lin(x)
+        x = self.layer_norm2(x)
+        return x
 
 '''
 Initialize Encoders for each wavelet band and 

@@ -81,7 +81,7 @@ class MENDRContextualizer(nn.Module):
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
 			x_input[mask_idxes] = spd_mask
 		else:
-			x_input = x # No need to clone
+			x_input = x.clone()
 
 		res_x, shape = self.attention(x_input)
 		# Add and norm

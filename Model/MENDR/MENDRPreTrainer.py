@@ -17,6 +17,8 @@ from Explainability.plotReconstruction import plotReconstruction
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian, plotWaveletEmbeddingsEuclidean
 import mlflow
 import matplotlib.pyplot as plt
+from torchjd import mtl_backward
+from torchjd.aggregation import UPGrad
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 ABS_PRECISION = 3 # Number of decimal places to consider equal
@@ -33,6 +35,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.contrastive_loss_fn_combined = nn.MSELoss()
 		self.contrastive_combined_loss_pref = config.contrastive_combined_loss_pref
 		self.contrastive_wavelet_loss_pref = config.contrastive_wavelet_loss_pref
+
 		self.recon_loss_pref = {
 			'delta': config.delta_reconstructive_loss_pref,
 			'theta': config.theta_reconstructive_loss_pref,
@@ -40,10 +43,32 @@ class MENDRPreTrainer(BaseModelTrainer):
 			'beta': config.beta_reconstructive_loss_pref,
 			'gamma': config.gamma_reconstructive_loss_pref
 		}
-
+		
 		super(MENDRPreTrainer, self).__init__(mendr_model=MENDR, contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
+
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			self.aggregator = UPGrad(pref_vector=torch.tensor([
+				self.contrastive_combined_loss_pref,
+				self.contrastive_wavelet_loss_pref,
+				self.recon_loss_pref['delta'],
+				self.recon_loss_pref['theta'],
+				self.recon_loss_pref['alpha'],
+				self.recon_loss_pref['beta'],
+				self.recon_loss_pref['gamma']
+			]))
+		elif self.mendr_model.contextualizer_size.upper() == "TINY":
+			self.aggregator = UPGrad(pref_vector=torch.tensor([
+				self.contrastive_combined_loss_pref,
+				self.recon_loss_pref['delta'],
+				self.recon_loss_pref['theta'],
+				self.recon_loss_pref['alpha'],
+				self.recon_loss_pref['beta'],
+				self.recon_loss_pref['gamma']
+			]))
+		else:
+			raise ValueError("Unidentified Contextualizer Type")
 
 		# Clamp gradients
 		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
@@ -107,16 +132,25 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
-			losses = contrastive_losses[0] + contrastive_losses[1]
+			losses = [contrastive_losses[0], contrastive_losses[1]] + list(reconstruction_losses.values())
+			tasks_params = [list(self.mendr_model.mendr_contextualizer.WaveletContextualizer.parameters()) + [self.mendr_model.mendr_contextualizer.temp1] + list(self.mendr_model.mendr_contextualizer.learnable_padding.parameters()),
+						   list(self.mendr_model.mendr_contextualizer.CombinedContextualizer.parameters())
+			]
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
-			losses = contrastive_losses[0]
+			losses = [contrastive_losses[0]] + list(reconstruction_losses.values())
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
 
-		for band in reconstruction_losses:
-			losses = losses + reconstruction_losses[band]
+		shared_params = []
+		for band in BANDS: 
+			shared_params = shared_params + self.mendr_model.mendr_encoder.encoder_decoders[band].getEncoderParams()
 
-		losses.backward()
+		for band in BANDS:
+			model_params = self.mendr_model.mendr_encoder.encoder_decoders[band].getDecoderParams()
+			tasks_params.append(model_params)
+
+		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=True, tasks_params=tasks_params, shared_params=shared_params)
+
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
 			# Clamp temperature to non-negative values
@@ -126,7 +160,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
-		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], self.recon_loss_pref) # Reconstruction Loss returns a dictionary
+		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
@@ -151,7 +185,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
-			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], recon_loss_pref=self.recon_loss_pref) # Reconstruction Loss returns a dictionary
+			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
 			if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
 			elif self.mendr_model.contextualizer_size.upper() == 'TINY':
@@ -249,7 +283,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
-		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
 		batch_size = wavelet_manifold_output['delta'].shape[0]
@@ -337,7 +371,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
-		return self.contrastive_wavelet_loss_pref * loss, correct, pairs
+		return loss, correct, pairs
 
 	'''
 	Currently not being used

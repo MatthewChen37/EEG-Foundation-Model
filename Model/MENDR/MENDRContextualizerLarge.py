@@ -37,17 +37,19 @@ class MENDRContextualizerLarge(nn.Module):
 			'gamma': None
 		}
 
+		self.patch_len = 18 # TODO: Make this a parameter
+
 		for band in self.encoded_h:
 			if self.encoded_h[band] and self.encoded_h[band] % 2 == 0:
 				self.encoded_h[band] += 1
 				print(f"Encoded_H {band} {self.encoded_h[band] - 1} is even, adding 1 to make it odd")
-				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, 37), requires_grad=True).to(self.device)
+				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, self.patch_len), requires_grad=True).to(self.device)
 
 
 		self.learnable_padding = nn.ParameterDict(self.learnable_padding)
 
 		self.encoded_out = encoded_out
-		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=37)
+		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=self.patch_len)
 		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
 
 		# Initialize temperature as a trainable parameter
@@ -173,13 +175,10 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 
-			'''
-			# TODO: SOMETHING IS WRONG HERE -- For some reason when I include this it makes every patch embedding (almost) the same
 			# Another skip connection
 			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms[band](wavelet_manifold_output[band]) # Add and norm
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 
-			'''
 			# Second layer
 			res_output2, shape2 = self.wavelet_attention_manifolds2[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
 			epoched_shape = shape2
@@ -189,8 +188,7 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 
 			# Another skip connection
-			# # TODO: SOMETHING IS WRONG HERE TOO -- For some reason when I include this it makes every patch embedding (almost) the same
-			# wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms2[band](wavelet_manifold_output[band].clone()) # Just add, no norm
+			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms2[band](wavelet_manifold_output[band]) # Just add, no norm
 			# output shape is [B, N, N]
 		return wavelet_manifold_output, shape
 
@@ -234,7 +232,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		x_input = dict()
 		if mask_ratio > 0.0:
 			for band in x.keys():
-				x_input[band] = x[band].clone()
+				x_input[band] = x[band].clone().detach()
 
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
@@ -248,8 +246,8 @@ class MENDRCombinedContextualizer(nn.Module):
 				x_input[band][mask_idxes] = spd_mask
 				x_input[band] = x_input[band].view(batch_size * num_patches, spd_batch.shape[1], spd_batch.shape[2])
 		else:
-			for band in x.keys(): # No need to clone
-				x_input[band] = x[band]
+			for band in x.keys():
+				x_input[band] = x[band].clone().detach()
 
 		# Log Euclidean Mean
 		combined_manifold_output = self._wavelet_LogEuclideanMean(x_input)
