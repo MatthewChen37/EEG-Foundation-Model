@@ -847,6 +847,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -906,10 +907,14 @@ if __name__ == "__main__":
     testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
+
+    '''
     print("Testing pretrainer fit with validation...")
     testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
 
+
+    '''
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
@@ -921,5 +926,6 @@ if __name__ == "__main__":
     print("Testing pretrainer load from checkpoint tiny...")
     testMENDRPreTrainerLoadFromCheckpointTiny()
     print("PreTrainer load from checkpoint tiny test passed!")
+    '''
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")

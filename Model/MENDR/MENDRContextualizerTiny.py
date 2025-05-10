@@ -73,7 +73,7 @@ class MENDRContextualizer(nn.Module):
 		# x is now with shape [Batch, #patch, #encoded_h, #encoded_h]
 		
 		mask_idxes = None
-		x_input = {}
+		x_input = None
 		if mask_ratio > 0:
 			x_input = x.clone()
 			# Construct the mask at runtime

@@ -150,4 +150,5 @@ class AttentionManifold(nn.Module):
         shape.append(-1)
 
         output = output.contiguous().view(-1, self.d_out, self.d_out)
+        output = (output + output.permute(0, 2, 1)) / 2 # Make sure to symmetrize
         return output, shape

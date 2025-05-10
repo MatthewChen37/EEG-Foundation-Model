@@ -142,14 +142,16 @@ class MENDRWaveletContextualizer(nn.Module):
 																SPDTransform(int(1.5 *self.encoded_out), self.encoded_out, self.device))
 		self.wavelet_spd_transforms2 = nn.ParameterDict(self.wavelet_spd_transforms2).to(self.device)
 
-				
+
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
 		x_input = dict()
-		if self.position_encoder:
-			for band in x.keys():
-				x_input[band] = x[band] + self.position_encoder[band](x[band])
+
+		for band in x.keys():
+			input_x = x[band].clone()
+			x_input[band] = input_x + self.position_encoder[band](input_x)
+
 		epoched_shape = None
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():
@@ -161,6 +163,7 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
 			res_output, shape = self.wavelet_attention_manifolds[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
+
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7)), "Attention Manifold"
 			# Skip Connection
 			epoched_shape = shape
@@ -170,10 +173,13 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 			#assert torch.allclose(output, output.mT, atol=(10 ** -7))
 
+			'''
+			# TODO: SOMETHING IS WRONG HERE -- For some reason when I include this it makes every patch embedding (almost) the same
 			# Another skip connection
 			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms[band](wavelet_manifold_output[band]) # Add and norm
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 
+			'''
 			# Second layer
 			res_output2, shape2 = self.wavelet_attention_manifolds2[band](wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out))
 			epoched_shape = shape2
@@ -183,14 +189,16 @@ class MENDRWaveletContextualizer(nn.Module):
 			wavelet_manifold_output[band] = self.trace_normalization[band](wavelet_manifold_output[band])
 
 			# Another skip connection
-			wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms2[band](wavelet_manifold_output[band]) # Just add, no norm
+			# # TODO: SOMETHING IS WRONG HERE TOO -- For some reason when I include this it makes every patch embedding (almost) the same
+			# wavelet_manifold_output[band] = wavelet_manifold_output[band] + self.wavelet_spd_transforms2[band](wavelet_manifold_output[band].clone()) # Just add, no norm
+			# output shape is [B, N, N]
 		return wavelet_manifold_output, shape
 
 	def _batch_LogEuclideanMean(self, x, band):
 		# X is list of [Batch_Size * epochs, C, C]
-		x = torch.stack(x, dim=1)
-		x_log = self.wavelet_attention_manifolds[band].tensor_log(x)
-		x_mean = self.wavelet_attention_manifolds[band].tensor_exp(x_log.sum(dim=1, keepdim=True) / x.shape[1])[:, 0, :, :]
+		x_stacked = torch.stack(x, dim=1)
+		x_log = self.wavelet_attention_manifolds[band].tensor_log(x_stacked)
+		x_mean = self.wavelet_attention_manifolds[band].tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
