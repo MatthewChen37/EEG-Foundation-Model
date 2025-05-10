@@ -100,6 +100,7 @@ def testMENDRBatchWiseMatrixSimilarity():
         contrastive_combined_loss_pref = 1e3,
         contrastive_wavelet_loss_pref = 1e3,
         gradient_clip_value = 1e7,
+        negatives_loo = 10,
         mask_span = 5,
         temp = 0.01,
         num_negatives=10,
@@ -276,7 +277,7 @@ def testContextualizerTiny():
     with torch.no_grad():
         contextualizer = MENDRContextualizerTiny(device, encoded_h=95)
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
-            combined_manifold_output, cov_matrices, _ = contextualizer(example_input)
+            combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=11)
         df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
         df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
         df.to_csv("ProfileData/TinyContextualizer.csv", float_format='%.5f')
@@ -376,7 +377,7 @@ def testMENDRPreTrainerLOOLoss():
     contrastive_combined_loss_pref = 1e3,
     contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
-    num_negatives=10,
+    negatives_loo = 10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -419,7 +420,7 @@ def testMENDRPreTrainerMAEReconLoss():
     contrastive_combined_loss_pref = 1e3,
     contrastive_wavelet_loss_pref = 1e3,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo = 10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -474,7 +475,7 @@ def testMENDRPreTrainerTinyMAEReconLoss():
         gradient_clip_value = 1e7,
         contrastive_combined_loss_pref = 1e3,
         contrastive_wavelet_loss_pref = 1e3,
-        num_negatives=10,
+        negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
@@ -528,7 +529,7 @@ def testMENDRPreTrainerWithTiny():
         gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
-        num_negatives=10,
+        negatives_loo=10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
@@ -564,7 +565,7 @@ def testMENDRPreTrainerNoValidation():
     gradient_clip_value = 1e7,
     mask_span = 5,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -599,7 +600,7 @@ def testMENDRParameters():
     contrastive_combined_loss_pref = 1e3,
     contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     ckpt_dir="./checkpoint",
@@ -680,7 +681,7 @@ def testMENDRPreTrainerWithValidation():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.1,
-    num_negatives=20,
+    negatives_loo=20,
     enc_feat_l2 = 0.001,
     mask_ratio = 0.5,
     delta_reconstructive_loss_pref = 1.0,
@@ -732,7 +733,7 @@ def testMENDRPretrainerTinyContextualizerWithValidation():
     contrastive_wavelet_loss_pref = 1e3,
     gradient_clip_value = 1e7,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     train_frac=0.8,
@@ -766,7 +767,7 @@ def testMENDRPreTrainerLoadFromCheckpoint():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     mask_ratio = 0.5,
     delta_reconstructive_loss_pref = 1.0,
@@ -803,7 +804,7 @@ def testMENDRPreTrainerLoadFromCheckpointTiny():
     l2_weight_decay = 0.001,
     save_model_directory = None,
     temp = 0.01,
-    num_negatives=10,
+    negatives_loo=10,
     enc_feat_l2 = 0.001,
     multi_gpu = False,
     train_frac=0.8,
@@ -896,6 +897,7 @@ if __name__ == "__main__":
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
+
     print("Testing pretrainer fit without validation...")
     testMENDRPreTrainerNoValidation()
     print("PreTrainer fit without validation test passed!")
@@ -911,7 +913,6 @@ if __name__ == "__main__":
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")
-
 
     print("Testing pretrainer load from checkpoint...")
     testMENDRPreTrainerLoadFromCheckpoint()

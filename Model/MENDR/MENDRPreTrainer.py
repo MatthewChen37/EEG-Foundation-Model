@@ -62,7 +62,14 @@ class MENDRPreTrainer(BaseModelTrainer):
 		graphs = data['graph']
 		patchified_inputs = self.mendr_model._super_patchify(data)
 		encodings, decodings = self.mendr_model.mendr_encoder(graphs, patchified_inputs)
+		batch_size = patchified_inputs['delta'].shape[0]
+		patch_num = patchified_inputs['delta'].shape[1]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			for band in self.mendr_model.mendr_contextualizer.encoded_h.keys():
+				if band in encodings.keys():
+					if self.mendr_model.mendr_contextualizer.learnable_padding[band] is not None:
+						encodings[band] = torch.cat([encodings[band], self.mendr_model.mendr_contextualizer.learnable_padding[band].repeat(batch_size, patch_num, 1, 1)], dim=2)
+
 			wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
 
 			# Wavelet wise contrastive loss, i.e. Multi-Resolution loss
@@ -79,11 +86,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'riemannian_loss': riemannian_loss,
 					'wavelet_manifold_output': wavelet_manifold_output,
 					'wavelet_loss': w_loss,
-					'wavelet_acc': w_correct / w_pairs
+					'wavelet_acc': w_correct / w_pairs,
+					'mask_idxes': mask_idxes
 			}
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
-			batch_size = patchified_inputs['delta'].shape[0]
-			patches = patchified_inputs['delta'].shape[1]
 			# Combined contrastive loss
 			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.epochMaskedReconTiny(encodings, self.contrastive_loss_fn_combined)
 			return {
@@ -93,6 +99,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 					'combined_manifold_output': combined_manifold_output,
 					'combined_manifold_output_masked': combined_manifold_output_masked,
 					'riemannian_loss': riemannian_loss,
+					'mask_idxes': mask_idxes
 			}
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
@@ -108,7 +115,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		for band in reconstruction_losses:
 			losses = losses + reconstruction_losses[band]
-	
+
 		losses.backward()
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# Only large model has temp parameter, which is used in wavelet loss
@@ -160,9 +167,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
 				if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 					wavelet_manifold_output = outputs['wavelet_manifold_output']
-					combined_manifold_output = combined_manifold_output.reshape(wavelet_manifold_output['delta'].shape)
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(wavelet_manifold_output['delta'].shape)
-					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
+					combined_manifold_output = combined_manifold_output[outputs['mask_idxes']]
+					num_masked_patches = combined_manifold_output.shape[0] // batch_size	
+					combined_manifold_output = combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+					combined_manifold_output_masked = combined_manifold_output_masked[outputs['mask_idxes']].reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
 					for band, wavelet_fig in wavelet_figs.items():
 						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
 						plt.close(wavelet_fig)
@@ -172,9 +181,11 @@ class MENDRPreTrainer(BaseModelTrainer):
 					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 					mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
 				elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-					combined_manifold_output = combined_manifold_output.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					combined_manifold_output_masked = combined_manifold_output_masked.reshape(batch_size*num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'])
+					combined_manifold_output = combined_manifold_output[outputs['mask_idxes']]
+					num_masked_patches = combined_manifold_output.shape[0] // batch_size
+					combined_manifold_output = combined_manifold_output.reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
+					combined_manifold_output_masked = combined_manifold_output_masked[outputs['mask_idxes']].reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
+					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
 					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 				else:
@@ -236,17 +247,19 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
+		batch_size = wavelet_manifold_output['delta'].shape[0]
+		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, mask_ratio=self.mask_ratio)
+		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output, combined_manifold_output_masked)
+		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
 
 		return self.contrastive_combined_loss_pref * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 

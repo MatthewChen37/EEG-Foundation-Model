@@ -33,9 +33,10 @@ def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_type='real'
             'delta_real_loss': recon_loss_pref['delta'] * delta_real_loss,
             'theta_real_loss': recon_loss_pref['theta'] * theta_real_loss,
             'alpha_real_loss': recon_loss_pref['alpha'] * alpha_real_loss,
-            'beta_real_loss': recon_loss_pref['beta'] * beta_real_loss,
+            'beta_real_loss':  recon_loss_pref['beta'] * beta_real_loss,
             'gamma_real_loss': recon_loss_pref['gamma'] * gamma_real_loss,
         }
+        
         return real_loss_dict
 
     elif loss_type == 'fft':
@@ -49,10 +50,10 @@ def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_type='real'
             'delta_fft_loss': recon_loss_pref['delta'] * delta_fft_loss,
             'theta_fft_loss': recon_loss_pref['theta'] * theta_fft_loss,
             'alpha_fft_loss': recon_loss_pref['alpha'] * alpha_fft_loss,
-            'beta_fft_loss': recon_loss_pref['beta'] * beta_fft_loss,
+            'beta_fft_loss':  recon_loss_pref['beta'] * beta_fft_loss,
             'gamma_fft_loss': recon_loss_pref['gamma'] * gamma_fft_loss,
         }
-
+        
         return fft_loss_dict
     
     # Otherwise combine real and fft losses

@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, subject_names, num_patches=11, num_rows=4, num_cols=11):
-    B, N, N = combined_manifold_output.shape
+def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, subject_names, masked_idxes, batch_size, num_masked_patches, num_patches=11, num_rows=4, num_cols=11):
+    B = batch_size * num_patches
+    N = combined_manifold_output.shape[-1]
     assert B % num_patches == 0, f"Batch Size {B} is not divisible by {num_patches}"
     #print(f"B: {B} N: {N} num_patches: {num_patches} num_rows: {num_rows} num_cols: {num_cols}")
     wavelet_figs = dict()
@@ -15,18 +16,17 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined
             wavelet_fig, wavelet_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
 
             _plotBatchWavelet(wavelet_axs, num_rows, num_cols,
-                            wavelet_batch.clone().reshape(B // num_patches,
-                            num_patches, N, N)[:len(subject_names)], 
+                            wavelet_batch.clone().reshape(batch_size, -1, N, N)[:len(subject_names)], 
                             subject_names)
             wavelet_fig.suptitle(f"{band} SPD Embeddings")
             wavelet_fig.tight_layout()
             wavelet_figs[band] = wavelet_fig # Figure is a BATCH_SIZE / NUM_FIGS_PER_ROW for each manifold embedding
 
-    combined_fig, combined_axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
-    _plotBatchCombined(combined_axs, num_rows, num_cols,
-                      combined_manifold_output.clone().reshape(B // num_patches, num_patches, N, N)[:len(subject_names)],
-                      combined_manifold_output_masked.clone().reshape(B // num_patches, num_patches, N, N)[:len(subject_names)],
-                      subject_names)
+    combined_fig, combined_axs = plt.subplots(num_rows, num_masked_patches, figsize=(num_masked_patches * 3, num_rows * 3), subplot_kw=dict(projection='3d', elev=45, azim=45, roll=45)) # Always look through the view of positive octant
+    _plotBatchCombined(combined_axs, num_rows=num_rows, num_cols=num_masked_patches,
+                      output=combined_manifold_output.clone().reshape(batch_size, num_masked_patches, N, N)[:len(subject_names)],
+                      output_masked=combined_manifold_output_masked.clone().reshape(batch_size, num_masked_patches, N, N)[:len(subject_names)],
+                      subject_names=subject_names)
     handles, labels = combined_axs[0, 0].get_legend_handles_labels()
     combined_fig.legend(handles, labels, loc='upper left')
     combined_fig.suptitle("Combined SPD Embeddings")
@@ -35,7 +35,6 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined
 
 
 def _plotBatchCombined(axs, num_rows, num_cols, output, output_masked, subject_names):
-    #print(f"Output Shape: {output.shape} Output Masked Shape: {output_masked.shape} Subject_names: {len(subject_names)}")
     for row in range(num_rows):
         for col in range(num_cols):
             output_matrix = output[row, col, :, :]
@@ -47,7 +46,7 @@ def _plotBatchCombined(axs, num_rows, num_cols, output, output_masked, subject_n
             _plot_ellipsoid_3D_PCA(output_matrix, axs[row, col], color='b', label='Original', alpha=0.5)
             _plot_ellipsoid_3D_PCA(output_masked_matrix, axs[row, col], color='r', label='Reconstruction', alpha=0.5)
             axs[row, col].set_title(f"Subject {subject_names[row]}, Patch {col + 1}")
-            handles, labels = axs[row, col].get_legend_handles_labels()
+            #handles, labels = axs[row, col].get_legend_handles_labels()
 
     #fig.legend(handles, labels, loc='upper left')
 
