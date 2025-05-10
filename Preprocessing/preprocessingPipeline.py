@@ -26,7 +26,10 @@ def simplePipeline(raw, sample_rate=128, low_pass=75, exclude_epochs=[0, -1], ex
 	5. Exclude first and last epoch of TUH like CBraMod
 	'''
 	raw.filter(0.1, low_pass, verbose=False)
-	raw.notch_filter((60, 120), verbose=False)
+	if raw.info['sfreq'] < 240 and raw.info['sfreq'] > 120:
+		raw.notch_filter(60, verbose=False)
+	elif raw.info['sfreq'] > 240:
+		raw.notch_filter((60, 120), verbose=False)
 	epochs = make_fixed_length_epochs(raw, duration=60, preload=True)
 	epochs = epochs.load_data()
 	if exclude_short_epochs and len(epochs) <= 3:
