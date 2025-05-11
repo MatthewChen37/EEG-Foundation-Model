@@ -49,10 +49,14 @@ def _process_subject(args, subject):
 					'high_freq': dbt['d'].data
 				}
 
-				for band, data in relevant_bands.items():
-					torch.save(torch.tensor(data), os.path.join(args.input_directory, subject, "wavelet_decompositions", f"{epoch_file[:-4]}_{band}_band.pt"))
-				
-				torch.save(torch.tensor(gait_raw.get_data(copy=True)), os.path.join(args.input_directory, subject, "gait", f"{epoch_file[:-4]}_gait.pt"))
+				for i in range(raw_data.shape[0]):
+					epoch_gait_data = torch.tensor(gait_raw.get_data())
+					curr_gait = torch.tensor(epoch_gait_data[i])
+					for band, data in relevant_bands.items():
+						epoch_data = torch.tensor(data)
+						curr_epoch = torch.tensor(epoch_data[i])
+						torch.save(curr_epoch, os.path.join(args.input_directory, subject, "wavelet_decompositions", f"{epoch_file[:-4]}_{band}_band_epoch_{i}.pt"))
+					torch.save(curr_gait, os.path.join(args.input_directory, subject, "gait", f"{epoch_file[:-4]}_gait_epoch_{i}.pt"))
 
 				# TODO: Add support for multiple features
 				dist_feat = createDistanceMatrix(raw_epoch.info)
