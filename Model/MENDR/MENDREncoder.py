@@ -88,7 +88,7 @@ class WaveletEncoderDecoder(nn.Module):
         x = self.channel_dropout(x)
         x = self.patch_embedder(x)
         x = self.patch_norm1(x)
-        x = self.patch_embedder_lin(x) # No residual here because dimensions are different
+        x = x + self.patch_embedder_lin(x)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         edge_index = graph.edge_index.to(self.device)
@@ -100,9 +100,9 @@ class WaveletEncoderDecoder(nn.Module):
         x = x + self.patch_embedder2_lin(x)
 
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
-        decoding = x.clone().detach() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
-        decoding.requires_grad = True # Just to be safe
+        decoding = x.clone() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
+        #decoding.requires_grad = True # Just to be safe
         # x: [Batch Size, Patches, self.encoded_h, self.L_out_2]
         decoding = self.up1(decoding)
         decoding = self.up2(decoding)
@@ -150,9 +150,9 @@ class GNNTransformer(nn.Module):
         x = x.view(B, P, C, self.num_features)
         for patch_idx in range(x.shape[1]):
             gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.num_features).clone()
-            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.L_out_1]
+            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.num_features]
             channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
-            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1]
+            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1, self.num_features]
             x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, self.num_features)
 
         x = x.view(B*P, C, self.num_features)

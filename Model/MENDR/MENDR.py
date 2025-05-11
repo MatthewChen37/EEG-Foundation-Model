@@ -96,6 +96,7 @@ class MENDR_model(nn.Module):
                 beta_encoded_h=self.encoded_h['beta'],
                 gamma_encoded_h=self.encoded_h['gamma'],
                 high_encoded_h=self.encoded_h['high'],
+                patch_len=self.mendr_encoder.encoder_decoders['delta'].L_out_2,
                 temp=temp,
                 device=device)
         elif self.contextualizer_size.upper() == "TINY":

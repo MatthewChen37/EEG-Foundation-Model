@@ -6,10 +6,12 @@ from .mAtt.spd import SPDTangentSpace, SPDTransform
 from .MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes
 
 class ManifoldTransformer(nn.Module):
-    def __init__(self, device, encoded_h, hidden_scale=1.5, patch_len=18):
+    def __init__(self, device, encoded_h, hidden_scale=1.5, norm_output=True):
         super().__init__()
         self.encoded_h = encoded_h
         self.hidden_scale = hidden_scale
+        self.device = device
+        self.norm_output = norm_output
 
         self.manifold_self_attention = AttentionManifold(self.encoded_h, self.encoded_h, self.device)
         self.activation = SPDRectified()
@@ -19,22 +21,18 @@ class ManifoldTransformer(nn.Module):
 
         self.trace_normalization = BatchTraceNormalization(self.device)
 
-    def forward(self, x, batch_size, num_patches, norm_output=True):
+    def forward(self, x, batch_size, num_patches):
         # X is list of [Batch_Size, epochs, C, C]
 
         x_res, shape = self.manifold_self_attention(x)
-        x = x + x_res.view(x.shape)
-
-        epoched_shape = shape
-        og_output_shape = x.shape
-        x = x.view(batch_size, num_patches, self.encoded_h, self.encoded_h)
+        # x_res is [Batch_Size*epochs, C, C]
+        x = x.view(x_res.shape) + x_res # Add and norm
         x = self.trace_normalization(x)
-
         x = x + self.manifold_self_spd_transform(x)
-        if norm_output:
+        if self.norm_output:
             x = self.trace_normalization(x)
-
-        return x, epoched_shape
+        x = x.view(batch_size, num_patches, self.encoded_h, self.encoded_h)
+        return x
 
 
 

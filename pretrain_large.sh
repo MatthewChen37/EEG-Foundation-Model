@@ -1,6 +1,6 @@
 python pretrain.py --input_dir=/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz \
- --train_frac=0.05 \
- --val_frac=0.005 \
+ --train_frac=0.01 \
+ --val_frac=0.001 \
  --learning_rate=0.001\
  --l2_weight_decay=0.000001 \
  --batch_size=256 \
