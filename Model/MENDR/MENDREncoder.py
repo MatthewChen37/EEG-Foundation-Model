@@ -5,6 +5,7 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
+from .MENDRReconstructionDecoder import MENDRReconstructionDecoder
 
 
 '''
@@ -41,15 +42,10 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
 
         # Decoders
-        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
-        self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
-        self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
-        self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
-        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
-        self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
-        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=encoded_h, stride=self.stride, groups=1).to(self.device), self.act)
-        self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
-               
+        self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
+                                                                 encoded_h=encoded_h, L_out_2=self.L_out_2,
+                                                                 seq_len=self.seq_len, device=self.device)
+
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
         patch_norm1_count = sum(p.numel() for p in self.patch_norm1.parameters() if p.requires_grad)
@@ -61,11 +57,8 @@ class WaveletEncoderDecoder(nn.Module):
         return patch_embedder_count + patch_norm1_count + patch_embedder_lin_count + patch_embedder2_count + patch_norm2_count + patch_embedder2_lin_count + gnn_spatial_harmonizer_count
 
     def getDecoderParamCount(self):
-        up1_count = sum(p.numel() for p in self.up1.parameters() if p.requires_grad)
-        up2_count = sum(p.numel() for p in self.up2.parameters() if p.requires_grad)
-        up3_count = sum(p.numel() for p in self.up3.parameters() if p.requires_grad)
-        up4_count = sum(p.numel() for p in self.up4.parameters() if p.requires_grad)
-        return up1_count + up2_count + up3_count + up4_count
+        reconstruction_decoder_count = sum(p.numel() for p in self.reconstruction_decoder.parameters() if p.requires_grad)
+        return reconstruction_decoder_count
 
     def getEncoderParams(self):
         patch_embedder_params = list(self.patch_embedder.parameters())
@@ -78,7 +71,7 @@ class WaveletEncoderDecoder(nn.Module):
         return patch_embedder_params + patch_norm1_params + patch_embedder_lin_params + patch_embedder2_params + patch_norm2_params + patch_embedder2_lin_params + gnn_encoder_params
                 
     def getDecoderParams(self):
-        return list(self.up1.parameters()) + list(self.up2.parameters()) + list(self.up3.parameters()) + list(self.up4.parameters())
+        return list(self.reconstruction_decoder.parameters())
 
     def forward(self, graph, x):
         # x: [Batch Size, Patches, Channels, Time Steps]
@@ -102,14 +95,9 @@ class WaveletEncoderDecoder(nn.Module):
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         decoding = x.clone() # For torchjd, create separate autograd graph for decoding so that task parameters are not included in shared parameters
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
-        #decoding.requires_grad = True # Just to be safe
         # x: [Batch Size, Patches, self.encoded_h, self.L_out_2]
-        decoding = self.up1(decoding)
-        decoding = self.up2(decoding)
-        decoding = self.up3(decoding)
-        decoding = self.up4(decoding)
+        decoding = self.reconstruction_decoder(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
-
         return x, decoding
 
 
@@ -243,8 +231,6 @@ class MENDRPatchEncoder(nn.Module):
             param.requires_grad = unfreeze
         if finetuning:
             self.mask_replacement.requires_grad = False
-
-
 
 
 # DEPRECATED

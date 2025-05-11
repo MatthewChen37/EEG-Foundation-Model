@@ -100,7 +100,7 @@ class MENDR_model(nn.Module):
                 device=device)
         elif self.contextualizer_size.upper() == "TINY":
             encoded_h_total = self.encoded_h['delta'] + self.encoded_h['theta'] + self.encoded_h['alpha'] + self.encoded_h['beta'] + self.encoded_h['gamma']
-            self.mendr_contextualizer = MENDRContextualizerTiny(encoded_h=encoded_h_total, device=device)
+            self.mendr_contextualizer = MENDRContextualizerTiny(encoded_h=encoded_h_total, patch_len=self.mendr_encoder.encoder_decoders['delta'].L_out_2, device=device)
         else:
             raise ValueError("Contextualizer size must be either 'LARGE' or 'TINY'")
 

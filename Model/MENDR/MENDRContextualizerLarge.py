@@ -142,7 +142,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, encoded_out, n_transformer_layers=2):
+	def __init__(self, device, encoded_out, n_transformer_layers=4):
 		super().__init__()
 		self.device = device
 		self.encoded_out = encoded_out
@@ -202,6 +202,9 @@ class MENDRCombinedContextualizer(nn.Module):
 		if len(x['delta'].shape) == 4:
 			for band in x.keys():
 				x_input[band] = x[band].clone().view(x[band].shape[0]*x[band].shape[1], x[band].shape[2], x[band].shape[3])
+		else:
+			for band in x.keys():
+				x_input[band] = x[band].clone()
 		combined_manifold_output = torch.stack(list(x_input.values()), dim=1)
 		# Combined Manifold Output is something like [Batch_num * Patches, # of Wavelet Bands, C, C]
 		combined_manifold_output = self.manifold_transformer[0].manifold_self_attention.tensor_log(combined_manifold_output)

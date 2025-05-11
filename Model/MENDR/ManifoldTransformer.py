@@ -32,6 +32,9 @@ class ManifoldTransformer(nn.Module):
         if self.norm_output:
             x = self.trace_normalization(x)
         x = x.view(batch_size, num_patches, self.encoded_h, self.encoded_h)
+
+        # Symmetrize Due to Numeric Instability
+        x = 0.5 * (x + x.transpose(2, 3))
         return x
 
 

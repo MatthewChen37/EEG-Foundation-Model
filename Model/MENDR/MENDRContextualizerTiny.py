@@ -4,12 +4,13 @@ import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
 from .MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization
+from .ManifoldTransformer import ManifoldTransformer
 
 '''
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, device, encoded_h, patch_len=37, encoded_out=19):
+	def __init__(self, device, encoded_h, patch_len=18, encoded_out=19):
 		super(MENDRContextualizerTiny, self).__init__()
 		self.device = device
 		self.encoded_h = encoded_h
@@ -49,19 +50,21 @@ class MENDRContextualizerTiny(nn.Module):
 		return signal_transformed, signal, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge, but mask_idxes is None
 	
 class MENDRContextualizer(nn.Module):
-	def __init__(self, device, encoded_out):
+	def __init__(self, device, encoded_out, n_transformer_layers=3):
 		super(MENDRContextualizer, self).__init__()
 		self.device = device
 		self.encoded_out = encoded_out
 
-		self.attention = AttentionManifold(self.encoded_out, self.encoded_out, self.device)
-		self.ract = SPDRectified()
-		self.spd_transform1 = SPDTransform(self.encoded_out, int(1.5*self.encoded_out), self.device)
-		self.spd_transform2 = SPDTransform(int(1.5*self.encoded_out), self.encoded_out, self.device)
+		assert n_transformer_layers >= 1, "Must have at least one transformer layer"
 
-		self.spd_transform = nn.Sequential(self.spd_transform1, self.ract, self.spd_transform2)
+		manifold_transformers = []
+		for i in range(n_transformer_layers):
+			if i == n_transformer_layers - 1:
+				manifold_transformers.append(ManifoldTransformer(device, self.encoded_out, norm_output=False, hidden_scale=1.0))
+			else:
+				manifold_transformers.append(ManifoldTransformer(device, self.encoded_out, hidden_scale=1.0))
 
-		self.trace_normalization = BatchTraceNormalization(self.device)
+		self.manifold_transformer = nn.ModuleList(manifold_transformers)
 
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
@@ -83,13 +86,10 @@ class MENDRContextualizer(nn.Module):
 		else:
 			x_input = x.clone()
 
-		res_x, shape = self.attention(x_input)
-		# Add and norm
-		x_input = res_x + x_input.view(res_x.shape)
-		x_input = self.trace_normalization(x_input)
+		x_input = x_input.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
+		for transformer in self.manifold_transformer:
+			x_input = transformer(x_input, batch_size, num_patches)
 
-		x_input = x_input + self.spd_transform(x_input) # Just add, no norm
-		x_input = x_input.reshape(shape[0], shape[1], self.encoded_out, self.encoded_out)
 		return x_input, mask_idxes
 	
 	

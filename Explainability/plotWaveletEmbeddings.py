@@ -39,7 +39,7 @@ def plotWaveletEmbeddingsEuclidean(wavelet_manifold_output, combined_manifold_ou
 
     return fig
 
-def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, title, num_sample_patches=4, reduction="TSNE"):
+def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, title, num_samples=1, num_sample_patches=11, reduction="TSNE"):
     with torch.no_grad():
         if reduction == "TSNE":
             riemannian_reducer = Riem_Riem_tSNE(perplexity=int(0.75 * num_sample_patches * 6), max_it=10000, max_time=6000)
@@ -49,24 +49,26 @@ def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_o
             raise ValueError("Reduction must be either 'TSNE' or 'MDS'")
 
         data = []
-        for band in ['delta', 'theta', 'alpha', 'beta', 'gamma']:
-            data.append(wavelet_manifold_output[band][:num_sample_patches].clone().detach().cpu().numpy())
-        data.append(combined_manifold_output[:num_sample_patches].clone().detach().cpu().numpy())
-        data = np.concatenate(data, axis=0)
-        embedding = riemannian_reducer.fit(data)
-        labels = np.arange(num_sample_patches)
-        assert embedding.shape[0] == num_sample_patches * 6, f"Embedding Shape: {embedding.shape} Expected Shape: {num_sample_patches * 6}"
-
         labels = []
-        for embedding_idx in range(num_sample_patches):
-            labels.append('Delta')
-            labels.append('Theta')
-            labels.append('Alpha')
-            labels.append('Beta')
-            labels.append('Gamma')
-            labels.append('Combined')
+        for sample_idx in range(num_samples):
+            for band in ['delta', 'theta', 'alpha', 'beta', 'gamma']:
+                data.append(wavelet_manifold_output[band][sample_idx][:num_sample_patches].clone().detach().cpu().numpy())
+            data.append(combined_manifold_output[sample_idx][:num_sample_patches].clone().detach().cpu().numpy())
+
+            for embedding_idx in range(num_sample_patches):
+                labels.append('Delta')
+                labels.append('Theta')
+                labels.append('Alpha')
+                labels.append('Beta')
+                labels.append('Gamma')
+                labels.append('Combined')
+
         labels = np.array(labels)
         legends = np.unique(labels)
+
+        data = np.concatenate(data, axis=0)
+        embedding = riemannian_reducer.fit(data)
+        assert embedding.shape[0] == num_samples * num_sample_patches * 6, f"Embedding Shape: {embedding.shape} Expected Shape: {num_samples * num_sample_patches * 6}"
 
         return plot_results_R(
             embedding,
