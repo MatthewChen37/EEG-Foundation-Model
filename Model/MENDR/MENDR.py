@@ -65,7 +65,6 @@ class MENDR_model(nn.Module):
             'high': high_encoded_h
         }
 
-            
         self.mendr_encoder = MENDRPatchEncoder(
             num_channels=19,
             delta_sub_patch_size=self.WAVELET_LENGTHS['delta'],

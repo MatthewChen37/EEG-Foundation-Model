@@ -192,11 +192,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--contrastive_combined_loss_coeff", type=float, help="Coefficient of combined contrastive loss", default=1e3
+		"--contrastive_combined_loss_coeff", type=float, help="Coefficient of combined contrastive loss", default=1.0
 	)
 
 	parser.add_argument(
-		"--contrastive_wavelet_loss_coeff", type=float, help="Coefficient of wavelet contrastive loss", default=1
+		"--contrastive_wavelet_loss_coeff", type=float, help="Coefficient of wavelet contrastive loss", default=1e3
 	)
 
 	parser.add_argument(
