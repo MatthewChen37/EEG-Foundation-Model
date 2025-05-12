@@ -221,7 +221,7 @@ class BaseModelTrainer(object):
                 module_weight_path = os.path.join(epoch_ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path, weights_only=True))
-        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=True))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=False))
         self.loaded_from_ckpt = True
 
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):

@@ -36,7 +36,7 @@ def main(args):
 	
 	Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
-	
+
 	### Seed ###
 	torch.cuda.empty_cache()
 	random.seed(args.random_state)
@@ -221,6 +221,26 @@ def parse_args():
 
 	parser.add_argument(
 		"--gradient_clip_value", type=float, help="Gradient Clipping Value", default=1e7
+	)
+
+	'''
+	sum: Weighted sum of losses (default)
+	Here contrastive_combined_loss_coeff, contrastive_wavelet_loss_coeff, delta_reconstructive_loss_pref, theta_reconstructive_loss_pref, alpha_reconstructive_loss_pref, beta_reconstructive_loss_pref, gamma_reconstructive_loss_pref are used as coefficients for each loss
+
+	real_time: As mentioned in this article: https://medium.com/@baicenxiao/strategies-for-balancing-multiple-loss-functions-in-deep-learning-e1a641e0bcc0
+	Scaling all losses to 1, and then adding them up
+
+	jacobian: TorchJD implementation of the jacobian descent strategy
+	Here contrastive_combined_loss_coeff is used as coefficient for the combined loss and contrastive_wavelet_loss_coeff is used as coefficient for the wavelet loss, which are summed into one loss
+
+	the contrastive_loss_pref is used as coefficient magnitude of projection 
+	the delta_reconstructive_loss_pref, theta_reconstructive_loss_pref, alpha_reconstructive_loss_pref, beta_reconstructive_loss_pref, gamma_reconstructive_loss_pref are used as coefficient magnitude of projection
+	'''
+	parser.add_argument(
+		"--multi_objective_loss_balancing_strategy",
+		type=str,
+		help="How to balance losses: https://medium.com/@baicenxiao/strategies-for-balancing-multiple-loss-functions-in-deep-learning-e1a641e0bcc0, Possible values: sum, real_time, or jacobian",
+		default="sum"
 	)
 
 	# parse args

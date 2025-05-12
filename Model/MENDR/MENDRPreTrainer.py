@@ -37,6 +37,9 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.contrastive_combined_loss_coeff = config.contrastive_combined_loss_coeff
 		self.contrastive_wavelet_loss_coeff = config.contrastive_wavelet_loss_coeff
 
+		assert config.multi_objective_loss_balancing_strategy in ["sum", "real_time", "jacobian"], f"Invalid multi_objective_loss_balancing_strategy: {args.multi_objective_loss_balancing_strategy}"
+		self.multi_objective_loss_balancing_strategy = config.multi_objective_loss_balancing_strategy
+
 		self.recon_loss_pref = {
 			'delta': config.delta_reconstructive_loss_pref,
 			'theta': config.theta_reconstructive_loss_pref,
@@ -49,14 +52,15 @@ class MENDRPreTrainer(BaseModelTrainer):
 			contrastive_loss_fn_combined = self.contrastive_loss_fn_combined, lr=config.learning_rate,
 			l2_weight_decay=config.l2_weight_decay, metrics=dict(), ckpt_dir=config.ckpt_dir, **kwargs)
 
-		self.aggregator = UPGrad(pref_vector=torch.tensor([
-			self.contrastive_loss_pref,
-			self.recon_loss_pref['delta'],
-			self.recon_loss_pref['theta'],
-			self.recon_loss_pref['alpha'],
-			self.recon_loss_pref['beta'],
-			self.recon_loss_pref['gamma']
-		]))
+		if self.multi_objective_loss_balancing_strategy == "jacobian":
+			self.aggregator = UPGrad(pref_vector=torch.tensor([
+				self.contrastive_loss_pref,
+				self.recon_loss_pref['delta'],
+				self.recon_loss_pref['theta'],
+				self.recon_loss_pref['alpha'],
+				self.recon_loss_pref['beta'],
+				self.recon_loss_pref['gamma']
+			]))
 
 		# Clamp gradients
 		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
@@ -114,6 +118,40 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 	def backward(self, shared_features, contrastive_losses, reconstruction_losses):
 		self.optimizer.zero_grad()
+		if self.multi_objective_loss_balancing_strategy == "jacobian":
+			self._backward_jacobian(shared_features, contrastive_losses, reconstruction_losses)
+		elif self.multi_objective_loss_balancing_strategy == "sum":
+			self._backward_sum(contrastive_losses, reconstruction_losses)
+		elif self.multi_objective_loss_balancing_strategy == "real_time":
+			self._backward_real_time(contrastive_losses, reconstruction_losses)
+		else:
+			raise ValueError("Unidentified Multi Objective Loss Balancing Strategy")
+		
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			# Only large model has temp parameter, which is used in wavelet loss
+			# Clamp temperature to non-negative values
+			with torch.no_grad():
+				self.mendr_model.mendr_contextualizer.temp1.copy_(torch.clamp(self.mendr_model.mendr_contextualizer.temp1, min=0.0))
+
+	def _backward_sum(self, contrastive_losses, reconstruction_losses):
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			losses = contrastive_losses[0] + contrastive_losses[1]
+		else:
+			losses = contrastive_losses[0] 
+		for band in reconstruction_losses:
+			losses = losses + reconstruction_losses[band]
+		losses.backward()
+
+	def _backward_real_time(self, contrastive_losses, reconstruction_losses):
+		if self.mendr_model.contextualizer_size.upper() == "LARGE":
+			losses = (contrastive_losses[0] / contrastive_losses[0].detach()) + (contrastive_losses[1] / contrastive_losses[1].detach())
+		else:
+			losses = (contrastive_losses[0] / contrastive_losses[0].detach())
+		for band in reconstruction_losses:
+			losses = losses + (reconstruction_losses[band] / reconstruction_losses[band].detach())
+		losses.backward()
+
+	def _backward_jacobian(self, shared_features, contrastive_losses, reconstruction_losses):
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			losses = [contrastive_losses[0] + contrastive_losses[1]] + list(reconstruction_losses.values())
 		elif self.mendr_model.contextualizer_size.upper() == "TINY":
@@ -121,12 +159,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 		else:
 			raise ValueError("Unidentified Contextualizer Type")
 
-		'''
-		shared_params = []
-		for band in BANDS:
-			shared_params = shared_params+ self.mendr_model.mendr_encoder.encoder_decoders[band].getEncoderParams()
-		
-		'''
 		tasks_params = [
 				list(self.mendr_model.mendr_contextualizer.parameters()),
 		]
@@ -136,16 +168,10 @@ class MENDRPreTrainer(BaseModelTrainer):
 
 		mtl_backward(losses=losses, features=shared_features, aggregator=self.aggregator, retain_graph=False, tasks_params=tasks_params)
 
-		if self.mendr_model.contextualizer_size.upper() == "LARGE":
-			# Only large model has temp parameter, which is used in wavelet loss
-			# Clamp temperature to non-negative values
-			with torch.no_grad():
-				self.mendr_model.mendr_contextualizer.temp1.copy_(torch.clamp(self.mendr_model.mendr_contextualizer.temp1, min=0.0))
-
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
-		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+		recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], recon_loss_pref=self.recon_loss_pref, loss_strategy=self.multi_objective_loss_balancing_strategy) # Reconstruction Loss returns a dictionary
 		shared_features = [encoding for band, encoding in outputs['encodings'].items()]
 		if self.mendr_model.contextualizer_size.upper() == "LARGE":
 			# In a future work, figure out a way to multi-level backpropagate (i.e. jacobians for the wavelet loss and riemannian loss on riemannian and wavelet loss)
