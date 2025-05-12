@@ -19,6 +19,7 @@ class MENDR_model(nn.Module):
                 gamma_encoded_h=114,
                 high_encoded_h=152,
                 super_patch_seconds=10,
+                n_gnn_transformer_layers=3,
                 contextualizer_size="LARGE"):
         '''
         Sampling rate is in Hertz
@@ -32,6 +33,7 @@ class MENDR_model(nn.Module):
         self.device = device
         self.contextualizer_size=contextualizer_size
         self.num_channels = num_channels
+        self.n_gnn_transformer_layers = n_gnn_transformer_layers
 
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
@@ -85,6 +87,7 @@ class MENDR_model(nn.Module):
             beta_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['beta'],
             gamma_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
             high_super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['high'],
+            n_gnn_transformer_layers=self.n_gnn_transformer_layers,
             device=device)
         
         if self.contextualizer_size.upper() == "LARGE":

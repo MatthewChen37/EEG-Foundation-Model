@@ -66,7 +66,7 @@ def main(args):
 	print("Starting training.")
 
 	### Training ###
-	mendr = MENDR_model(device, contextualizer_size=args.model_size)
+	mendr = MENDR_model(device, contextualizer_size=args.model_size, n_gnn_transformer_layers=args.n_gnn_transformer_layers)
 	trainer = MENDRPreTrainer(mendr, args)
 	optimizer = torch.optim.AdamW(trainer.parameters(), lr=args.learning_rate, weight_decay=args.l2_weight_decay)
 	optimizer = MixOptimizer(optimizer)
@@ -241,6 +241,13 @@ def parse_args():
 		type=str,
 		help="How to balance losses: https://medium.com/@baicenxiao/strategies-for-balancing-multiple-loss-functions-in-deep-learning-e1a641e0bcc0, Possible values: sum, real_time, or jacobian",
 		default="sum"
+	)
+
+	parser.add_argument(
+		"--n_gnn_transformer_layers",
+		type=int,
+		help="Number of GNN Transformer layers",
+		default=2
 	)
 
 	# parse args

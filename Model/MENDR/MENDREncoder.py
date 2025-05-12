@@ -7,7 +7,6 @@ from torch_geometric.data import Data, Batch
 from math import floor
 from .MENDRReconstructionDecoder import MENDRReconstructionDecoder
 
-
 '''
 We break each Wavelet sequence into patches. There are two patch scales: Super-Patch and Sub-Patch. 
 By default super-patches represent 10 seconds and are what are first fed into the encoder.
@@ -16,7 +15,7 @@ Decoders are used for Super-Patch reconstruction to ensure embeddings have a rea
 intepretation. 
 '''
 class WaveletEncoderDecoder(nn.Module):
-    def __init__(self, num_channels, sub_patch_size, super_patch_seq_len, encoded_h, device):
+    def __init__(self, num_channels, sub_patch_size, super_patch_seq_len, encoded_h, n_gnn_transformer_layers, device):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = nn.Dropout1d(0.2)
@@ -33,7 +32,9 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_norm1 = nn.LayerNorm((19, self.L_out_1))
         self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
 
-        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.L_out_1, device=self.device, n_gnn_transformer_layers=3, heads=2)
+        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.L_out_1,
+                                                           device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
+                                                           heads=2)
 
         self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
@@ -102,7 +103,7 @@ class WaveletEncoderDecoder(nn.Module):
 
 
 class GNNSpatialHarmonizer(nn.Module):
-    def __init__(self, num_channels, num_features, device, n_gnn_transformer_layers = 2, heads=2):
+    def __init__(self, num_channels, num_features, device, n_gnn_transformer_layers=2, heads=2):
         super().__init__()
         self.num_channels = num_channels
         self.num_features = num_features
@@ -175,6 +176,7 @@ class MENDRPatchEncoder(nn.Module):
                 beta_super_patch_seq_len,
                 gamma_super_patch_seq_len,
                 high_super_patch_seq_len,
+                n_gnn_transformer_layers,
                 device):
         super().__init__()
         self.device = device
@@ -184,6 +186,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=delta_sub_patch_size,
                     encoded_h=delta_encoded_h,
                     super_patch_seq_len=delta_super_patch_seq_len,
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'theta': WaveletEncoderDecoder(
@@ -191,6 +194,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=theta_sub_patch_size,
                     encoded_h=theta_encoded_h,
                     super_patch_seq_len=theta_super_patch_seq_len,
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'alpha': WaveletEncoderDecoder(
@@ -198,6 +202,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=alpha_sub_patch_size,
                     encoded_h=alpha_encoded_h,
                     super_patch_seq_len=alpha_super_patch_seq_len,
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device 
                     ),
             'beta': WaveletEncoderDecoder(
@@ -205,6 +210,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=beta_sub_patch_size,
                     encoded_h=beta_encoded_h,
                     super_patch_seq_len = beta_super_patch_seq_len,
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'gamma': WaveletEncoderDecoder(
@@ -212,6 +218,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size = gamma_sub_patch_size,
                     encoded_h = gamma_encoded_h,
                     super_patch_seq_len=gamma_super_patch_seq_len,
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
         })

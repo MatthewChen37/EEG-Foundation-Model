@@ -6,7 +6,6 @@ from math import floor
 import copy
 from copy import deepcopy
 
-
 class MENDRReconstructionDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, encoded_h, L_out_2, seq_len, device):
         super().__init__()
@@ -17,8 +16,8 @@ class MENDRReconstructionDecoder(nn.Module):
         self.L_out_2 = L_out_2
         self.seq_len = seq_len
 
-        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=4).to(self.device)
-
+        #self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=4).to(self.device)
+        '''
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = ResidualConvTranspose1dBlock(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, padding=0, activation=nn.GELU()).to(self.device)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
@@ -27,10 +26,22 @@ class MENDRReconstructionDecoder(nn.Module):
         self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
         self.up3 = ResidualConv1dBlock(in_channels=encoded_h * 2, out_channels=19, kernel_size=encoded_h, stride=self.stride, padding=0, activation=nn.GELU()).to(self.device)
         self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
+        '''
+
+        self.act = nn.GELU()
+
+        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
+        self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
+        self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
+        self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
+        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
+        self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
+        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=encoded_h, stride=self.stride, groups=1).to(self.device), self.act)
+        self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
 
     def forward(self, x):
         # x: [Batch Size*Patches, encoded_h, L_out_2]
-        x  = self.SEBlock(x)
+        #x  = self.SEBlock(x)
         x =  self.up1(x)
         x = self.up2(x)
         x = self.up3(x) 

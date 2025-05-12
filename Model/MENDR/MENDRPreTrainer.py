@@ -196,7 +196,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
-			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings']) # Reconstruction Loss returns a dictionary
+			recon_losses = WaveletReconstructionLoss(outputs['patchified_inputs'], outputs['decodings'], recon_loss_pref=self.recon_loss_pref, loss_strategy=self.multi_objective_loss_balancing_strategy) # Reconstruction Loss returns a dictionary
 			if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 				eval_metrics = self._calculate_metrics(outputs['riemannian_loss'].item(), outputs['wavelet_loss'].item(), outputs['wavelet_acc'], recon_losses)
 			elif self.mendr_model.contextualizer_size.upper() == 'TINY':
