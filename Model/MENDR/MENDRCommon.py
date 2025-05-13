@@ -68,6 +68,48 @@ def _make_mask_idxes(batch_size, num_patches, mask_ratio):
 			batch_mask_idxes[i,indices] = True
 		return batch_mask_idxes
 
+class LogEuclidLayerNorm(nn.Module):
+    def __init__(self, device, num_channels=19, epsilon=1e-5):
+        super().__init__()
+        self.device       = device
+        self.num_channels = num_channels
+        self.epsilon      = epsilon
+        # params
+        self.gamma = nn.Parameter(torch.ones(num_channels, device=device))
+        self.beta  = nn.Parameter(torch.zeros(num_channels, device=device))
+
+    def forward(self, C):
+        # assume SPD
+        # Eigendecompose
+		# D: [B,N], U: [B,N,N]
+        D, U = torch.linalg.eigh(C)         
+
+        # Log‐map + clamp
+        D = D.clamp(min=self.epsilon)
+        logD = torch.log(D)                    
+
+        # LayerNorm in log‐space
+		# [B,1]
+        mu    = logD.mean(dim=-1, keepdim=True)
+		# [B,1]      
+        var   = logD.var(dim=-1, unbiased=False, keepdim=True)
+		# [B,N]
+        D_hat = (logD - mu) / torch.sqrt(var + self.epsilon)   
+
+        # transform
+		# [B,N]
+        D_tilde = self.gamma * D_hat + self.beta     
+
+        # exp, diagnolize, reconstruct
+		# [B,N,N]
+        C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.transpose(-2, -1) 
+
+        # ensure PD
+        I = torch.eye(self.num_channels, device=self.device).unsqueeze(0)
+        C_norm = C_norm + self.epsilon * I
+
+        return C_norm
+
 if __name__ == "__main__":
 	# Test Positional Encoding
 	pe = PositionalEncoding("cpu", 114, 37)
