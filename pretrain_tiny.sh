@@ -1,11 +1,11 @@
 python pretrain.py --input_dir=/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz \
- --train_frac=0.01 \
- --val_frac=0.001 \
+ --train_frac=0.9 \
+ --val_frac=0.1 \
  --learning_rate=0.001\
  --l2_weight_decay=0.0005 \
  --batch_size=256 \
  --negatives_loo=20 \
- --training_epochs=1 \
+ --training_epochs=15 \
  --temp=10.0 \
  --mask_ratio=0.2\
  --model_size=TINY \

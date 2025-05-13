@@ -35,11 +35,6 @@ class MENDR_model(nn.Module):
         self.num_channels = num_channels
         self.n_gnn_transformer_layers = n_gnn_transformer_layers
 
-        if self.contextualizer_size.upper() == "LARGE":
-            self.n_gnn_transformer_layers = 2
-        else:
-            self.n_gnn_transformer_layers = 1
-
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {

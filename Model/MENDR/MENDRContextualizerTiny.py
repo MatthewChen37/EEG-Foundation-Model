@@ -23,7 +23,6 @@ class MENDRContextualizerTiny(nn.Module):
 			print(f"Encoded_H {self.encoded_h - 1} is even, adding 1 to make it odd")
 			self.learnable_padding = nn.Parameter(torch.zeros(1, 1, 1, self.patch_len), requires_grad=True).to(self.device)
 
-
 		self.position_encoder = PositionalEncoding(self.device, self.encoded_h, self.patch_len, 0.1)
 		self.e2r = E2R(device=self.device)
 		self.ract = SPDRectified()
@@ -77,7 +76,7 @@ class MENDRContextualizer(nn.Module):
 		
 		mask_idxes = None
 		x_input = None
-		if mask_ratio > 0:
+		if mask_ratio > 0.0:
 			x_input = x.clone()
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
