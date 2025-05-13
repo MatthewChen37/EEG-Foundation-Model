@@ -46,8 +46,8 @@ class MENDRContextualizerTiny(nn.Module):
 		cov_matrices = self.e2r(signal)
 		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
 		signal_transformed = signal_transformed.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
-		signal, mask_idxes = self.Contextualizer(signal_transformed, batch_size, num_patches, mask_ratio)
-		return signal_transformed, signal, mask_idxes   # Return 2 things to keep compatibility with MENDRContextualizerLarge, but mask_idxes is None
+		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), batch_size, num_patches, mask_ratio)
+		return signal_transformed, signal, mask_idxes 
 	
 class MENDRContextualizer(nn.Module):
 	def __init__(self, device, encoded_out, n_transformer_layers=3):

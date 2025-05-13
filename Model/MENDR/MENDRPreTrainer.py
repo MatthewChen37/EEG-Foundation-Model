@@ -337,7 +337,6 @@ class MENDRPreTrainer(BaseModelTrainer):
 		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
 		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
-
 		# of shape Batch, epoch, C, C
 
 		# Masked Reconstruction loss

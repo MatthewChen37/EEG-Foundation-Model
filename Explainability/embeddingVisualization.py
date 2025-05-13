@@ -29,7 +29,7 @@ def plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined
                       output_masked=combined_manifold_output_masked.clone().reshape(batch_size, num_patches, N, N)[:len(subject_names)],
                       masked_idexes=masked_idxes,
                       subject_names=subject_names)
-    handles, labels = combined_axs[0, 0].get_legend_handles_labels()
+    handles, labels = combined_axs[get_first_true_index(masked_idxes)].get_legend_handles_labels()
     combined_fig.legend(handles, labels, loc='upper left')
     combined_fig.suptitle("Combined SPD Embeddings")
     combined_fig.tight_layout()
@@ -45,9 +45,9 @@ def _plotBatchCombined(axs, num_rows, num_cols, output, output_masked, masked_id
             axs[row, col].set_yticks([])
             axs[row, col].set_zticks([])
             _plot_ellipsoid_3D_PCA(output_matrix, axs[row, col], color='b', label='Original', alpha=0.5)
-            _plot_ellipsoid_3D_PCA(output_masked_matrix, axs[row, col], color='r', label='Reconstruction', alpha=0.5)
             if masked_idexes[row, col] == True:
                 axs[row, col].set_title(f"Patch {col + 1} (MASKED)")
+                _plot_ellipsoid_3D_PCA(output_masked_matrix, axs[row, col], color='r', label='Reconstruction', alpha=0.5)
             else:
                 axs[row, col].set_title(f"Subject {subject_names[row]}, Patch {col + 1}")
             #handles, labels = axs[row, col].get_legend_handles_labels()
@@ -139,3 +139,14 @@ def _ellipsoid_sample(S, z_hat, m_FA, Gamma_Threshold=1.0):
     z_fa=(unif_ell * np.sqrt(Gamma_Threshold)+(z_hat * np.ones((1,m_FA))))
 
     return np.array(z_fa)
+
+def get_first_true_index(tensor_2d):
+  """
+  Returns the index (row, column) of the first True value in a 2D boolean tensor.
+  If no True value is found, it returns None.
+  """
+  true_indices = torch.nonzero(tensor_2d)
+  if true_indices.numel() > 0:
+    return tuple(true_indices[0].tolist())
+  else:
+    return None
