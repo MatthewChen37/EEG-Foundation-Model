@@ -41,7 +41,8 @@ class MENDRContextualizerLarge(nn.Module):
 
 	def forward(self, x, batch_size, patch_num):
 		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_manifold_output, mask_idxes = self.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=0.0)
+		combined_manifold_output = self.CombinedContextualizer._wavelet_LogEuclideanMean(wavelet_manifold_output)
+		combined_manifold_output, mask_idxes = self.CombinedContextualizer(combined_manifold_output, epoched_shape, mask_ratio=0.0)
 		# Never mask when calling it from here
 		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
 
@@ -164,38 +165,37 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out)).float().to(self.device)
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
-	def forward(self, x, og_output_shape, mask_ratio=0.0):
+	def forward(self, combined_manifold_output, og_output_shape, mask_ratio=0.0):
+		# Combined Manifold Output should be a clone
 		batch_size = og_output_shape[0]
 		num_patches = og_output_shape[1]
+		combined_manifold_output_hidden_dim = combined_manifold_output.shape[-1]
 		mask_idxes = None
-		x_input = dict()
+		x = None
 		if mask_ratio > 0.0:
-			for band in x.keys():
-				x_input[band] = x[band].clone()
-
+			x = combined_manifold_output.clone() # Just in case
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
-			for band, spd_batch in x_input.items():
-				x_input[band] = spd_batch.view(batch_size, num_patches, spd_batch.shape[2], spd_batch.shape[3]).clone()
+			combined_manifold_output = combined_manifold_output.view(batch_size, num_patches, combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			for band in x_input.keys():
-				x_input[band][mask_idxes] = spd_mask
-				x_input[band] = x_input[band].view(batch_size * num_patches, spd_batch.shape[2], spd_batch.shape[3])
+			combined_manifold_output[mask_idxes] = spd_mask
+
+			'''
+			print(mask_idxes.shape)
+			for batch_idx in range(combined_manifold_output.shape[0]):
+				for patch_idx in range(combined_manifold_output.shape[1]):
+					if mask_idxes[batch_idx, patch_idx] == False:
+						print("HERE", mask_idxes.shape)
+						assert not torch.equal(combined_manifold_output[batch_idx, patch_idx], torch.zeros(combined_manifold_output[batch_idx, patch_idx].shape, device=self.device)), f"Masked SPD Matrix {batch_idx, patch_idx} is not equal to the mask"
+			'''
 		else:
-			for band in x.keys():
-				x_input[band] = x[band].clone()
-
-		# Log Euclidean Mean TODO: Make this more efficient because we can just mask out the mean rather than each wavelet band and computing the mean
-		combined_manifold_output = self._wavelet_LogEuclideanMean(x_input)
-
-		combined_manifold_output = combined_manifold_output.view(og_output_shape[0], og_output_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+			x = combined_manifold_output.clone()
 		for transformer in self.manifold_transformer:
-			combined_manifold_output = transformer(combined_manifold_output, batch_size, num_patches)
-
-		return combined_manifold_output, mask_idxes
+			x = transformer(x, batch_size, num_patches)
+		return x, mask_idxes
 
 	def _wavelet_LogEuclideanMean(self, x):
 		x_input = dict()

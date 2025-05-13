@@ -86,7 +86,7 @@ class MENDRContextualizer(nn.Module):
 		else:
 			x_input = x.clone()
 
-		x_input = x_input.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
+		x_input = x_input.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out).clone()
 		for transformer in self.manifold_transformer:
 			x_input = transformer(x_input, batch_size, num_patches)
 

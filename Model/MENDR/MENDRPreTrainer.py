@@ -209,28 +209,34 @@ class MENDRPreTrainer(BaseModelTrainer):
 				combined_manifold_output_masked = outputs['combined_manifold_output_masked']
 				batch_size = combined_manifold_output.shape[0]
 				num_patches = combined_manifold_output.shape[1]
+				assert outputs['mask_idxes'].shape[0] == batch_size, f"Masked Index Shape: {outputs['mask_idxes'].shape} Batch Size: {batch_size}"
+				assert outputs['mask_idxes'].shape[1] == num_patches, f"Masked Index Shape: {output['mask_idxes'].shape} Batch Size: {batch_size}"
 				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
+
+				combined_manifold_output= combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+				combined_manifold_output_masked = combined_manifold_output_masked.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
 				if self.mendr_model.contextualizer_size.upper() == 'LARGE':
 					wavelet_manifold_output = outputs['wavelet_manifold_output']
-					combined_manifold_output_mask_only = combined_manifold_output[outputs['mask_idxes']]
-					num_masked_patches = combined_manifold_output_mask_only.shape[0] // batch_size	
-					combined_manifold_output_mask_only= combined_manifold_output_mask_only.reshape(-1, combined_manifold_output_mask_only.shape[-2], combined_manifold_output_mask_only.shape[-1])
-					combined_manifold_output_masked = combined_manifold_output_masked.clone()[outputs['mask_idxes']].reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
-					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output_mask_only, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
+					'''
+					predictions = []
+					for idx in range(combined_manifold_output_masked.shape[0]):
+							predictions.append(combined_manifold_output_masked[idx])
+					for predictions_idx in range(len(predictions)):
+						if predictions_idx != len(predictions) - 1:
+							assert torch.allclose(predictions[predictions_idx], predictions[predictions_idx + 1]) == False, f"Predictions: {predictions[predictions_idx]} and {predictions[predictions_idx + 1]} are equal: {predictions_idx}"
+					'''
+					wavelet_figs, combined_fig = plotSPDEmbedding(wavelet_manifold_output, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
 					for band, wavelet_fig in wavelet_figs.items():
 						mlflow.log_figure(wavelet_fig, f"epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
 						plt.close(wavelet_fig)
 					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
-					
-					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
+					fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output,
+														 combined_manifold_output.reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
+														 f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 					mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
 				elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-					combined_manifold_output = combined_manifold_output[outputs['mask_idxes']]
-					num_masked_patches = combined_manifold_output.shape[0] // batch_size
-					combined_manifold_output = combined_manifold_output.reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					combined_manifold_output_masked = combined_manifold_output_masked[outputs['mask_idxes']].reshape(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)
-					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], batch_size, num_masked_patches)
+					_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
 					mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 					plt.close(combined_fig)
 				else:
@@ -247,12 +253,24 @@ class MENDRPreTrainer(BaseModelTrainer):
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.pdf")
 				plt.close(fig)
 
-
 			for metric in eval_metrics:
 				if isinstance(eval_metrics[metric], torch.Tensor):
 					eval_metrics[metric] = eval_metrics[metric].item()
 
 			return eval_metrics
+
+	def _plot_embeddings_train(self, combined_manifold_output, combined_manifold_output_masked, mask_idxes):
+		batch_size = combined_manifold_output.shape[0]
+		num_patches = combined_manifold_output.shape[1]
+		subject_names = ['0', '1', '2', '3']
+		if self.mendr_model.contextualizer_size.upper() == 'LARGE':
+			combined_manifold_output= combined_manifold_output.clone().detach().reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+			combined_manifold_output_masked = combined_manifold_output_masked.clone().detach().reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+			wavelet_figs, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, subject_names, mask_idxes)
+			for band, wavelet_fig in wavelet_figs.items():
+				mlflow.log_figure(wavelet_fig, f"train_epoch_{self.epoch}_{band}_wavelet_embeddings.pdf")
+				plt.close(wavelet_fig)
+			mlflow.log_figure(combined_fig, f"train_epoch_{self.epoch}_combined_embeddings.pdf")
 
 	def _calculate_metrics(self, combined_riemannian_loss, wavelet_loss, wavelet_acc, recon_loss):
 		if wavelet_loss is None or wavelet_acc is None:
@@ -283,16 +301,35 @@ class MENDRPreTrainer(BaseModelTrainer):
 		batch_size = epoched_shape[0]
 		num_epochs = epoched_shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output_masked, mask_idxes = self.mendr_model.mendr_contextualizer.CombinedContextualizer(wavelet_manifold_output, epoched_shape, mask_ratio=self.mask_ratio)
-
-		# Log Euclidean Mean True 
 		combined_manifold_output = self.mendr_model.mendr_contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(wavelet_manifold_output)
-		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
+		combined_manifold_output_masked = combined_manifold_output.clone()
+		combined_manifold_output_masked, mask_idxes = self.mendr_model.mendr_contextualizer.CombinedContextualizer(combined_manifold_output_masked, epoched_shape, mask_ratio=self.mask_ratio)
+		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+		'''
+		# For debugging
+		predictions = []
+		for batch_idx in range(combined_manifold_output_masked.shape[0]):
+			for patch_idx in range(combined_manifold_output_masked.shape[1]):
+					if mask_idxes[batch_idx, patch_idx] == True:
+						predictions.append(combined_manifold_output_masked[batch_idx, patch_idx])
+		for predictions_idx in range(len(predictions)):
+			if predictions_idx != len(predictions) - 1:
+				mask = torch.matmul(self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask.T)
+				assert torch.allclose(predictions[predictions_idx], predictions[predictions_idx + 1]) == False, f"Predictions: {predictions[predictions_idx]} and {predictions[predictions_idx + 1]} are equal, {mask}"
+				assert torch.allclose(predictions[predictions_idx], mask) == False, f"Predictions: {predictions[predictions_idx]} and {mask} are equal"
+
+		print("Shapes:")
+		print(torch.masked_select(combined_manifold_output_masked, mask_idxes.to(self.device)[:, :, None, None]).shape)
+		print(torch.masked_select(combined_manifold_output, mask_idxes.to(self.device)[:, :, None, None]).shape)
+		'''
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
-
+		'''	
+		if torch.is_grad_enabled():
+			self._plot_embeddings_train(combined_manifold_output, combined_manifold_output_masked, mask_idxes)
+		'''
 		return self.contrastive_combined_loss_coeff * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def epochMaskedReconTiny(self, wavelet_manifold_output, criterion):
@@ -300,12 +337,12 @@ class MENDRPreTrainer(BaseModelTrainer):
 		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
 		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.mendr_model.mendr_contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
+
 		# of shape Batch, epoch, C, C
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
 		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
-
 		return self.contrastive_combined_loss_coeff * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	def leave_one_out(self, embeddings, criterion, negatives=20):

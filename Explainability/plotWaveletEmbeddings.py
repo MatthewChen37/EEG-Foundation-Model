@@ -77,9 +77,6 @@ def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_o
             legends,
         )
 
-
-
-
 if __name__ == "__main__":
     random_tensor = torch.ones(44, 190)
     wavelet_manifold_output = {
