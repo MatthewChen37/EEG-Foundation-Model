@@ -29,7 +29,6 @@ class MENDRReconstructionDecoder(nn.Module):
         '''
 
         self.act = nn.GELU()
-
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
@@ -42,7 +41,7 @@ class MENDRReconstructionDecoder(nn.Module):
     def forward(self, x):
         # x: [Batch Size*Patches, encoded_h, L_out_2]
         #x  = self.SEBlock(x)
-        x =  self.up1(x)
+        x = self.up1(x)
         x = self.up2(x)
         x = self.up3(x) 
         x = self.up4(x)

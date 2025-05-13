@@ -36,7 +36,6 @@ def main(args):
 	
 	Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
-
 	### Seed ###
 	torch.cuda.empty_cache()
 	random.seed(args.random_state)
