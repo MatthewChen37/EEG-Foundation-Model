@@ -30,13 +30,15 @@ class WaveletEncoderDecoder(nn.Module):
         self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
         self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
         self.patch_norm1 = nn.LayerNorm((19, self.L_out_1))
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.L_out_1)).to(self.device)
 
-        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.L_out_1,
+        self.hidden_encoded_h = 2 * self.L_out_1
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.hidden_encoded_h)).to(self.device)
+
+        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.hidden_encoded_h,
                                                            device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
                                                            heads=2)
 
-        self.L_out_2 = self.L_out_1 + 2 * (0) - 1 * (2 - 1) - 1
+        self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
         self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
@@ -100,7 +102,6 @@ class WaveletEncoderDecoder(nn.Module):
         decoding = self.reconstruction_decoder(decoding)
         # decoding: [Batch Size * Patches, Channels, self.seq_len]
         return x, decoding
-
 
 class GNNSpatialHarmonizer(nn.Module):
     def __init__(self, num_channels, num_features, device, n_gnn_transformer_layers=2, heads=2):
