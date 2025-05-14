@@ -1,17 +1,14 @@
 import torch
-import torch.nn as nn
 import tqdm
 import re
 import os
 import mlflow
 from torch_geometric.loader import DataLoader
 from sys import gettrace
-from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
 from Model.loggingUtil import MENDRLogger
-from Explainability.embeddingVisualization import plotSPDEmbedding
-import matplotlib.pyplot as plt
+import multiprocessing
 
 '''
 Based on:
@@ -53,7 +50,9 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
-        self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
+        self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(),
+                                                    weight_decay=l2_weight_decay,
+                                                    lr=lr, nesterov=True, momentum=0.9))
         self.scheduler_after_batch = True
         self.epoch = None
         self.lr = lr
@@ -67,25 +66,10 @@ class BaseModelTrainer(object):
         self.optimizer = optimizer
         self.lr = float(self.optimizer.optimizer.param_groups[0]['lr'])
 
-    def _optimize_dataloader_kwargs(self, num_worker_cap=6, **loader_kwargs):
+    def _optimize_dataloader_kwargs(self, num_worker_cap=128, **loader_kwargs):
         loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
         # Use multiple worker processes when NOT DEBUGGING
-        if gettrace() is None:
-            try:
-                # Find number of cpus available (taken from second answer):
-                # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
-                m = re.search(r'(?m)^Cpus_allowed:\s*(.*)$',
-                              open('/proc/self/status').read())
-                nw = bin(int(m.group(1).replace(',', ''), 16)).count('1')
-                # Cap the number of workers at 6 (actually 4) to avoid pummeling disks too hard
-                nw = min(num_worker_cap, nw)
-            except FileNotFoundError:
-                # Fallback for when proc/self/status does not exist
-                nw = 2
-        else:
-            # 0 workers means not extra processes are spun up
-            nw = 2
-        loader_kwargs.setdefault('num_workers', int(nw - 2))
+        loader_kwargs.setdefault('num_workers', int(multiprocessing.cpu_count() - 2))
         print("Loading data with {} additional workers".format(loader_kwargs['num_workers']))
         return loader_kwargs
 
