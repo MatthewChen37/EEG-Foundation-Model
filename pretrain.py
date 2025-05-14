@@ -89,7 +89,8 @@ def main(args):
 	print("Total Encoder Params: ", total_encoder_params)
 	print("Total Decoder Params: ", total_decoder_params)
 	print("Total number of parameters: ", sum(p.numel() for p in trainer.parameters() if p.requires_grad))
-	
+
+	mlflow_run_id = None
 	if args.load_from_ckpt:
 		print(f'Checkpoint specified. Loading from checkpoint: {args.load_from_ckpt}')
 		if not os.path.exists(args.load_from_ckpt):
@@ -97,6 +98,7 @@ def main(args):
 		assert set(os.listdir(args.load_from_ckpt)) == {'mendr_model_weights.pth', 'scheduler.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
+		mlflow_run_id = args.load_from_ckpt.split("/")[-1].split("_")[0]
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -104,10 +106,10 @@ def main(args):
 		num_val = len(dataset) - num_train
 		train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
 		print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-		trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
 	else:
 		print("No Validation Set. Training on Whole Dataset.")
-		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size)
+		trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
 
 	print("*" * 50)
 	print("Cleaning up resources...")
@@ -183,7 +185,11 @@ def parse_args():
 	)
 
 	parser.add_argument(
-		"--load_from_ckpt", type=str, help="Initializes weights of encoder and contextualizer with weights from folder. If it cannot throws an error.", required=False, default=None
+		"--load_from_ckpt",
+		type=str,
+		help="Initializes weights of encoder and contextualizer with weights from folder. Also continues MLFlow run - the ID is assumed to be before the first underscore. If it cannot throws an error.",
+		required=False,
+		default=None
 	)
 
 	parser.add_argument(

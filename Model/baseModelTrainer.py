@@ -255,7 +255,7 @@ class BaseModelTrainer(object):
 
         return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
     
-    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, **loader_kwargs):
+    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
         loader_kwargs.setdefault('batch_size', batch_size)
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
@@ -266,10 +266,12 @@ class BaseModelTrainer(object):
             validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
-        mlflow.start_run()
+        if mlflow_run_id != None:
+            mlflow.start_run(run_id=mlflow_run_id)
+        else:
+            mlflow.start_run()
         self.logger = MENDRLogger()
 
-        signature = None
         if self.loaded_from_ckpt == False:
             self.optimizer.set_scheduler_t0(len(training_dataloader))
         for epoch in range(epochs):
