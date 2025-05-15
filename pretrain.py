@@ -98,7 +98,7 @@ def main(args):
 		assert set(os.listdir(args.load_from_ckpt)) == {'mendr_model_weights.pth', 'scheduler.pth'}
 		trainer.load_from_ckpt(args.load_from_ckpt)
 		print(f'Weights successfully loaded.')
-		mlflow_run_id = args.load_from_ckpt.split("/")[-1].split("_")[0]
+		mlflow_run_id = args.load_from_ckpt.split("/")[2].split("_")[0]
 	# Split Dataset
 	if args.val_frac > 0: # Pre-Pretraining Phase
 		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
