@@ -106,9 +106,12 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
             if self.scheduler_after_batch:
                 self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
-            
-                        
-        # VALIDATION 
+            # Logging 
+            self._retain_best(epoch, epoch_metrics)
+            self.standard_logging(epoch_metrics, "End of Epoch")
+            self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
+
+        ''' VALIDATION '''
         if validation_dataloader != None:
             self.train(False)
             pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
@@ -119,11 +122,25 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                 pbar.set_postfix(val_metrics)
 
-        def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
-            for metric in metric_dict:
-                if metric != 'lr':
-                    if metric not in aggregated_metrics :
-                        aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
-                    else:
-                        aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
-            return aggregated_metrics
+        ''' SAVE '''
+        self._retain_best(epoch, epoch_metrics)
+        self.standard_logging(epoch_metrics, "End of Epoch")
+        self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
+        mlflow.log_metrics(epoch_metrics, step=epoch)
+        print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'],
+                                "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
+        if self.ckpt_dir != None:
+                print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
+        if not self.scheduler_after_batch:
+            self.optimizer.scheduler_step(epoch)
+        mlflow.end_run()
+        self.logger.closeWriter()
+
+    def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
+        for metric in metric_dict:
+            if metric != 'lr':
+                if metric not in aggregated_metrics :
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+                else:
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+        return aggregated_metrics
