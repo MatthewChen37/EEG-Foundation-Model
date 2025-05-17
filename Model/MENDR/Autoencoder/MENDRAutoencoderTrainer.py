@@ -5,8 +5,10 @@ import numpy as np
 from ...baseModelTrainer import BaseModelTrainer
 from ..WaveletLoss import WaveletReconstructionLoss
 from ....Explainability.plotReconstruction import plotReconstruction
+from Model.loggingUtil import MENDRLogger
 import matplotlib.pyplot as plt
 import mlflow
+import tqdm
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 class MENDRAutoencoderTrainer(BaseModelTrainer):
@@ -65,4 +67,63 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
 
         return {band: loss.item() for band, loss in loss_dict.items()}
 
-    def fit
+    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
+        self.epoch = 0
+        self.train_dataset = training_dataset
+        self.validation_dataset = validation_dataset
+
+        loader_kwargs.setdefault('batch_size', batch_size)
+        loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
+        training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
+        print("Training on {} sample batches.".format(len(training_dataloader)))
+
+        validation_dataloader = None
+        if validation_dataset != None:
+            validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
+            print("Validation on {} sample batches.".format(len(validation_dataloader)))
+
+        if mlflow_run_id != None:
+            mlflow.start_run(run_id=mlflow_run_id)
+        else:
+            mlflow.start_run()
+        self.logger = MENDRLogger()
+
+        if self.loaded_from_ckpt == False:
+            self.optimizer.set_scheduler_t0(len(training_dataloader))
+        for epoch in range(epochs):
+            epoch_metrics = {}
+            self.epoch = epoch
+
+        ''' TRAINING '''
+        train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+        train_data_iterator = iter(training_dataloader)
+        self.train(True)
+        for iteration in train_pbar:
+            input_batch = self._get_batch(train_data_iterator)
+            train_metrics = self.train_step(input_batch)
+            train_pbar.set_postfix(train_metrics)
+            mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+            epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
+            if self.scheduler_after_batch:
+                self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
+            
+                        
+        # VALIDATION 
+        if validation_dataloader != None:
+            self.train(False)
+            pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
+            val_data_iterator = iter(validation_dataloader)
+            for iteration in pbar:
+                input_batch = self._get_batch(val_data_iterator)
+                val_metrics = self.evaluate_step(input_batch, iteration)
+                epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+                pbar.set_postfix(val_metrics)
+
+        def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
+            for metric in metric_dict:
+                if metric != 'lr':
+                    if metric not in aggregated_metrics :
+                        aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+                    else:
+                        aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+            return aggregated_metrics
