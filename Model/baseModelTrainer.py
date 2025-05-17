@@ -238,6 +238,13 @@ class BaseModelTrainer(object):
         return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
     
     def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
+        """
+        Fit the specific model to the training dataset. This must be implemented in the child class.
+        """
+        raise NotImplementedError
+
+    '''
+    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
         loader_kwargs.setdefault('batch_size', batch_size)
         loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
@@ -260,67 +267,74 @@ class BaseModelTrainer(object):
             epoch_metrics = {}
             self.epoch = epoch
 
-            ''' TRAINING '''
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
-            train_data_iterator = iter(training_dataloader)
-            self.train(True)
-            for iteration in train_pbar:
-                input_batch = self._get_batch(train_data_iterator)
-                train_metrics = self.train_step(input_batch)
-                train_pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
-                epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
-                if self.scheduler_after_batch:
-                    self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
-                # Logging
-                self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
-                self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer, epoch=epoch * len(train_pbar) + iteration)
-                if self.mendr_model.contextualizer_size.upper() == "LARGE":
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.temp1, epoch=epoch * len(train_pbar) + iteration, name="Temperature")
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
-                elif self.mendr_model.contextualizer_size.upper() == "TINY":
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.Contextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
-                else:
-                    raise ValueError("Unidentified Contextualizer Type")
+    '''
+''' TRAINING '''
+    
+'''
+train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+train_data_iterator = iter(training_dataloader)
+self.train(True)
+for iteration in train_pbar:
+    input_batch = self._get_batch(train_data_iterator)
+    train_metrics = self.train_step(input_batch)
+    train_pbar.set_postfix(train_metrics)
+    mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+    epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
+    if self.scheduler_after_batch:
+        self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
+    # Logging
+    self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
+    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer, epoch=epoch * len(train_pbar) + iteration)
+    if self.mendr_model.contextualizer_size.upper() == "LARGE":
+        self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.temp1, epoch=epoch * len(train_pbar) + iteration, name="Temperature")
+        self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
+    elif self.mendr_model.contextualizer_size.upper() == "TINY":
+        self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.Contextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
+    else:
+        raise ValueError("Unidentified Contextualizer Type")
 
-            ''' VALIDATION '''
-            if validation_dataloader != None:
-                self.train(False)
-                pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
-                val_data_iterator = iter(validation_dataloader)
-                for iteration in pbar:
-                    input_batch = self._get_batch(val_data_iterator)
-                    val_metrics = self.evaluate_step(input_batch, iteration)
-                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
-                    pbar.set_postfix(val_metrics)
+# VALIDATION 
+'''
+'''
+if validation_dataloader != None:
+self.train(False)
+pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
+val_data_iterator = iter(validation_dataloader)
+for iteration in pbar:
+    input_batch = self._get_batch(val_data_iterator)
+    val_metrics = self.evaluate_step(input_batch, iteration)
+    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+    pbar.set_postfix(val_metrics)
+'''
+# ''' SAVE '''
+'''
+self._retain_best(epoch, epoch_metrics)
+self.standard_logging(epoch_metrics, "End of Epoch")
+self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
+self.logger.logContextualizerParams(self.mendr_model.mendr_contextualizer, step=epoch)
+if self.mendr_model.contextualizer_size.upper() == 'LARGE':
+    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.temp1, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, step=epoch)
+elif self.mendr_model.contextualizer_size.upper() == 'TINY':
+    self.logger.logMENDRTrainerParams(None, self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
+else:
+    raise ValueError("Unidentified Contextualizer Type")
+mlflow.log_metrics(epoch_metrics, step=epoch)
+print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
+if self.ckpt_dir != None:
+        print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
+if not self.scheduler_after_batch:
+    self.optimizer.scheduler_step(epoch)
 
-                
-                ''' SAVE '''
-                self._retain_best(epoch, epoch_metrics)
-                self.standard_logging(epoch_metrics, "End of Epoch")
-                self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
-                self.logger.logContextualizerParams(self.mendr_model.mendr_contextualizer, step=epoch)
-                if self.mendr_model.contextualizer_size.upper() == 'LARGE':
-                    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.temp1, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, step=epoch)
-                elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-                    self.logger.logMENDRTrainerParams(None, self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
-                else:
-                    raise ValueError("Unidentified Contextualizer Type")
-                mlflow.log_metrics(epoch_metrics, step=epoch)
-                print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
-                if self.ckpt_dir != None:
-                    print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
-            if not self.scheduler_after_batch:
-                self.optimizer.scheduler_step(epoch)
-
-        mlflow.end_run()
-        self.logger.closeWriter()
-
-    def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
-        for metric in metric_dict:
-            if metric != 'lr':
-                if metric not in aggregated_metrics :
-                    aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
-                else:
-                    aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
-        return aggregated_metrics
+mlflow.end_run()
+self.logger.closeWriter()
+'''
+'''
+def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
+    for metric in metric_dict:
+        if metric != 'lr':
+            if metric not in aggregated_metrics :
+                aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+            else:
+                aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+    return aggregated_metrics
+'''

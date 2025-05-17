@@ -210,7 +210,7 @@ class MENDRPreTrainer(BaseModelTrainer):
 				batch_size = combined_manifold_output.shape[0]
 				num_patches = combined_manifold_output.shape[1]
 				assert outputs['mask_idxes'].shape[0] == batch_size, f"Masked Index Shape: {outputs['mask_idxes'].shape} Batch Size: {batch_size}"
-				assert outputs['mask_idxes'].shape[1] == num_patches, f"Masked Index Shape: {output['mask_idxes'].shape} Batch Size: {batch_size}"
+				assert outputs['mask_idxes'].shape[1] == num_patches, f"Masked Index Shape: {outputs['mask_idxes'].shape} Batch Size: {batch_size}"
 				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
 
 				combined_manifold_output= combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])

@@ -181,6 +181,29 @@ class MENDRPatchEncoder(nn.Module):
                 device):
         super().__init__()
         self.device = device
+        # Each represents one second of data
+        self.SUPPORTED_WAVELET_LENGTHS = {
+            128 : {
+                'delta': 4, # 0-4Hz, 1/32 
+                'theta': 4, # 4-8Hz, 1/32
+                'alpha': 8, # 8-16Hz, 1/16
+                'beta': 16, # 16-32Hz, 1/8
+                'gamma': 32, # 32-64Hz, 1/4
+                'high': 64, # 64-128Hz, 1/2
+            }, 
+            256 : { 
+                #TODO
+            }
+        }
+
+        self.WAVELET_LENGTHS = self.SUPPORTED_WAVELET_LENGTHS[self.sampling_rate]
+        self.WAVELET_SUPER_PATCH_LENGTHS = dict()
+        self.WAVELET_SUPER_PATCH_HOP_LENGTHS = dict()
+        for band, second_length in self.WAVELET_LENGTHS.items():
+            self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
+            self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
+
+
         self.encoder_decoders = nn.ParameterDict({
             'delta': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -224,22 +247,32 @@ class MENDRPatchEncoder(nn.Module):
                     ),
         })
 
-    def forward(self, graph, data):
-        assert data.keys() == self.encoder_decoders.keys()
+    def forward(self, data):
+        patchified_data = self.super_patchify(data)
+        graphs = data['graph']
+        assert patchified_data.keys() == self.encoder_decoders.keys()
         encodings = {}
         decodings = {}
-        for band, band_decomposition in data.items():
-            encoding, decoding = self.encoder_decoders[band](graph, band_decomposition)
+        for band, band_decomposition in patchified_data.items():
+            encoding, decoding = self.encoder_decoders[band](graphs, band_decomposition)
             encodings[band] = encoding
             decodings[band] = decoding
-        return encodings, decodings
-
-    def freeze_features(self, unfreeze=False, finetuning=False):
-        for param in self.parameters():
-            param.requires_grad = unfreeze
-        if finetuning:
-            self.mask_replacement.requires_grad = False
-
+        return patchified_data, encodings, decodings
+    
+    def _super_patchify(self, data):
+        patchified_data = dict()
+        for band, second_length in self.WAVELET_LENGTHS.items():
+            if band in data: # Sometimes we exclude HIGH
+                wavelet_data = data[band] # [Batches, Channels, Time Steps]
+                patched_wavelet_data = []
+                wavelet_super_patch_length = self.WAVELET_SUPER_PATCH_LENGTHS[band]
+                wavelet_super_patch_hop_length = self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band]
+                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_hop_length):
+                    if i + wavelet_super_patch_length <= wavelet_data.shape[-1]:
+                        patched_wavelet_data.append(wavelet_data[:, :, i:i + wavelet_super_patch_length])
+                patched_wavelet_data = torch.stack(patched_wavelet_data, dim=1) # [Batch, Patches, C, T]
+                patchified_data[band] = patched_wavelet_data
+        return patchified_data
 
 # DEPRECATED
 '''
