@@ -84,7 +84,7 @@ class WaveletEncoderDecoder(nn.Module):
         x = self.channel_dropout(x)
         x = self.patch_embedder(x)
         x = self.patch_norm1(x)
-        x = x + self.patch_embedder_lin(x)
+        x = self.patch_embedder_lin(x)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
         edge_index = graph.edge_index.to(self.device)

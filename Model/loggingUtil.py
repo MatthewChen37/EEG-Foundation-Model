@@ -20,7 +20,11 @@ class MENDRLogger(object):
                 if module.grad is None:
                     continue
                 grad = module.grad.cpu()
-                self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
+                try:
+                    self.writer.add_histogram(f'{name}_gradient', values=grad, global_step=epoch)
+                except Exception as e:
+                    print(f"Error adding gradient for {name}: {e} at epoch {epoch}")
+                    continue
         elif isinstance(model, torch.nn.Parameter) and name != None:
             if model.grad is not None:
                 grad = model.grad.cpu()

@@ -69,7 +69,7 @@ class BaseModelTrainer(object):
     def _optimize_dataloader_kwargs(self, num_worker_cap=128, **loader_kwargs):
         loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
         # Use multiple worker processes when NOT DEBUGGING
-        loader_kwargs.setdefault('num_workers', int(multiprocessing.cpu_count() - 2))
+        loader_kwargs.setdefault('num_workers', int(16 - 2))
         print("Loading data with {} additional workers".format(loader_kwargs['num_workers']))
         return loader_kwargs
 
