@@ -15,7 +15,6 @@ Based on:
 1. https://github.com/SPOClab-ca/dn3/blob/master/dn3/trainable/processes.py
 '''
 class BaseModelTrainer(object):
-
     def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, ckpt_dir=None, **kwargs):
         """
         By default uses the SGD with momentum optimization.
@@ -35,7 +34,6 @@ class BaseModelTrainer(object):
 
         self.cuda = cuda
         self.device = torch.device(cuda)
-        
         _before_members = set(self.__dict__.keys())
         self.__dict__.update(**kwargs)
 
