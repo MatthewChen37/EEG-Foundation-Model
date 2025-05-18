@@ -1,0 +1,3 @@
+patch_encoder_params:
+  num_channels: 19
+  sub_patch_size: 32
