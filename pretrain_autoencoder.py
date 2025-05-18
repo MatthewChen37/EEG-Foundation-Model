@@ -19,13 +19,20 @@ from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrai
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
 
-
 @hydra.main(version_base=None, config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/", config_name="default")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
     print(OmegaConf.to_yaml(cfg))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Create input directory if it doesn't exist
+    if args.ckpt_dir is not None:
+        if args.val_frac <= 0:
+            raise Exception("Must have validation dataset to save to dir")
+
+	#Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
+
 
     ### Seed ###
     torch.cuda.empty_cache()
@@ -62,15 +69,46 @@ def main(cfg:DictConfig) -> None:
                 eta_min=cfg.training_params.eta_min)
     mix_optimizer = MixOptimizer(optimizer, scheduler)
     trainer = MENDRAutoencoderTrainer(mendr_autoencoder, mix_optimizer, cfg, cuda=device)
+
+    total_encoder_params = 0
+    total_decoder_params = 0
+    for band in cfg.meta_params.bands:
+        encoder_params = mendr_autoencoder.encoder_decoders[band].getEncoderParamCount()
+        decoder_params = mendr_autoencoder.encoder_decoders[band].getDecoderParamCount()
+        total_encoder_params += encoder_params
+        total_decoder_params += decoder_params
+        print(f'{band} Encoder Params: {encoder_params}')
+        print(f'{band} Decoder Params: {decoder_params}')
+        total_encoder_params += encoder_params
+        total_decoder_params += decoder_params
+    print("Total Encoder Params: ", total_encoder_params)
+    print("Total Decoder Params: ", total_decoder_params)
+    print("Total number of parameters: ", total_encoder_params + total_decoder_params)
+
     ### Training ###
+    if args.val_frac > 0: 
+        print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
+        num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
+        num_val = len(dataset) - num_train
+        train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
+        print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
+        trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
+    else:
+        print("No Validation Set. Training on Whole Dataset.")
+        trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
 
+    print("*" * 50)
+    print("Cleaning up resources...")
 
+    # Clear the PyTorch cache (for GPU)
+    torch.cuda.empty_cache()
+    # Force garbage collection (for CPU and GPU tensors)
+    gc.collect()
+    # If using multiple GPUs, synchronize them (optional but recommended)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    print("Cleanup complete.")
 
-
-
-
-
-    return None
 
 if __name__ == '__main__':
     main()
