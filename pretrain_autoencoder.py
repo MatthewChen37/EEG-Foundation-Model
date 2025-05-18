@@ -27,8 +27,8 @@ def main(cfg:DictConfig) -> None:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Create input directory if it doesn't exist
-    if args.ckpt_dir is not None:
-        if args.val_frac <= 0:
+    if cfg.training_params.ckpt_dir is not None:
+        if cfg.training_params.val_frac <= 0:
             raise Exception("Must have validation dataset to save to dir")
 
 	#Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,6 @@ def main(cfg:DictConfig) -> None:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    '''
     # Load Dataset
     total_frac = cfg.training_params.train_frac + cfg.training_params.val_frac
     dataset = WaveletPretrainDataset(root=cfg.training_params.input_dir, frac=total_frac)
@@ -57,7 +56,6 @@ def main(cfg:DictConfig) -> None:
         dataset = torchdata.ConcatDataset([dataset, dataset2])
     print("*" * 50)
     print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", total_frac)
-    '''
 
     ### Model ###
     mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, device=device)
@@ -86,16 +84,16 @@ def main(cfg:DictConfig) -> None:
     print("Total number of parameters: ", total_encoder_params + total_decoder_params)
 
     ### Training ###
-    if args.val_frac > 0: 
+    if cfg.training_params.val_frac > 0:
         print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
-        num_train = int(len(dataset) * (args.train_frac / (args.train_frac + args.val_frac)))
+        num_train = int(len(dataset) * (cfg.training_params.train_frac / (total_frac)))
         num_val = len(dataset) - num_train
         train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
         print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-        trainer.fit(training_dataset=train_dataset, validation_dataset=val_dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
+        trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
     else:
         print("No Validation Set. Training on Whole Dataset.")
-        trainer.fit(training_dataset=dataset, epochs=args.training_epochs, batch_size=args.batch_size, mlflow_run_id=mlflow_run_id)
+        trainer.fit(training_dataset=dataset, cfg=cfg)
 
     print("*" * 50)
     print("Cleaning up resources...")

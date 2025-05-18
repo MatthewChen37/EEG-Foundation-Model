@@ -64,13 +64,16 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
 
         return {band: loss.item() for band, loss in loss_dict.items()}
 
-    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
+    def fit(self, training_dataset, cfg, validation_dataset=None):
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
 
-        loader_kwargs.setdefault('batch_size', batch_size)
-        loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
+        loader_kwargs = dict()
+        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
+        loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
+        loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
+        loader_kwargs.setdefault('persistent_workers', True)
         training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
@@ -79,6 +82,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
+        '''
         if mlflow_run_id != None:
             mlflow.start_run(run_id=mlflow_run_id)
         else:
@@ -91,7 +95,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             epoch_metrics = {}
             self.epoch = epoch
 
-        ''' TRAINING '''
+        ### TRAINING ###
         train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
         train_data_iterator = iter(training_dataloader)
         self.train(True)
@@ -108,7 +112,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             self.standard_logging(epoch_metrics, "End of Epoch")
             self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
 
-        ''' VALIDATION '''
+        ### VALIDATION ###
         if validation_dataloader != None:
             self.train(False)
             pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
@@ -119,7 +123,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                 pbar.set_postfix(val_metrics)
 
-        ''' SAVE '''
+        ### SAVE ###
         self._retain_best(epoch, epoch_metrics)
         self.standard_logging(epoch_metrics, "End of Epoch")
         self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
@@ -130,6 +134,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
         if not self.scheduler_after_batch:
             self.optimizer.scheduler_step(epoch)
+        '''
         mlflow.end_run()
         self.logger.closeWriter()
 

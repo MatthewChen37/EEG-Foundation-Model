@@ -54,13 +54,6 @@ class BaseModelTrainer(object):
         self.ckpt_dir = cfg.training_params.ckpt_dir
         self.loaded_from_ckpt = False
 
-    def _optimize_dataloader_kwargs(self, num_worker_cap=128, **loader_kwargs):
-        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
-        # Use multiple worker processes when NOT DEBUGGING
-        loader_kwargs.setdefault('num_workers', int(16 - 2))
-        print("Loading data with {} additional workers".format(loader_kwargs['num_workers']))
-        return loader_kwargs
-
     def _get_batch(self, iterator):
         batch = next(iterator)
         for key, value in batch.items():
@@ -212,20 +205,13 @@ class BaseModelTrainer(object):
         self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
 
-    @staticmethod
-    def _dataloader_args(dataset, training=False, **loader_kwargs):
-        # Only shuffle and drop last when training
-        loader_kwargs.setdefault('shuffle', training)
-        loader_kwargs.setdefault('drop_last', training)
-
-        return loader_kwargs
-
     def _make_dataloader(self, dataset, training=False, **loader_kwargs):
         """Any args that make more sense as a convenience function to be set"""
         if isinstance(dataset, DataLoader):
             return dataset
-
-        return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
+        loader_kwargs.setdefault('shuffle', training)
+        loader_kwargs.setdefault('drop_last', training)
+        return DataLoader(dataset, **loader_kwargs)
     
     def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
         """
