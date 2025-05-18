@@ -15,7 +15,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
     '''
 	Based on BENDRTrainer.py	
 	'''
-    def __init__(self, MENDRAutoencoder, config, **kwargs):
+    def __init__(self, MENDRAutoencoder, optimizer, cfg, **kwargs):
         self.reconstruction_loss_function = nn.MSELoss()
         self.recon_loss_pref = {
             'delta': 1.0,
@@ -24,14 +24,11 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             'beta':  1.0,
             'gamma': 1.0,
         }
-
-        super(MENDRAutoencoderTrainer, self).__init__(autoencoder=MENDRAutoencoder,
-                                                    reconstruction_loss_fn=self.reconstruction_loss_function,
-                                                    lr=config.learning_rate,
-                                                    l2_weight_decay=config.l2_weight_decay,
-                                                    metrics=dict(),
-                                                    ckpt_dir=config.ckpt_dir,
+        super(MENDRAutoencoderTrainer, self).__init__(autoencoder=MENDRAutoencoder, 
+                                                    optimizer=optimizer,
+                                                    cfg=cfg,
                                                     **kwargs)
+
     def forward(self, data):
         patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
         return patchified_inputs, encodings, decodings

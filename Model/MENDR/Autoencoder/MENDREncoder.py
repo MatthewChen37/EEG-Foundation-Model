@@ -159,28 +159,24 @@ put them into a single object.
 class MENDRPatchEncoder(nn.Module):
     def __init__(self, 
                 num_channels, 
-                delta_sub_patch_size,
-                theta_sub_patch_size,
-                alpha_sub_patch_size,
-                beta_sub_patch_size,
-                gamma_sub_patch_size,
-                high_sub_patch_size,
+                sampling_rate,
+                super_patch_seconds,
+                hop_length,
                 delta_encoded_h,
                 theta_encoded_h,
                 alpha_encoded_h,
                 beta_encoded_h,
                 gamma_encoded_h,
-                high_encoded_h,
-                delta_super_patch_seq_len,
-                theta_super_patch_seq_len,
-                alpha_super_patch_seq_len,
-                beta_super_patch_seq_len,
-                gamma_super_patch_seq_len,
-                high_super_patch_seq_len,
                 n_gnn_transformer_layers,
-                device):
+                device,
+                high_encoded_h=None,
+                ):
         super().__init__()
         self.device = device
+        self.sampling_rate = sampling_rate
+        self.super_patch_seconds = super_patch_seconds
+        self.hop_length = hop_length
+
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {
@@ -203,49 +199,59 @@ class MENDRPatchEncoder(nn.Module):
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
             self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
 
-
-        self.encoder_decoders = nn.ParameterDict({
+        self.encoder_decoders = {
             'delta': WaveletEncoderDecoder(
                     num_channels = num_channels,
-                    sub_patch_size=delta_sub_patch_size,
+                    sub_patch_size=self.WAVELET_LENGTHS['delta'],
                     encoded_h=delta_encoded_h,
-                    super_patch_seq_len=delta_super_patch_seq_len,
+                    super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['delta'],
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'theta': WaveletEncoderDecoder(
                     num_channels = num_channels,
-                    sub_patch_size=theta_sub_patch_size,
+                    sub_patch_size=self.WAVELET_LENGTHS['theta'],
                     encoded_h=theta_encoded_h,
-                    super_patch_seq_len=theta_super_patch_seq_len,
+                    super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['theta'],
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'alpha': WaveletEncoderDecoder(
                     num_channels = num_channels,
-                    sub_patch_size=alpha_sub_patch_size,
+                    sub_patch_size=self.WAVELET_LENGTHS['alpha'],
                     encoded_h=alpha_encoded_h,
-                    super_patch_seq_len=alpha_super_patch_seq_len,
+                    super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['alpha'],
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device 
                     ),
             'beta': WaveletEncoderDecoder(
                     num_channels = num_channels,
-                    sub_patch_size=beta_sub_patch_size,
+                    sub_patch_size=self.WAVELET_LENGTHS['beta'],
                     encoded_h=beta_encoded_h,
-                    super_patch_seq_len = beta_super_patch_seq_len,
+                    super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['beta'],
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
             'gamma': WaveletEncoderDecoder(
                     num_channels = num_channels,
-                    sub_patch_size = gamma_sub_patch_size,
+                    sub_patch_size = self.WAVELET_LENGTHS['gamma'],
                     encoded_h = gamma_encoded_h,
-                    super_patch_seq_len=gamma_super_patch_seq_len,
+                    super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     ),
-        })
+        }
+
+        if high_encoded_h != None:
+            self.encoder_decoders['high'] = WaveletEncoderDecoder(
+                    num_channels = num_channels,
+                    sub_patch_size = self.WAVELET_LENGTHS['high'],
+                    encoded_h = high_encoded_h,
+                    super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['high'],
+                    n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    device = device
+                    )
+        self.encoder_decoders = nn.ParameterDict(self.encoder_decoders)
 
     def forward(self, data):
         patchified_data = self.super_patchify(data)

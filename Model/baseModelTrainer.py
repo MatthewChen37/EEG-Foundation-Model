@@ -15,7 +15,7 @@ Based on:
 1. https://github.com/SPOClab-ca/dn3/blob/master/dn3/trainable/processes.py
 '''
 class BaseModelTrainer(object):
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, ckpt_dir=None, **kwargs):
+    def __init__(self, optimizer, cfg, cuda, **kwargs):
         """
         By default uses the SGD with momentum optimization.
         """
@@ -48,21 +48,11 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
-        self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(),
-                                                    weight_decay=l2_weight_decay,
-                                                    lr=lr, nesterov=True, momentum=0.9))
-        self.scheduler_after_batch = True
-        self.epoch = None
-        self.lr = lr
-        self.weight_decay = l2_weight_decay
-        self.ckpt_dir = ckpt_dir
-        self.loaded_from_ckpt = False
-
-    def set_optimizer(self, optimizer):
-        # assert isinstance(optimizer, torch.optim.Optimizer)
-        del self.optimizer
         self.optimizer = optimizer
-        self.lr = float(self.optimizer.optimizer.param_groups[0]['lr'])
+        self.scheduler_after_batch = cfg.training_params.scheduler_after_batch
+        self.epoch = None
+        self.ckpt_dir = cfg.training_params.ckpt_dir
+        self.loaded_from_ckpt = False
 
     def _optimize_dataloader_kwargs(self, num_worker_cap=128, **loader_kwargs):
         loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')

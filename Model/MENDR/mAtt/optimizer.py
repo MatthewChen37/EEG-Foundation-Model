@@ -8,10 +8,9 @@ class MixOptimizer(object):
     """This is a meta optimizer which uses other optimizers for updating parameters
         and remap all StiefelParameter parameters to Stiefel space after they have been updated.
     """
-
-    def __init__(self, optimizer):
+    def __init__(self, optimizer, scheduler):
         self.optimizer = optimizer
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=700, T_mult=2, eta_min=1e-7)
+        self.scheduler = scheduler
         self.state = {}
 
     def zero_grad(self):
