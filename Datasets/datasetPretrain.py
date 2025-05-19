@@ -20,17 +20,17 @@ class WaveletPretrainDataset(Dataset):
 	def _index_data(self):
 		self.graphs = dict()
 		self.epochs = []
-
 		subjects = [f.path.split("/")[-1] for f in os.scandir(self.root) if f.is_dir()]
 		subjects = subjects[:int(len(subjects) * self.frac)]
+		self.subjects_idx = {subject: idx for idx, subject in enumerate(subjects)}
 		print(f"Loading {len(subjects)} subjects")
+		self.num_subjects = len(self.subjects_idx)
 
 		with ThreadPoolExecutor() as executor:
 			futures = [executor.submit(self._process_subject, subject) for subject in subjects]
 			for future in tqdm(futures):
 				future.result()
 		self.length = len(self.epochs)
-			
 	def _process_subject(self, subject):
 		subject_graph_folder = os.path.join(self.root, subject, f"graphs_{self.suffix}")
 		wavelet_path = os.path.join(self.root, subject, f"wavelet_decompositions_{self.suffix}")
@@ -55,16 +55,15 @@ class WaveletPretrainDataset(Dataset):
 								epoch_wavelet_dict['beta'],
 								epoch_wavelet_dict['gamma'])
 				self.epochs.append(epoch_tuple)
-
 	def len(self):
 		return self.length
-	
 	def get(self, idx):
 		epoch_tuple = self.epochs[idx]
 		graph = self.graphs[epoch_tuple[0]]
 		data = {
 			"graph": graph,
 			"subject_name": epoch_tuple[1],
+			"subject_idx": self.subjects_idx[epoch_tuple[1]],
 			"delta": epoch_tuple[3],
 			"theta": epoch_tuple[4],
 			"alpha": epoch_tuple[5],

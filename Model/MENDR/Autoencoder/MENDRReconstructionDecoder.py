@@ -16,7 +16,9 @@ class MENDRReconstructionDecoder(nn.Module):
         self.L_out_2 = L_out_2
         self.seq_len = seq_len
 
-        #self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=4).to(self.device)
+        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
+        self.SEBlock2 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
+
         '''
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = ResidualConvTranspose1dBlock(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, padding=0, activation=nn.GELU()).to(self.device)
@@ -42,7 +44,9 @@ class MENDRReconstructionDecoder(nn.Module):
         # x: [Batch Size*Patches, encoded_h, L_out_2]
         #x  = self.SEBlock(x)
         x = self.up1(x)
+        x = self.SEBlock1(x)
         x = self.up2(x)
+        x = self.SEBlock2(x)
         x = self.up3(x) 
         x = self.up4(x)
         return x

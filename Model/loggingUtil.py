@@ -108,3 +108,4 @@ class MENDRLogger(object):
 
     def closeWriter(self):
         self.writer.close()
+        print("Tensorboard Writer Closed.")

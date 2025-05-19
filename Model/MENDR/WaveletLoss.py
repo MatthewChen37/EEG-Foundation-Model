@@ -1,7 +1,7 @@
 import torch
 loss_fn = torch.nn.MSELoss()
 
-def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_strategy, loss_type='real'):
+def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
     '''
     for band, input_data in inputs.items():
         if isinstance(input_data, torch.Tensor):
@@ -28,17 +28,7 @@ def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_strategy, l
         alpha_real_loss = loss_fn(inputs_copy['alpha'], outputs['alpha'])
         beta_real_loss =  loss_fn(inputs_copy['beta'],  outputs['beta'])
         gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs['gamma'])
-
-        if loss_strategy == 'sum':
-            real_loss_dict = {
-                'delta_real_loss': recon_loss_pref['delta'] * delta_real_loss,
-                'theta_real_loss': recon_loss_pref['theta'] * theta_real_loss,
-                'alpha_real_loss': recon_loss_pref['alpha'] * alpha_real_loss,
-                'beta_real_loss':  recon_loss_pref['beta'] * beta_real_loss,
-                'gamma_real_loss': recon_loss_pref['gamma'] * gamma_real_loss,
-            }
-        else:
-            real_loss_dict = {
+        real_loss_dict = {
                 'delta_real_loss': delta_real_loss,
                 'theta_real_loss': theta_real_loss,
                 'alpha_real_loss': alpha_real_loss,
@@ -54,16 +44,7 @@ def WaveletReconstructionLoss(inputs, outputs, recon_loss_pref, loss_strategy, l
         beta_fft_loss = fft_loss(inputs_copy['beta'], outputs['beta'])
         gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs['gamma'])
 
-        if loss_strategy == 'sum':
-            fft_loss_dict = {
-                'delta_fft_loss': recon_loss_pref['delta'] * delta_fft_loss,
-                'theta_fft_loss': recon_loss_pref['theta'] * theta_fft_loss,
-                'alpha_fft_loss': recon_loss_pref['alpha'] * alpha_fft_loss,
-                'beta_fft_loss':  recon_loss_pref['beta'] * beta_fft_loss,
-                'gamma_fft_loss': recon_loss_pref['gamma'] * gamma_fft_loss,
-            }
-        else:
-            fft_loss_dict = {
+        fft_loss_dict = {
                 'delta_fft_loss': delta_fft_loss,
                 'theta_fft_loss': theta_fft_loss,
                 'alpha_fft_loss': alpha_fft_loss,

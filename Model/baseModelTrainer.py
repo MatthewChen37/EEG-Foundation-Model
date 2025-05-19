@@ -154,6 +154,7 @@ class BaseModelTrainer(object):
         
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
+        val_seen = False
         if start_message.rstrip()[-1] != '|':
             start_message = start_message.rstrip() + " |" + "\n"
         for m in metrics:
@@ -163,6 +164,9 @@ class BaseModelTrainer(object):
                 start_message += " {}: {:.3e} |".format(m, metrics[m]) + "\n"
             else:
                 start_message += " {}: {:.3f} |".format(m, metrics[m]) + "\n"
+            if 'val' in m.lower() and not val_seen:
+                val_seen = True
+                start_message += "\n"
         tqdm.tqdm.write(start_message)
 
     def save_best(self, epoch_ckpt_dir):
@@ -189,6 +193,14 @@ class BaseModelTrainer(object):
         self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=False))
         self.loaded_from_ckpt = True
 
+
+    def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
+        """
+        Save model depending on the metrics. This must be implemented in the child class.
+        """
+        raise NotImplementedError
+
+    '''
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
         training_Combined_loss = metrics_to_check[f'total_epoch_training_Combined Riemannian Loss']
         validation_Combined_loss = metrics_to_check[f'total_epoch_validation_Combined Riemannian Loss']
@@ -204,6 +216,7 @@ class BaseModelTrainer(object):
         torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
         self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
+    '''
 
     def _make_dataloader(self, dataset, cfg, training=False):
         if isinstance(dataset, DataLoader):
@@ -237,11 +250,10 @@ class BaseModelTrainer(object):
                             experiment_name=cfg.meta_params.experiment_name,
                             log_system_metrics=cfg.meta_params.log_system_metrics)
         else:
-            mlflow.start_run(run_name=cfg.meta_params.run_name, log_system_metrics=cfg.meta_params.log_system_metrics)
+            mlflow.start_run(run_name=cfg.meta_params.run_name,
+            log_system_metrics=cfg.meta_params.log_system_metrics)
         self.logger = MENDRLogger()
 
-        if self.loaded_from_ckpt == False:
-            self.optimizer.set_scheduler_t0(len(training_dataloader))
         return training_dataloader, validation_dataloader
 
     

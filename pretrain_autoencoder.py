@@ -59,7 +59,7 @@ def main(cfg:DictConfig) -> None:
     print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", total_frac)
 
     ### Model ###
-    mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, device=device)
+    mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, num_subjects=dataset.num_subjects, device=device)
     optimizer = torch.optim.AdamW(mendr_autoencoder.parameters(), 
                 lr=cfg.training_params.learning_rate,
                 weight_decay=cfg.training_params.l2_weight_decay)
@@ -107,7 +107,6 @@ def main(cfg:DictConfig) -> None:
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     print("Cleanup complete.")
-
 
 if __name__ == '__main__':
     main()
