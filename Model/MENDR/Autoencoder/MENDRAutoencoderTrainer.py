@@ -78,7 +78,8 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 train_pbar.set_postfix(train_metrics)
                 mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
                 epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
-                self.logger.log_model_gradients(self.autoencoder, epoch=epoch * len(train_pbar) + iteration)
+                if cfg.meta_params.log_encoder_params_and_grads:
+                    self.logger.log_model_gradients(self.autoencoder, epoch=epoch * len(train_pbar) + iteration)
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step_cosine_annealing()
             
@@ -95,7 +96,8 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             ### SAVE ###
             self._retain_best(epoch, epoch_metrics)
             self.standard_logging(epoch_metrics, "End of Epoch")
-            self.logger.logEncoderParams(self.autoencoder, step=epoch)
+            if cfg.meta_params.log_encoder_params_and_grads: 
+                self.logger.logEncoderParams(self.autoencoder, step=epoch)
             mlflow.log_metrics(epoch_metrics, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step_cosine_annealing()
