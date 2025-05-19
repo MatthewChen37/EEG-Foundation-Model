@@ -103,7 +103,8 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 self.optimizer.scheduler_step_cosine_annealing()
 
         mlflow.end_run()
-        self.logger.closeWriter()
+        if cfg.meta_params.log_encoder_params_and_grads:
+            self.logger.closeWriter()
 
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
         for metric in metric_dict:

@@ -252,7 +252,9 @@ class BaseModelTrainer(object):
         else:
             mlflow.start_run(run_name=cfg.meta_params.run_name,
             log_system_metrics=cfg.meta_params.log_system_metrics)
-        self.logger = MENDRLogger()
+
+        if cfg.meta_params.log_encoder_params_and_grads:
+            self.logger = MENDRLogger()
 
         return training_dataloader, validation_dataloader
 
