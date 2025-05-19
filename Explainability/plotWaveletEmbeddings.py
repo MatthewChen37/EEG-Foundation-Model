@@ -8,6 +8,9 @@ import torch
 import umap
 import plotly.io as pio
 
+# TODO: Make an alpha shape out of the combined embeddings
+# https://github.com/bellockk/alphashape
+
 def plotWaveletEmbeddingsEuclidean(wavelet_manifold_output, combined_manifold_output, title, num_sample_patches=32):
 
     with torch.no_grad():

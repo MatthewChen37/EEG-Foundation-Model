@@ -16,7 +16,12 @@ from omegaconf import DictConfig, OmegaConf
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConcatDataset
+from Datasets.datasetPretrain import WaveletPretrainDataset
+
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
 
 @hydra.main(version_base=None, 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
@@ -32,6 +37,9 @@ def main(cfg:DictConfig) -> None:
         if cfg.training_params.val_frac <= 0:
             raise Exception("Must have validation dataset to save to dir")
 
+    if torch.cuda.device_count() > 1:
+        print(f"Multiple GPUs detected: {torch.cuda.device_count()}")
+        os.environ['CUDA_VISIBLE_DEVICES'] = torch.cuda.device_count()
 	#Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
     ### Seed ###
@@ -47,6 +55,7 @@ def main(cfg:DictConfig) -> None:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    '''
     # Load Dataset
     total_frac = cfg.training_params.train_frac + cfg.training_params.val_frac
     dataset = WaveletPretrainDataset(root=cfg.training_params.input_dir, frac=total_frac)
@@ -97,6 +106,7 @@ def main(cfg:DictConfig) -> None:
 
     print("*" * 50)
     print("Cleaning up resources...")
+    '''
 
     # Clear the PyTorch cache (for GPU)
     torch.cuda.empty_cache()
