@@ -18,3 +18,4 @@ ProfileData/*
 ProfileData/LargeContextualizer.csv
 ProfileData/TinyContextualizer.csv
 /outputs
+/multirun
