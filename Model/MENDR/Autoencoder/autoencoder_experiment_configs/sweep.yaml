@@ -26,16 +26,17 @@ training_params:
   learning_rate: 0.001
   l2_weight_decay: 0.0005
   batch_size: 128
-  epochs: 30
-  T_max: 30
+  epochs: 10
+  T_max: 10
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
-  num_workers: 16
+  num_workers: 32
 hydra:
   output_subdir: null
   mode: MULTIRUN
   sweeper:
     params:
+      ++training_params.train_frac: 0.2, 0.4, 0.6, 0.8, 0.9
       ++training_params.random_seed: 42, 84, 126, 168, 210
       
