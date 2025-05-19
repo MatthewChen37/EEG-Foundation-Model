@@ -23,6 +23,18 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
+def ddp_setup(rank, world_size):
+    """
+    Args:
+        rank: Unique identifier of each process
+        world_size: Total number of processes
+    """
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    torch.cuda.set_device(rank)
+    # initialize the process group
+    init_process_group('nccl', rank=rank, world_size=world_size)
+
 @hydra.main(version_base=None, 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
             config_name="default")
