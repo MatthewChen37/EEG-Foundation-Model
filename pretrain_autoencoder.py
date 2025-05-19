@@ -19,7 +19,9 @@ from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrai
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
 
-@hydra.main(version_base=None, config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/", config_name="default")
+@hydra.main(version_base=None, 
+            config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
+            config_name="default")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
