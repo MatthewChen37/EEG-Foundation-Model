@@ -42,7 +42,7 @@ def ddp_setup(rank, world_size):
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
-            config_name="default")
+            config_name="sweep")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")

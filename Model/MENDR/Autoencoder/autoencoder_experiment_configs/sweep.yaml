@@ -19,15 +19,25 @@ patch_encoder_params:
   n_gnn_transformer_layers: 2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.005
-  val_frac: 0.005
+  train_frac: 0.2
+  val_frac: 0.1
   random_seed: 42
   learning_rate: 0.001
   l2_weight_decay: 0.0005
   batch_size: 128
-  epochs: 1
-  T_max: 1
+  epochs: 30
+  T_max: 30
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
   num_workers: 16
+### OPTIONAL: To perform multiple runs with different seeds, remove for default
+hydra:
+  output_subdir: null
+  mode: MULTIRUN
+  sweeper:
+    params:
+      ++training_params.random_seed: 42, 84, 126, 168, 210
+      ++meta_params.run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_seed_${training_params.random_seed}
+      ++meta_params.log_system_metrics: False
+      ++meta_params.log_encoder_params_and_grads: False
