@@ -36,7 +36,6 @@ class BaseModelTrainer(object):
         self.device = torch.device(cuda)
         _before_members = set(self.__dict__.keys())
         self.__dict__.update(**kwargs)
-
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
 
@@ -48,11 +47,14 @@ class BaseModelTrainer(object):
                     self._trainables.append(member)
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
+
         self.optimizer = optimizer
         self.scheduler_after_batch = cfg.training_params.scheduler_after_batch
         self.epoch = None
         self.ckpt_dir = cfg.training_params.ckpt_dir
         self.loaded_from_ckpt = False
+        self.train_dataset = None
+        self.validation_dataset = None
 
     def _get_batch(self, iterator):
         batch = next(iterator)
@@ -205,15 +207,44 @@ class BaseModelTrainer(object):
         self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
 
-    def _make_dataloader(self, dataset, training=False, **loader_kwargs):
-        """Any args that make more sense as a convenience function to be set"""
+    def _make_dataloader(self, dataset, cfg, training=False):
         if isinstance(dataset, DataLoader):
             return dataset
+        loader_kwargs = dict()
+        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
+        loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
+        loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
+        loader_kwargs.setdefault('persistent_workers', True)
         loader_kwargs.setdefault('shuffle', training)
         loader_kwargs.setdefault('drop_last', training)
         return DataLoader(dataset, **loader_kwargs)
+
+    def _setup_experiment(self, cfg):
+        # We cannot log models to MlFlow due to our custom modules.
+        assert self.train_dataset != None, "Train Dataset not specified."
+        assert self.validation_dataset != None, "Validation Dataset not specified."
+
+        mlflow.set_experiment(cfg.meta_params.experiment_name)
+        training_dataloader = self._make_dataloader(self.train_dataset, cfg, training=True)
+        print("Training on {} sample batches.".format(len(training_dataloader)))
+
+        validation_dataloader = None
+        if self.validation_dataset != None:
+            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg,training=False)
+            print("Validation on {} sample batches.".format(len(validation_dataloader)))
+
+        if "mlflow_run_id" in cfg.meta_params:
+            mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id, run_name=cfg.meta_params.run_name, experiment_name=cfg.meta_params.experiment_name)
+        else:
+            mlflow.start_run(run_name=cfg.meta_params.run_name)
+        self.logger = MENDRLogger()
+
+        if self.loaded_from_ckpt == False:
+            self.optimizer.set_scheduler_t0(len(training_dataloader))
+        return training_dataloader, validation_dataloader
+
     
-    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, mlflow_run_id=None, **loader_kwargs):
+    def fit(self, training_dataset, cfg, validation_dataset=None):
         """
         Fit the specific model to the training dataset. This must be implemented in the child class.
         """

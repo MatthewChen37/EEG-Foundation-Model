@@ -68,33 +68,9 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
-
-        loader_kwargs = dict()
-        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
-        loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
-        loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
-        loader_kwargs.setdefault('persistent_workers', True)
-        training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
-        print("Training on {} sample batches.".format(len(training_dataloader)))
-
-        validation_dataloader = None
-        if validation_dataset != None:
-            validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
-            print("Validation on {} sample batches.".format(len(validation_dataloader)))
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg)
 
         '''
-        if mlflow_run_id != None:
-            mlflow.start_run(run_id=mlflow_run_id)
-        else:
-            mlflow.start_run()
-        self.logger = MENDRLogger()
-
-        if self.loaded_from_ckpt == False:
-            self.optimizer.set_scheduler_t0(len(training_dataloader))
-        for epoch in range(epochs):
-            epoch_metrics = {}
-            self.epoch = epoch
-
         ### TRAINING ###
         train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
         train_data_iterator = iter(training_dataloader)
@@ -138,6 +114,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         mlflow.end_run()
         self.logger.closeWriter()
 
+    
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
         for metric in metric_dict:
             if metric != 'lr':

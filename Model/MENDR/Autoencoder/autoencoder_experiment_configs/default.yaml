@@ -1,6 +1,8 @@
 meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
   experiment_name: train_autoencoder
+  run_name: test
+  log_system_metrics: True
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
@@ -15,8 +17,8 @@ patch_encoder_params:
   n_gnn_transformer_layers: 2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.3
-  val_frac: 0.1
+  train_frac: 0.1
+  val_frac: 0.05
   random_seed: 42
   learning_rate: 0.001
   l2_weight_decay: 0.0005
