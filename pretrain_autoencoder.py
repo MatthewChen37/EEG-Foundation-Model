@@ -5,6 +5,7 @@ import copy
 import time
 import random
 import numpy as np
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -18,12 +19,12 @@ from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrai
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
 
-'''
+"""
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-
+"""
 '''
 def ddp_setup(rank, world_size):
     """
@@ -38,7 +39,7 @@ def ddp_setup(rank, world_size):
     init_process_group('nccl', rank=rank, world_size=world_size)
 '''
 
-@hydra.main(version_base=None, 
+@hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
             config_name="default")
 def main(cfg:DictConfig) -> None:
@@ -51,12 +52,8 @@ def main(cfg:DictConfig) -> None:
     if cfg.training_params.ckpt_dir is not None:
         if cfg.training_params.val_frac <= 0:
             raise Exception("Must have validation dataset to save to dir")
-    '''
-    if torch.cuda.device_count() >= 1:
-        print(f"Multiple GPUs detected: {torch.cuda.device_count()}")
-        os.environ['CUDA_VISIBLE_DEVICES'] = torch.cuda.device_count()
-    '''
-    Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
+
+    Path(cfg.training_params.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
     ### Seed ###
     torch.cuda.empty_cache()

@@ -1,7 +1,7 @@
 meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
   experiment_name: train_autoencoder
-  run_name: test
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
   log_system_metrics: True
   num_recons: 8
 patch_encoder_params:
@@ -24,8 +24,8 @@ training_params:
   learning_rate: 0.001
   l2_weight_decay: 0.0005
   batch_size: 128
-  epochs: 3
-  T_max: 3
+  epochs: 30
+  T_max: 30
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
