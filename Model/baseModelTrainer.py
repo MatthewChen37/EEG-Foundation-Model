@@ -232,9 +232,12 @@ class BaseModelTrainer(object):
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
         if "mlflow_run_id" in cfg.meta_params:
-            mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id, run_name=cfg.meta_params.run_name, experiment_name=cfg.meta_params.experiment_name)
+            mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id,
+                            run_name=cfg.meta_params.run_name,
+                            experiment_name=cfg.meta_params.experiment_name,
+                            log_system_metrics=cfg.meta_params.log_system_metrics)
         else:
-            mlflow.start_run(run_name=cfg.meta_params.run_name)
+            mlflow.start_run(run_name=cfg.meta_params.run_name, log_system_metrics=cfg.meta_params.log_system_metrics)
         self.logger = MENDRLogger()
 
         if self.loaded_from_ckpt == False:

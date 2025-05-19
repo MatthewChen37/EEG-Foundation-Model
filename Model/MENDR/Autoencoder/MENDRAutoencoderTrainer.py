@@ -71,9 +71,10 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         training_dataloader, validation_dataloader = self._setup_experiment(cfg)
 
         ### TRAINING ###
-        train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+        train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(self.epoch), ncols=400, position=0, leave=True)
         train_data_iterator = iter(training_dataloader)
         self.train(True)
+        '''
         for iteration in train_pbar:
             input_batch = self._get_batch(train_data_iterator)
             train_metrics = self.train_step(input_batch)

@@ -33,7 +33,6 @@ def main(cfg:DictConfig) -> None:
 
 	#Path(args.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
-
     ### Seed ###
     torch.cuda.empty_cache()
     random.seed(cfg.training_params.random_seed)
