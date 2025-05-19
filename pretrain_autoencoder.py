@@ -9,7 +9,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.utils.data as torchdata
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -17,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-from Datasets.datasetPretrain import WaveletPretrainDataset
+from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConcatDataset
 
 @hydra.main(version_base=None, 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
@@ -54,7 +53,7 @@ def main(cfg:DictConfig) -> None:
     if "input_dir_2" in cfg.training_params:
         print(f"Second Data Dir specified: {cfg.training_params.input_dir_2}")
         dataset2 = WaveletPretrainDataset(root=cfg.training_params.input_dir_2, frac=total_frac)
-        dataset = torchdata.ConcatDataset([dataset, dataset2])
+        dataset = WaveletPretrainConcatDataset([dataset, dataset2])
     print("*" * 50)
     print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", total_frac)
 
@@ -89,7 +88,7 @@ def main(cfg:DictConfig) -> None:
         print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
         num_train = int(len(dataset) * (cfg.training_params.train_frac / (total_frac)))
         num_val = len(dataset) - num_train
-        train_dataset, val_dataset = torchdata.random_split(dataset, [num_train, num_val])
+        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, num_val])
         print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
         trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
     else:

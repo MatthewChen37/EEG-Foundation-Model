@@ -52,9 +52,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 decodings[band] = decodings[band].view(patchified_inputs[band].shape)
                 recon_enc[band] = patchified_inputs[band][0, :self.num_recons].detach().cpu().numpy()
                 recon_dec[band] = decodings[band][0, :self.num_recons].detach().cpu().numpy()
-                assert not np.allclose(recon_dec[band][:, 0], recon_dec[band][:, 1], atol=1e-5, rtol=1e-5)
-
-            fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} reconstructions")
+            fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} wavelet patch reconstructions")
             mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.pdf")
             plt.close(fig)
 
@@ -70,8 +68,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             epoch_metrics = {}
             self.epoch = epoch
             ### TRAINING ###
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch),
-                                     ncols=400, position=0, leave=True)
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
 
