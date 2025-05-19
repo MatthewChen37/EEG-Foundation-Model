@@ -4,6 +4,7 @@ meta_params:
   run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
   log_system_metrics: True
   log_encoder_params_and_grads: True
+  save_model: True
   num_recons: 4
 patch_encoder_params:
   num_channels: 19

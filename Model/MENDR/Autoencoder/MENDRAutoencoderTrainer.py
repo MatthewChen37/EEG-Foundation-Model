@@ -94,7 +94,8 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                     epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                     pbar.set_postfix(val_metrics)
             ### SAVE ###
-            self._retain_best(epoch, epoch_metrics)
+            if cfg.meta_params.save_model:
+                self._retain_best(epoch, epoch_metrics)
             self.standard_logging(epoch_metrics, "End of Epoch")
             if cfg.meta_params.log_encoder_params_and_grads: 
                 self.logger.logEncoderParams(self.autoencoder, step=epoch)
