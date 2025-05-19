@@ -111,8 +111,6 @@ class BaseModelTrainer(object):
         self._training = mode
         for member in self._trainables:
             self.__dict__[member].train(mode=mode)
-            if hasattr(member, 'freeze_features'):
-                member.freeze_features(unfreeze=mode)
 
     def train_step(self, inputs):
         ''' 
