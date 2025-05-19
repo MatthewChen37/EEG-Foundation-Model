@@ -110,6 +110,17 @@ class LogEuclidLayerNorm(nn.Module):
 
         return C_norm
 
+class LayerNormChannelOnly(nn.Module):
+    def __init__(self, num_channels):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(num_channels)
+
+    def forward(self, x):
+        # Expects x [Batch Size, Patches, Channels, Time Steps]
+        x = x.permute(0, 1, 3, 2)
+        x = self.layer_norm(x)
+        return x.permute(0, 1, 3, 2)
+
 if __name__ == "__main__":
 	# Test Positional Encoding
 	pe = PositionalEncoding("cpu", 114, 37)

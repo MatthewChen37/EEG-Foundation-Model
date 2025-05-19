@@ -6,6 +6,7 @@ from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
 from .MENDRReconstructionDecoder import MENDRReconstructionDecoder, SEBasicBlock
+from ..MENDRCommon import LayerNormChannelOnly
 
 '''
 We break each Wavelet sequence into patches. There are two patch scales: Super-Patch and Sub-Patch. 
@@ -19,7 +20,7 @@ class WaveletEncoderDecoder(nn.Module):
                 encoded_h, n_gnn_transformer_layers, num_subjects, device):
         super().__init__()
         self.num_channels = num_channels
-        self.channel_dropout = nn.Dropout1d(0.2)
+        self.channel_dropout = nn.Dropout1d(0.1)
         self.patch_size = sub_patch_size
         self.stride = self.patch_size // 2
         self.device = device
@@ -43,10 +44,9 @@ class WaveletEncoderDecoder(nn.Module):
         self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
         self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
-        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=4).to(self.device)
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
-
+        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=1).to(self.device)
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=self.L_out_2).to(self.device)
@@ -99,9 +99,9 @@ class WaveletEncoderDecoder(nn.Module):
         x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
         
         x = self.patch_embedder2(x)
-        x = self.SEBlock(x)
         x = self.patch_norm2(x)
         x = x + self.patch_embedder2_lin(x)
+        x = self.SEBlock(x)
 
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
@@ -211,6 +211,14 @@ class MENDRPatchEncoder(nn.Module):
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
             self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
 
+        self.patch_normalizers = {
+            'delta': LayerNormChannelOnly(num_channels=num_channels),
+            'theta': LayerNormChannelOnly(num_channels=num_channels),
+            'alpha': LayerNormChannelOnly(num_channels=num_channels),
+            'beta': LayerNormChannelOnly(num_channels=num_channels),
+            'gamma': LayerNormChannelOnly(num_channels=num_channels),
+        }
+
         self.encoder_decoders = {
             'delta': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -268,7 +276,12 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     )
+            self.patch_normalizers['high'] = LayerNormChannelOnly(num_channels=num_channels)
         self.encoder_decoders = nn.ParameterDict(self.encoder_decoders)
+        self.patch_normalizers = nn.ParameterDict(self.patch_normalizers)
+
+        for band, encoder_decoder in self.encoder_decoders.items():
+            print(f"{band}: {encoder_decoder.L_out_2}")
 
     def forward(self, data):
         patchified_data = self._super_patchify(data)
@@ -305,6 +318,7 @@ class MENDRPatchEncoder(nn.Module):
         # Truncate patches to the minimum number of patches
         for band, band_decomposition in patchified_data.items():
             patchified_data[band] = band_decomposition[:, :min_patches]
+            patchified_data[band] = self.patch_normalizers[band](patchified_data[band])
         return patchified_data
 
     # For downstream tasks

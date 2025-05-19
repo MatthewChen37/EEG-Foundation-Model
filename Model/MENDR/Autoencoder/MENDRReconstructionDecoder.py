@@ -16,9 +16,6 @@ class MENDRReconstructionDecoder(nn.Module):
         self.L_out_2 = L_out_2
         self.seq_len = seq_len
 
-        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
-        self.SEBlock2 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
-
         '''
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = ResidualConvTranspose1dBlock(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, padding=0, activation=nn.GELU()).to(self.device)
@@ -34,6 +31,7 @@ class MENDRReconstructionDecoder(nn.Module):
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
+        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=8).to(self.device)
         self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
         self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
@@ -46,7 +44,6 @@ class MENDRReconstructionDecoder(nn.Module):
         x = self.up1(x)
         x = self.SEBlock1(x)
         x = self.up2(x)
-        x = self.SEBlock2(x)
         x = self.up3(x) 
         x = self.up4(x)
         return x
@@ -122,8 +119,9 @@ class SELayer(nn.Module):
 class SEBasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
-                 base_width=64, dilation=1, norm_layer=None,
+    def __init__(self, inplanes, planes, stride=1, 
+                downsample=None, groups=1,
+                dilation=1, norm_layer=None,
                  *, reduction=16):
         super().__init__()
         self.conv1 = nn.Conv1d(inplanes, planes, stride)

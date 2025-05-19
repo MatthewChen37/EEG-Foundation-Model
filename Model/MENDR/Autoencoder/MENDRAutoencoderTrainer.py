@@ -17,6 +17,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
 	'''
     def __init__(self, MENDRAutoencoder, optimizer, cfg, **kwargs):
         self.reconstruction_loss_function = nn.MSELoss()
+        self.num_recons = cfg.meta_params.num_recons
         super(MENDRAutoencoderTrainer, self).__init__(autoencoder=MENDRAutoencoder, 
                                                     optimizer=optimizer,
                                                     cfg=cfg,
@@ -29,7 +30,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
     def backward(self, loss_dict):
         self.optimizer.zero_grad()
         for band in loss_dict:
-            loss_dict[band].backward(retain_graph=False)
+            loss_dict[band].backward()
 
     def train_step(self, inputs):
         self.train(True)
@@ -40,17 +41,18 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         return {band: loss.item() for band, loss in loss_dict.items()}
     
     def evaluate_step(self, inputs, step_idx):
-        NUM_RECONS = 4
         self.train(False)
         patchified_inputs, encodings, decodings = self.forward(inputs)
+
         loss_dict = WaveletReconstructionLoss(patchified_inputs, decodings)
         if step_idx == 0:
             recon_enc = dict()
             recon_dec = dict()
             for band in BANDS: # Just look at patches from first sample/subject
                 decodings[band] = decodings[band].view(patchified_inputs[band].shape)
-                recon_enc[band] = patchified_inputs[band][0, :NUM_RECONS].detach().cpu().numpy()
-                recon_dec[band] = decodings[band][0, :NUM_RECONS].detach().cpu().numpy()
+                recon_enc[band] = patchified_inputs[band][0, :self.num_recons].detach().cpu().numpy()
+                recon_dec[band] = decodings[band][0, :self.num_recons].detach().cpu().numpy()
+                assert not np.allclose(recon_dec[band][:, 0], recon_dec[band][:, 1], atol=1e-5, rtol=1e-5)
 
             fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} reconstructions")
             mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.pdf")

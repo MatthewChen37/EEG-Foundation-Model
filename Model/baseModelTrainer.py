@@ -156,17 +156,17 @@ class BaseModelTrainer(object):
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
         val_seen = False
         if start_message.rstrip()[-1] != '|':
-            start_message = start_message.rstrip() + " |" + "\n"
+            start_message = start_message.rstrip() + " |"
         for m in metrics:
-            if 'acc' in m.lower() or 'pct' in m.lower():
-                start_message += " {}: {:.2%} |".format(m, metrics[m]) + "\n"
-            elif m == 'lr':
-                start_message += " {}: {:.3e} |".format(m, metrics[m]) + "\n"
-            else:
-                start_message += " {}: {:.3f} |".format(m, metrics[m]) + "\n"
             if 'val' in m.lower() and not val_seen:
                 val_seen = True
-                start_message += "\n"
+                start_message += "\n    "
+            if 'acc' in m.lower() or 'pct' in m.lower():
+                start_message += " {}: {:.2%} |".format(m, metrics[m])
+            elif m == 'lr':
+                start_message += " {}: {:.3e} |".format(m, metrics[m])
+            else:
+                start_message += " {}: {:.3f} |".format(m, metrics[m])
         tqdm.tqdm.write(start_message)
 
     def save_best(self, epoch_ckpt_dir):
