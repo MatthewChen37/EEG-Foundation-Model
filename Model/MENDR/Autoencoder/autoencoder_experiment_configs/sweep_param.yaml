@@ -2,8 +2,8 @@ meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
   experiment_name: train_autoencoder
   save_model: False
+  save_final_model: True
   run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_seed_${training_params.random_seed}
-  save_final_model: False
   log_system_metrics: False
   log_encoder_params_and_grads: False
   num_recons: 4
@@ -21,7 +21,7 @@ patch_encoder_params:
   n_gnn_transformer_layers: 2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.2
+  train_frac: 0.9
   val_frac: 0.1
   random_seed: 42
   learning_rate: 0.001
@@ -38,5 +38,5 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      ++training_params.train_frac: 0.4, 0.6, 0.8
+      ++patch_encoder_params.n_gnn_transformer_layers: 3, 4, 5
       ++training_params.random_seed: 42, 84, 126, 168, 210
