@@ -1,7 +1,8 @@
 meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
+  model_size: tiny
   experiment_name: pretrain_tiny_contextualizer
-  run_name: pretrain_tiny_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
+  run_name: pretrain_${meta_params.model_size}_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
   log_system_metrics: True
   log_contextualizer_params_and_grads: True
   save_model: True
@@ -18,8 +19,11 @@ patch_encoder_params:
   gamma_encoded_h: 32
   # high_encoded_h: 64
   n_gnn_transformer_layers: 2
+contextualizer params:
+  encoded_out: 10
 training_params:
-  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  pretrained_patch_encoder_dir: null
   train_frac: 0.005
   val_frac: 0.005
   random_seed: 42
