@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
-from .MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes
+from Model.MENDR.MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes
 from ..ManifoldTransformer import ManifoldTransformer
 
 '''

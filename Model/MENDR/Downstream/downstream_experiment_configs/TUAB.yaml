@@ -1,0 +1,5 @@
+training_params:
+  task_loss: BCEWithLogitsLoss
+  learning_rate: 0.001
+  l2_weight_decay: 0.0005
+  ckpt_dir: ./checkpoint

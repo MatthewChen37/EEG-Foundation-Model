@@ -2,73 +2,38 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import sys
-from ..baseModelTrainer import BaseModelTrainer
+import random
+import os
+from Model.baseModelTrainer import BaseModelTrainer
 from Datasets.datasetTUAB import WaveletTUABDataset
-
+from torch_geometric.loader import DataLoader
+from sklearn.metrics import (
+	accuracy_score,
+	balanced_accuracy_score,
+	roc_auc_score,
+	precision_recall_curve,
+	auc,
+	f1_score,
+	cohen_kappa_score
+)
+	
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
-def MENDRFinetuner(BaseModelTrainer):
-    def __init__(self, MENDR, Decoder, config, Adaptor=None, **kwargs):
-        seed = config.seed
-        ### Seed ###
-        torch.cuda.empty_cache()
-        random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
 
-        print("*" * 50)
-        recon_loss_fn = nn.MSELoss()
-        if config.dataset == "TUAB":
-            loss_fn = nn.BCEWithLogitsLoss()
-            finetune_train_dataset = WaveletTUABDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train", frac=1.0)
-            finetune_eval_dataset = WaveletTUABDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval", frac=1.0)
-        print("Dataset Loaded. Length of Train Dataset: ", len(finetune_train_dataset))
-        print("Dataset Loaded. Length of Validation Dataset: ", len(finetune_eval_dataset))
-
-        self.finetune_train_loader = DataLoader(finetune_train_dataset, batch_size=128, num_workers=8, shuffle=True, persistent_workers=True)
-        self.finetune_eval_loader = DataLoader(finetune_eval_dataset, batch_size=128, num_workers=8, shuffle=True, persistent_workers=True)
-        print(f"Length of Train Dataset: {len(self.finetune_train_loader)}")
-        print(f"Length of Validation Dataset: {len(self.finetune_eval_loader)}")
+class MENDRFinetuner(BaseModelTrainer):
+    def __init__(self, MENDR, Decoder, cfg, **kwargs):
+        if cfg.training_params.task_loss == 'BCEWithLogitsLoss':
+            self.loss_fn = nn.BCEWithLogitsLoss()
+        else:
+            raise ValueError(f"Unsupported task loss function: {cfg.training_params.task_loss}")
 
         super(MENDRFinetuner, self).__init__(mendr_model=MENDR, 
             decoder=Decoder,
-            adaptor=Adaptor,
-            recon_loss_fn=recon_loss_fn,
-            task_loss_fn=loss_fn,
-            lr=config.learning_rate,
-			l2_weight_decay=config.l2_weight_decay,
+            task_loss_fn=self.loss_fn,
+            lr=cfg.training_params.learning_rate,
+			l2_weight_decay=cfg.training_params.l2_weight_decay,
             metrics=dict(),
-            ckpt_dir=config.ckpt_dir, **kwargs)
-
-        
-    def _fft_loss(self, output, target, loss_fn):
-        hanning_window = torch.hann_window(output.shape[-1]).to(device)
-        output_windowed = output * hanning_window.expand_as(output)
-        target_windowed = target * hanning_window.expand_as(target)
-
-        output_fft = torch.fft.fft(output_windowed, dim=-1)
-        output_amplitude = torch.abs(output_fft)
-        output_angle = torch.angle(output_fft)
-
-        target_fft = torch.fft.fft(target_windowed, dim=-1)
-        target_amplitude = torch.abs(target_fft)
-        target_angle = torch.abs(target_fft)
-
-        return (loss_fn(output_amplitude, target_amplitude) + (loss_fn(output_angle, target_angle)))
-
-    def calculate_band_loss(self, inputs, outputs, loss_fn, loss_type='real'):
-        outputs_reshaped = outputs.reshape(inputs.shape[0], inputs.shape[1], inputs.shape[2], inputs.shape[3])
-        if loss_type == 'real':
-            loss = loss_fn(inputs, outputs_reshaped)
-        elif loss_type == 'fourier':
-            loss = _fft_loss(output_reshaped, inputs, loss_fn)
-        else:
-            loss = loss_fn(inputs, outputs_reshaped) + _fft_loss(output_reshaped, inputs, loss_fn) * 1e-2
-        return loss
-
+            ckpt_dir=cfg.training_params.ckpt_dir, **kwargs)
+    
     def forward(self, data):
         '''
 		Looks similar to MENDR_model forward
@@ -81,22 +46,10 @@ def MENDRFinetuner(BaseModelTrainer):
         patch_num = patchified_inputs['delta'].shape[1]
         patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output = model(data['graph'], inputs)
         return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
+    
 
-    def _get_recon_loss(self, patchified_inputs, decodings, recon_loss_fn):
-        delta_loss = self._calculate_band_loss(patchified_inputs['delta'], decodings['delta'], recon_loss_fn)
-        theta_loss = self._calculate_band_loss(patchified_inputs['theta'], decodings['theta'], recon_loss_fn)
-        alpha_loss = self._calculate_band_loss(patchified_inputs['alpha'], decodings['alpha'], recon_loss_fn)
-        beta_loss = self._calculate_band_loss(patchified_inputs['beta'],   decodings['beta'], recon_loss_fn)
-        gamma_loss = self._calculate_band_loss(patchified_inputs['gamma'], decodings['gamma'], recon_loss_fn)
-        return delta_loss, theta_loss, alpha_loss, beta_loss, gamma_loss
-
-    def _get_mtl_backward_params(self, encodings):
-        shared_features = [encoding for band, encoding in encodings.items()]
-        task_params = [self.decoder.parameters()]
-        for band in BANDS:
-            model_params = self.mendr_model.mendr_encoder.encoder_decoders[band].getDecoderParams()
-            task_params.append(model_params)
-        return shared_features, task_params
+    def fit(self, training_dataset, cfg, validation_dataset=None):
+        return self.mendr_model, self.decoder
 
 
     def train_one_epoch(self):
