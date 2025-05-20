@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
-from .mAtt.spd import SPDTangentSpace, SPDTransform
-from Model.MENDR.MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes
+from Model.MENDR.mAtt.mAtt import E2R, SPDRectified
+from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
+from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes
 from ..ManifoldTransformer import ManifoldTransformer
 
 '''
-BENDR-style Contextualizer using mATT module 
+BENDR-style Contextualizer using MAtt module 
 '''
 class MENDRContextualizerLarge(nn.Module):
 	def __init__(self, device,
