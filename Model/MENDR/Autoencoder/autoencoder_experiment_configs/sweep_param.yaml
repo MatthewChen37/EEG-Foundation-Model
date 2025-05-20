@@ -3,7 +3,7 @@ meta_params:
   experiment_name: train_autoencoder
   save_model: False
   save_final_model: True
-  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_seed_${training_params.random_seed}
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_seed_${training_params.random_seed}_${patch_encoder_params.n_gnn_transformer_layers}_layers
   log_system_metrics: False
   log_encoder_params_and_grads: False
   num_recons: 4
@@ -38,5 +38,5 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      ++patch_encoder_params.n_gnn_transformer_layers: 3, 4, 5
-      ++training_params.random_seed: 42, 84, 126, 168, 210
+      ++patch_encoder_params.n_gnn_transformer_layers: 3
+      ++training_params.random_seed: 126, 168, 210

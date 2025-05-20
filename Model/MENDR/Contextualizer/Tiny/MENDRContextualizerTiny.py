@@ -4,7 +4,7 @@ import numpy as np
 from .mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from .mAtt.spd import SPDTangentSpace, SPDTransform
 from .MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization
-from .ManifoldTransformer import ManifoldTransformer
+from ..ManifoldTransformer import ManifoldTransformer
 
 '''
 BENDR-style Contextualizer using mATT module 
