@@ -10,8 +10,8 @@ from torch_geometric.utils import unbatch
 from .mAtt import StiefelParameter
 from .safeSVD import SVD, svdv2
 from scipy.linalg import orth
-from .Large.MENDRContextualizerLarge import MENDRContextualizerLarge
-from .Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
+from ..MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
+from ..MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Explainability.embeddingVisualization import plotSPDEmbedding
 from Explainability.plotReconstruction import plotReconstruction
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian, plotWaveletEmbeddingsEuclidean
