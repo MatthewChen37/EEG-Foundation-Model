@@ -110,15 +110,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         if cfg.meta_params.log_encoder_params_and_grads:
             self.logger.closeWriter()
 
-    def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
-        for metric in metric_dict:
-            if metric != 'lr':
-                if metric not in aggregated_metrics :
-                    aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
-                else:
-                    aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
-        return aggregated_metrics
-
+    
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
         tqdm.tqdm.write("Retaining checkpoint...")
         epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'

@@ -96,17 +96,6 @@ class BaseModelTrainer(object):
         '''
         raise NotImplementedError
 
-    def calculate_metrics(self, inputs, outputs):
-        """
-        Given the inputs to and outputs from underlying modules, calculate the metrics.
-
-        Returns
-        -------
-        metrics : dict
-                  Dictionary of metrics to be recorded.
-        """
-        raise NotImplementedError
-
     def train(self, mode=True):
         self._training = mode
         for member in self._trainables:
@@ -257,6 +246,15 @@ class BaseModelTrainer(object):
             self.logger = MENDRLogger()
 
         return training_dataloader, validation_dataloader
+    
+    def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
+        for metric in metric_dict:
+            if metric != 'lr':
+                if metric not in aggregated_metrics :
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
+                else:
+                    aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
+        return aggregated_metrics
 
     
     def fit(self, training_dataset, cfg, validation_dataset=None):
