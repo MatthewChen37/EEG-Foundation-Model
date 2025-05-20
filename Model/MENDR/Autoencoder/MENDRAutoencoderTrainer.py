@@ -102,14 +102,12 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             mlflow.log_metrics(epoch_metrics, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step_cosine_annealing()
-        mlflow.end_run()
-
-        if cfg.save_final_model:
+        if cfg.meta_params.save_final_model:
             self._retain_best(epoch, epoch_metrics)
+        mlflow.end_run()
 
         if cfg.meta_params.log_encoder_params_and_grads:
             self.logger.closeWriter()
-
     
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
         tqdm.tqdm.write("Retaining checkpoint...")

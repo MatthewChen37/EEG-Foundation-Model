@@ -1,5 +1,16 @@
+model_params:
+  model_name: MENDR
+  pretrained_autoencoder_path: null
+  pretrained_contextualizer_path: null
+dataset_params:
+  name: TUAB
+  train_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train"
+  eval_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval"
+  train_frac: 1.0
+  eval_frac: 1.0
 training_params:
   task_loss: BCEWithLogitsLoss
   learning_rate: 0.001
   l2_weight_decay: 0.0005
   ckpt_dir: ./checkpoint
+

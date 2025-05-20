@@ -35,7 +35,7 @@ training_params:
   num_workers: 32
 hydra:
   output_subdir: null
-  mode: MULTIRUN
+  mode: MULTIRUN[]
   sweeper:
     params:
       ++training_params.train_frac: 0.8

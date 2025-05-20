@@ -39,4 +39,4 @@ hydra:
   sweeper:
     params:
       ++patch_encoder_params.n_gnn_transformer_layers: 3
-      ++training_params.random_seed: 126, 168, 210
+      ++training_params.random_seed: 168, 210
