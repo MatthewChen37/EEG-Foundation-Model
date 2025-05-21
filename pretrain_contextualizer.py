@@ -16,8 +16,6 @@ from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 
 from Model.MENDR.Contextualizer.Tiny.MENDRTinyPreTrainer import MENDRTinyPreTrainer
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
-
-
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConcatDataset
 
@@ -67,17 +65,16 @@ def main(cfg:DictConfig) -> None:
 		param.requires_grad = False # Freeze the autoencoder
 	autoencoder.eval()
 
-	if cfg.meta_params.size.lower() == 'tiny':
+	if cfg.meta_params.model_size.lower() == 'tiny':
 		contextualizer = MENDRContextualizerTiny(
 			encoded_h = cfg.patch_encoder_params.delta_encoded_h +
 						cfg.patch_encoder_params.theta_encoded_h +
 						cfg.patch_encoder_params.alpha_encoded_h +
 						cfg.patch_encoder_params.beta_encoded_h  +
-						cfg.patch_encoder_params.gamma_encoded_h +
-						cfg.patch_encoder_params.high_encoded_h,
+						cfg.patch_encoder_params.gamma_encoded_h,
 			patch_len = autoencoder.encoder_decoders['delta'].L_out_2,
 			device=device, **cfg.contextualizer_params)
-	elif cfg.meta_params.size.lower() == 'large':
+	elif cfg.meta_params.model_size.lower() == 'large':
 		raise ValueError("Large contextualizer not supported in this script")
 
 	optimizer = torch.optim.AdamW(contextualizer.parameters(),
@@ -87,7 +84,9 @@ def main(cfg:DictConfig) -> None:
 				T_max=cfg.training_params.T_max,
 				eta_min=cfg.training_params.eta_min)
 	mix_optimizer = MixOptimizer(optimizer, scheduler)
+	print(f'Contextualizer Params: {sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)}')
 
+	'''
 	if cfg.meta_params.size.lower() == 'tiny':
 		trainer = MENDRTinyPreTrainer(contextualizer, mix_optimizer, cfg, cuda=device)
 	else:
@@ -103,3 +102,7 @@ def main(cfg:DictConfig) -> None:
 	if torch.cuda.is_available():
 		torch.cuda.synchronize()
 	print("Cleanup complete.")
+	'''
+
+if __name__ == '__main__':
+    main()

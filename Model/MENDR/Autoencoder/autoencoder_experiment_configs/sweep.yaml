@@ -3,7 +3,7 @@ meta_params:
   experiment_name: train_autoencoder
   save_model: False
   run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_seed_${training_params.random_seed}
-  save_final_model: False
+  save_final_model: True
   log_system_metrics: False
   log_encoder_params_and_grads: False
   num_recons: 4
@@ -38,5 +38,5 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      ++training_params.train_frac: 0.8
-      ++training_params.random_seed: 168, 210
+      ++training_params.train_frac: 0.9
+      ++training_params.random_seed: 42, 84, 126, 168, 210

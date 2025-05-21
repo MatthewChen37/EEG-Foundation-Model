@@ -38,5 +38,5 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      ++patch_encoder_params.n_gnn_transformer_layers: 3
-      ++training_params.random_seed: 168, 210
+      ++patch_encoder_params.n_gnn_transformer_layers: 5
+      ++training_params.random_seed: 42, 84, 126, 168, 210
