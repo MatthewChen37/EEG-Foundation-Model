@@ -10,7 +10,7 @@ from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, device, encoded_h, patch_len=18, encoded_out=19):
+	def __init__(self, device, encoded_h, patch_len=18, encoded_out=19, contextualizer_layers=3):
 		super(MENDRContextualizerTiny, self).__init__()
 		self.device = device
 		self.encoded_h = encoded_h
@@ -28,9 +28,9 @@ class MENDRContextualizerTiny(nn.Module):
 		self.ract = SPDRectified()
 		self.pre_attention_transform = SPDTransform(self.encoded_h, self.encoded_out, self.device)
 		self.Contextualizer = MENDRContextualizer(device=self.device, 
-											encoded_out=encoded_out)
+											encoded_out=encoded_out,
+											n_transformer_layers=contextualizer_layers)
 
-		
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #encoded_h, #time_step] 
 		# Note that each wavelet band should be the same time length
@@ -43,7 +43,9 @@ class MENDRContextualizerTiny(nn.Module):
 		if self.position_encoder:
 			signal = signal + self.position_encoder(signal)
 		cov_matrices = self.e2r(signal)
+		#assert (cov_matrices[0, 0] - cov_matrices[0, 1]).abs().sum() >= 0.001, f"Cov: {cov_matrices[0, 0]}, {cov_matrices[0, 1]}"
 		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
+		#assert (signal_transformed[0] - signal_transformed[1]).abs().sum() >= 0.001, f"Signal Transformed: {signal_transformed[0]}, {signal_transformed[1]}"
 		signal_transformed = signal_transformed.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
 		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), batch_size, num_patches, mask_ratio)
 		return signal_transformed, signal, mask_idxes 
