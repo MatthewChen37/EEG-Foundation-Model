@@ -1,5 +1,7 @@
 from .utils import *
 from . import StiefelParameter
+import concurrent.futures
+from functools import partial
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/optimizer.py
@@ -31,6 +33,63 @@ class MixOptimizer(object):
         self.scheduler.step(iteration)
 
     def step(self, closure=None):
+        """Performs a single optimization step with parallel processing of parameters."""
+        
+        # Pre-processing phase: Store parameter states and prepare gradients
+        def process_param_before_step(p):
+            if p.grad is None:
+                return None
+            
+            if isinstance(p, StiefelParameter):
+                # Store the current parameter state
+                param_state = p.data.clone()
+                
+                # Perform orthogonal projection
+                p.data.fill_(0)
+                trans = orthogonal_projection(p.grad.data, p.data)
+                p.grad.data.fill_(0).add_(trans)
+                
+                return (id(p), param_state)
+            return None
+        
+        # Create parameter lists for processing
+        all_params = []
+        for group in self.optimizer.param_groups:
+            all_params.extend(group['params'])
+        
+        # Process parameters in parallel
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = list(executor.map(process_param_before_step, all_params))
+        
+        # Update the state dictionary
+        for result in results:
+            if result is not None:
+                param_id, param_state = result
+                if param_id not in self.state:
+                    self.state[param_id] = param_state
+                else:
+                    self.state[param_id].fill_(0).add_(param_state)
+        
+        # Perform the optimizer step
+        loss = self.optimizer.step(closure)
+        
+        # Post-processing phase: Map parameters back to Stiefel space
+        def process_param_after_step(p):
+            if p.grad is None:
+                return
+            
+            if isinstance(p, StiefelParameter):
+                # Perform retraction to map back to Stiefel space
+                trans = retraction(p.data, self.state[id(p)])
+                p.data.fill_(0).add_(trans)
+        
+        # Process parameters in parallel
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(process_param_after_step, all_params)
+        return loss
+    
+    '''
+    def step(self, closure=None):
         """Performs a single optimization step.
 
         Arguments:
@@ -55,13 +114,11 @@ class MixOptimizer(object):
         loss = self.optimizer.step(closure)
 
         for group in self.optimizer.param_groups:
-            
             for p in group['params']:
-                
                 if p.grad is None:
                     continue
                 if isinstance(p, StiefelParameter):
                     trans = retraction(p.data, self.state[id(p)])
                     p.data.fill_(0).add_(trans)
         return loss
-
+    '''
