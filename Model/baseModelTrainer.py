@@ -39,12 +39,17 @@ class BaseModelTrainer(object):
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
 
-        # Names of trainable objects
+        # Note: I think BENDR's implementation is incorrect:
+        # https://github.com/SPOClab-ca/dn3/blob/4d477fe42d3d8ce64f3b790585bfa5c7acb84848/dn3/trainable/processes.py#L85
+        # Trainables should be tensors/modules that have grads or are in training mode
         self._trainables = list()
         for member in new_members:
             if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor, torch.nn.Parameter)):
-                if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
+                if isinstance(self.__dict__[member], (torch.Tensor, torch.nn.Parameter)) and not self.__dict__[member].requires_grad:
                     self._trainables.append(member)
+                if isinstance(self.__dict__[member], torch.nn.Module) and self.__dict__[member].training:
+                    self._trainables.append(member)
+                
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
 
@@ -242,7 +247,7 @@ class BaseModelTrainer(object):
             mlflow.start_run(run_name=cfg.meta_params.run_name,
             log_system_metrics=cfg.meta_params.log_system_metrics)
 
-        if cfg.meta_params.log_encoder_params_and_grads:
+        if "log_model_params_and_grads" in cfg.meta_params and cfg.meta_params.log_model_params_and_grads:
             self.logger = MENDRLogger()
 
         return training_dataloader, validation_dataloader
