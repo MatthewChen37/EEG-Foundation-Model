@@ -29,8 +29,12 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
 
     def backward(self, loss_dict):
         self.optimizer.zero_grad()
+        combined_loss = sum(loss_dict.values())
+        combined_loss.backward()
+        '''
         for band in loss_dict:
             loss_dict[band].backward()
+        '''
 
     def train_step(self, inputs):
         self.train(True)
