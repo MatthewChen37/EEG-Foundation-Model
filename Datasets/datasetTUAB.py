@@ -46,11 +46,44 @@ class WaveletTUABDataset(Dataset):
 				folder_epochs[epoch_idx] = dict()
 				folder_epochs[epoch_idx]['graph_name'] = graph_name
 			folder_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_folder, file_name))
+			'''
+			epoch_wavelet_dict['gamma'] = epoch_wavelet_dict['gamma'][:, :1920]
+			split_length_delta = epoch_wavelet_dict['delta'].shape[1] // 6
+			split_length_theta = epoch_wavelet_dict['theta'].shape[1] // 6
+			split_length_beta = epoch_wavelet_dict['beta'].shape[1] // 6
+			split_length_alpha = epoch_wavelet_dict['alpha'].shape[1] // 6
+			split_length_gamma = epoch_wavelet_dict['gamma'].shape[1] // 6
+			for split_idx in range(6):
+				epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, (epoch_idx, split_idx),
+				epoch_wavelet_dict['delta'][:, split_length_delta*split_idx: split_length_delta*(split_idx + 1)],
+				epoch_wavelet_dict['theta'][:, split_length_theta*split_idx: split_length_theta*(split_idx + 1)], 
+				epoch_wavelet_dict['alpha'][:, split_length_alpha*split_idx: split_length_alpha*(split_idx+1)],
+				epoch_wavelet_dict['beta'][:, split_length_beta*split_idx: split_length_beta*(split_idx+1)],
+				epoch_wavelet_dict['gamma'][:, split_length_gamma*split_idx: split_length_gamma*(split_idx+1)])
+
+				self.epochs.append(epoch_tuple)
+			'''
 		for epoch_idx, epoch_wavelet_dict in folder_epochs.items():
+			epoch_wavelet_dict['gamma'] = epoch_wavelet_dict['gamma'][:, :1920]
+			split_length_delta = epoch_wavelet_dict['delta'].shape[1] // 6
+			split_length_theta = epoch_wavelet_dict['theta'].shape[1] // 6
+			split_length_beta = epoch_wavelet_dict['beta'].shape[1] // 6
+			split_length_alpha = epoch_wavelet_dict['alpha'].shape[1] // 6
+			split_length_gamma = epoch_wavelet_dict['gamma'].shape[1] // 6
+			for split_idx in range(6):
+				epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, (epoch_idx, split_idx),
+				epoch_wavelet_dict['delta'][:, split_length_delta*split_idx: split_length_delta*(split_idx + 1)],
+				epoch_wavelet_dict['theta'][:, split_length_theta*split_idx: split_length_theta*(split_idx + 1)], 
+				epoch_wavelet_dict['alpha'][:, split_length_alpha*split_idx: split_length_alpha*(split_idx+1)],
+				epoch_wavelet_dict['beta'][:, split_length_beta*split_idx: split_length_beta*(split_idx+1)],
+				epoch_wavelet_dict['gamma'][:, split_length_gamma*split_idx: split_length_gamma*(split_idx+1)])
+				self.epochs.append(epoch_tuple)
+			'''
 			epoch_tuple = (epoch_wavelet_dict['graph_name'], wavelet_folder, epoch_idx,
 				epoch_wavelet_dict['delta'], epoch_wavelet_dict['theta'], epoch_wavelet_dict['alpha'], epoch_wavelet_dict['beta'],
 				epoch_wavelet_dict['gamma'])
 			self.epochs.append(epoch_tuple)
+			'''
 
 	def len(self):
 		return self.length
