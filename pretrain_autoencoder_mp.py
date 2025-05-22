@@ -17,14 +17,35 @@ from Model.MENDR.Autoencoder.MENDRAutoencoderTrainer import MENDRAutoencoderTrai
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConcatDataset
 
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+'''
+def ddp_setup(rank, world_size):
+    """
+    Args:
+        rank: Unique identifier of each process
+        world_size: Total number of processes
+    """
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    torch.cuda.set_device(rank)
+    # initialize the process group
+    init_process_group('nccl', rank=rank, world_size=world_size)
+'''
+
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
-            config_name="default")
-def main(cfg:DictConfig) -> None:
+            config_name="sweep_param")
+def main(cfg : DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
     print(OmegaConf.to_yaml(cfg))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    world_size = torch.cuda.device_count()
+    print(f"World Size: {world_size}")
 
     # Create input directory if it doesn't exist
     if cfg.training_params.ckpt_dir is not None:
@@ -58,8 +79,7 @@ def main(cfg:DictConfig) -> None:
 
     ### Model ###
     mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, num_subjects=dataset.num_subjects, device=device)
-    optimizer = torch.optim.AdamW(mendr_autoencoder.parameters(),
-                betas=(0.9, 0.99),
+    optimizer = torch.optim.AdamW(mendr_autoencoder.parameters(), 
                 lr=cfg.training_params.learning_rate,
                 weight_decay=cfg.training_params.l2_weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
@@ -83,6 +103,8 @@ def main(cfg:DictConfig) -> None:
     print("Total Decoder Params: ", total_decoder_params)
     print("Total number of parameters: ", total_encoder_params + total_decoder_params)
 
+def run():
+
     ### Training ###
     if cfg.training_params.val_frac > 0:
         print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -95,6 +117,10 @@ def main(cfg:DictConfig) -> None:
         print("No Validation Set. Training on Whole Dataset.")
         trainer.fit(training_dataset=dataset, cfg=cfg)
 
+    
+if __name__ == '__main__':
+    main()
+
     print("*" * 50)
     print("Cleaning up resources...")
     # Clear the PyTorch cache (for GPU)
@@ -105,6 +131,3 @@ def main(cfg:DictConfig) -> None:
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     print("Cleanup complete.")
-
-if __name__ == '__main__':
-    main()

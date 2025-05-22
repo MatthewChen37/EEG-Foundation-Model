@@ -4,37 +4,39 @@ meta_params:
   experiment_name: pretrain_tiny_contextualizer
   run_name: pretrain_${meta_params.model_size}_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
   log_system_metrics: True
-  log_contextualizer_params_and_grads: True
+  log_model_params_and_grads: True
   save_model: True
   save_final_model: False
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
   super_patch_seconds: 2
-  hop_length: 0.5
-  delta_encoded_h: 4
-  theta_encoded_h: 4
-  alpha_encoded_h: 8
-  beta_encoded_h: 16
-  gamma_encoded_h: 32
+  hop_length: 1.0
+  delta_encoded_h: 19
+  theta_encoded_h: 19
+  alpha_encoded_h: 38
+  beta_encoded_h: 76
+  gamma_encoded_h: 114
   # high_encoded_h: 64
-  n_gnn_transformer_layers: 4
+  n_gnn_transformer_layers: 2
 contextualizer_params:
-  encoded_out: 10
+  encoded_out: 3
+  contextualizer_layers: 2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
   pretrained_patch_encoder_dir: null
-  train_frac: 0.9
-  val_frac: 0.1
+  train_frac: 0.01
+  val_frac: 0.001
   random_seed: 42
   learning_rate: 0.001
   l2_weight_decay: 0.0005
-  batch_size: 128
-  epochs: 1
-  T_max: 1
+  batch_size: 512
+  epochs: 3
+  T_max: 3
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
   num_workers: 16
   gradient_clip_value: 1e7
-  autoencoder_ckpt_path: ./checkpoint/0cc63521e430439aba138c2875707b34_9_42/autoencoder_weights.pth
+  autoencoder_ckpt_path: ./checkpoint/8bbef61331c64e06bc23e82252143f6a_19/autoencoder_weights.pth
+  mask_ratio: 0.15

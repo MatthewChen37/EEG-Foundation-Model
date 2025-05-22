@@ -6,7 +6,7 @@ from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
 from .MENDRReconstructionDecoder import MENDRReconstructionDecoder, SEBasicBlock
-from ..MENDRCommon import LayerNormChannelOnly
+from ..MENDRCommon import Std_Norm
 
 '''
 We break each Wavelet sequence into patches. There are two patch scales: Super-Patch and Sub-Patch. 
@@ -17,7 +17,7 @@ intepretation.
 '''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
-                encoded_h, n_gnn_transformer_layers, num_subjects, device):
+                encoded_h, hidden_encoded_ratio, n_gnn_transformer_layers, num_subjects, device):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = nn.Dropout1d(0.1)
@@ -25,35 +25,38 @@ class WaveletEncoderDecoder(nn.Module):
         self.stride = self.patch_size // 2
         self.device = device
         self.encoded_h = encoded_h
+        assert isinstance(hidden_encoded_ratio, int) and hidden_encoded_ratio > 0, "hidden_encoded_ratio must be a positive integer"
+        self.hidden_encoded_ratio = hidden_encoded_ratio
         self.seq_len = super_patch_seq_len
         self.act = nn.GELU()
 
-        # Pre-Harmonization Patch Embedder 
-        self.L_out_1 = self.seq_len + 2 * (0) - 1 * ((self.patch_size) - 1) - 1
-        self.L_out_1 = floor(self.L_out_1 / (self.stride)) + 1
-        self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
-        self.patch_norm1 = nn.LayerNorm((19, self.L_out_1))
-        self.hidden_encoded_h = 2 * self.L_out_1
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.hidden_encoded_h)).to(self.device)
-
-        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.hidden_encoded_h,
+        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.seq_len,
                                                            device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
-                                                           heads=2)
+                                                           heads=self.hidden_encoded_ratio)
+
+        # Pre-Harmonization Patch Embedder 
+        self.L_out_1 = self.seq_len + 2 * (0) - 1 * (self.patch_size - 1) - 1
+        self.L_out_1 = floor((self.L_out_1 / self.stride) + 1)
+        self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=self.patch_size, stride=self.stride).to(self.device)
+        self.patch_norm1 = nn.LayerNorm((encoded_h, self.L_out_1))
+        self.hidden_encoded_h = self.hidden_encoded_ratio * self.L_out_1
+        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.hidden_encoded_h)).to(self.device)
 
         # Post-Harmonization Patch Embedder
         self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (2 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
-        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_embedder2 = nn.Conv1d(in_channels=encoded_h, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
-        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
-        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=1).to(self.device)
+        self.hidden_encoded_length = self.L_out_2
+        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.hidden_encoded_length)).to(self.device)
+        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=19).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
-                                    embedding_dim=self.L_out_2).to(self.device)
+                                    embedding_dim=self.hidden_encoded_length).to(self.device)
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=encoded_h, L_out_2=self.L_out_2,
+                                                                 encoded_h=encoded_h, hidden_seq_length=self.hidden_encoded_length,
                                                                  seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
@@ -93,29 +96,29 @@ class WaveletEncoderDecoder(nn.Module):
         x = x.reshape(B*P, C, T)
         # x: [Batch Size * Patches, Channels, Time Steps]
         x = self.channel_dropout(x)
+        edge_index = graph.edge_index.to(self.device)
+        edge_dist = graph.edge_attr.to(self.device)
+        x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
+
         x = self.patch_embedder(x)
+        x = self.SEBlock(x)
         x = self.patch_norm1(x)
         x = self.patch_embedder_lin(x)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
-        edge_index = graph.edge_index.to(self.device)
-        edge_dist = graph.edge_attr.to(self.device)
-        x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
-        
         x = self.patch_embedder2(x)
         x = self.patch_norm2(x)
-        x = x + self.patch_embedder2_lin(x)
-        x = self.SEBlock(x)
+        x = self.patch_embedder2_lin(x)
 
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
-        x = x.reshape(B, P, self.encoded_h, self.L_out_2)
+        x = x.reshape(B, P, self.encoded_h, self.hidden_encoded_length)
         decoding = None
         if self.reconstruction_decoder is not None and self.subject_embeddings is not None:
             decoding = x.clone()
-            subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, L_out_2]
+            subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, self.hidden_encoded_length]
             decoding =  decoding + subject_embeddings
             # decoding: [Batch Size * Patches, Channels, self.seq_len]
-            decoding = decoding.reshape(B * P, self.encoded_h, self.L_out_2)
+            decoding = decoding.reshape(B * P, self.encoded_h, self.hidden_encoded_length)
             decoding = self.reconstruction_decoder(decoding)
         return x, decoding
 
@@ -126,7 +129,7 @@ class GNNSpatialHarmonizer(nn.Module):
         self.num_features = num_features
         self.n_gnn_transformer_layers = n_gnn_transformer_layers
         self.gnn_transformers = nn.ModuleList([GNNTransformer(num_features=self.num_features, num_channels=num_channels, 
-                                               device=device, hidden_ratio=2, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
+                                               device=device, hidden_ratio=4, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
 
     def forward(self, x, edge_index, edge_dist, B, P, C):
         # x: [Batch Size*Patches, Channels, num_features]
@@ -183,6 +186,7 @@ class MENDRPatchEncoder(nn.Module):
                 alpha_encoded_h,
                 beta_encoded_h,
                 gamma_encoded_h,
+                hidden_encoded_ratio,
                 n_gnn_transformer_layers,
                 num_subjects,
                 device,
@@ -218,11 +222,11 @@ class MENDRPatchEncoder(nn.Module):
             self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
 
         self.patch_normalizers = {
-            'delta': LayerNormChannelOnly(num_channels=num_channels),
-            'theta': LayerNormChannelOnly(num_channels=num_channels),
-            'alpha': LayerNormChannelOnly(num_channels=num_channels),
-            'beta': LayerNormChannelOnly(num_channels=num_channels),
-            'gamma': LayerNormChannelOnly(num_channels=num_channels),
+            'delta': Std_Norm(),
+            'theta': Std_Norm(),
+            'alpha': Std_Norm(),
+            'beta': Std_Norm(),
+            'gamma': Std_Norm(),
         }
 
         self.encoder_decoders = {
@@ -231,6 +235,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=self.WAVELET_LENGTHS['delta'],
                     encoded_h=delta_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['delta'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     num_subjects=num_subjects,
                     device = device
@@ -240,6 +245,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=self.WAVELET_LENGTHS['theta'],
                     encoded_h=theta_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['theta'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     num_subjects=num_subjects,
                     device = device
@@ -249,6 +255,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=self.WAVELET_LENGTHS['alpha'],
                     encoded_h=alpha_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['alpha'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     num_subjects=num_subjects,
                     device = device 
@@ -258,6 +265,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size=self.WAVELET_LENGTHS['beta'],
                     encoded_h=beta_encoded_h,
                     super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['beta'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     num_subjects=num_subjects,
                     device = device
@@ -267,6 +275,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size = self.WAVELET_LENGTHS['gamma'],
                     encoded_h = gamma_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     num_subjects=num_subjects,
                     device = device
@@ -279,6 +288,7 @@ class MENDRPatchEncoder(nn.Module):
                     sub_patch_size = self.WAVELET_LENGTHS['high'],
                     encoded_h = high_encoded_h,
                     super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['high'],
+                    hidden_encoded_ratio=hidden_encoded_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     device = device
                     )
@@ -287,7 +297,7 @@ class MENDRPatchEncoder(nn.Module):
         self.patch_normalizers = nn.ParameterDict(self.patch_normalizers)
 
         for band, encoder_decoder in self.encoder_decoders.items():
-            print(f"{band}: {encoder_decoder.L_out_2}")
+            print(f"{band} Hidden Token Sequence Length: {encoder_decoder.hidden_encoded_length}")
 
     def forward(self, data):
         patchified_data = self._super_patchify(data)
@@ -327,7 +337,7 @@ class MENDRPatchEncoder(nn.Module):
         # Truncate patches to the minimum number of patches
         for band, band_decomposition in patchified_data.items():
             patchified_data[band] = band_decomposition[:, :min_patches]
-            #patchified_data[band] = self.patch_normalizers[band](patchified_data[band])
+            patchified_data[band] = self.patch_normalizers[band](patchified_data[band])
         return patchified_data
 
     # For downstream tasks

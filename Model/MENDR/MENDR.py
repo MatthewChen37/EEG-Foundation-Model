@@ -24,6 +24,12 @@ class MENDR_model(nn.Module):
         if wavelet_contextualizer is not None:
             self.wavelet_contextualizer = wavelet_contextualizer
 
+        self.trainable_state = {
+            'encoder': True,
+            'combined_contextualizer': True,
+            'wavelet_contextualizer': True,
+        }
+
         self.tangent_space = SPDTangentSpace(self.combined_contextualizer.encoded_out, device=device)
         
     def forward(self, data):
@@ -40,3 +46,16 @@ class MENDR_model(nn.Module):
         elif self.contextualizer_size == "LARGE":
             combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings, batch_size, patch_num) # Mask indices should never be used here
             return None
+
+    def freeze_autoencoder(self, require_grad=False):
+        for param in self.encoder.parameters():
+            param.requires_grad = require_grad
+        self.trainable_state['encoder'] = require_grad
+
+    def parameters(self):
+        params = []
+        if self.trainable_state['encoder']:
+            params += list(self.encoder.parameters())
+        if self.trainable_state['combined_contextualizer']:
+            params += list(self.combined_contextualizer.parameters())
+        return params

@@ -7,13 +7,13 @@ import copy
 from copy import deepcopy
 
 class MENDRReconstructionDecoder(nn.Module):
-    def __init__(self, num_channels, sub_patch_size, encoded_h, L_out_2, seq_len, device):
+    def __init__(self, num_channels, sub_patch_size, encoded_h, hidden_seq_length, seq_len, device):
         super().__init__()
         self.num_channels = num_channels
         self.patch_size = sub_patch_size
         self.stride = self.patch_size // 2
         self.device = device
-        self.L_out_2 = L_out_2
+        self.hidden_seq_length = hidden_seq_length
         self.seq_len = seq_len
 
         '''
@@ -28,10 +28,10 @@ class MENDRReconstructionDecoder(nn.Module):
         '''
 
         self.act = nn.GELU()
-        self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
+        self.decode_L_out = (self.hidden_seq_length - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
-        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=8).to(self.device)
+        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
         self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
         self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     torch.manual_seed(0)
 
     x = torch.randn(1, encoded_h, L_out_2, device=device)
-    model = MENDRReconstructionDecoder(num_channels=num_channels, sub_patch_size=sub_patch_size, encoded_h=encoded_h, L_out_2=L_out_2, seq_len=seq_len, device=device)
+    model = MENDRReconstructionDecoder(num_channels=num_channels, sub_patch_size=sub_patch_size, encoded_h=encoded_h, hidden_seq_length=L_out_2, seq_len=seq_len, device=device)
     y = model(x)
     print("Delta Shape:", y.shape)
     print("Delta Number of parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     seq_len = 486
 
     x = torch.randn(1, encoded_h, L_out_2, device=device)
-    model = MENDRReconstructionDecoder(num_channels=num_channels, sub_patch_size=sub_patch_size, encoded_h=encoded_h, L_out_2=L_out_2, seq_len=seq_len, device=device)
+    model = MENDRReconstructionDecoder(num_channels=num_channels, sub_patch_size=sub_patch_size, encoded_h=encoded_h, hidden_seq_length=L_out_2, seq_len=seq_len, device=device)
     y = model(x)
     print("Alpha Shape:", y.shape)
     print("Alpha Number of parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
