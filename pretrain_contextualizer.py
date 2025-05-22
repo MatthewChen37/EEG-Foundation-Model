@@ -60,7 +60,9 @@ def main(cfg:DictConfig) -> None:
 
 	### Model ###
 	autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, num_subjects=dataset.num_subjects, device=device)
-	autoencoder.load_state_dict(torch.load(cfg.training_params.autoencoder_ckpt_path, weights_only=True))
+	for band, encoder_decoder in autoencoder.encoder_decoders.items():
+		encoder_decoder.disableDecoder()
+	autoencoder.load_state_dict(torch.load(cfg.training_params.autoencoder_ckpt_path, weights_only=True), strict=False)
 	for param in autoencoder.parameters():
 		param.requires_grad = False # Freeze the autoencoder
 	autoencoder.eval()
@@ -86,11 +88,23 @@ def main(cfg:DictConfig) -> None:
 	mix_optimizer = MixOptimizer(optimizer, scheduler)
 	print(f'Contextualizer Params: {sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)}')
 
-	'''
-	if cfg.meta_params.size.lower() == 'tiny':
-		trainer = MENDRTinyPreTrainer(contextualizer, mix_optimizer, cfg, cuda=device)
+	if cfg.meta_params.model_size.lower() == 'tiny':
+		trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
 	else:
 		raise ValueError("Large contextualizer not supported in this script")
+
+	### Training ###
+	if cfg.training_params.val_frac > 0:
+		print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
+		num_train = int(len(dataset) * (cfg.training_params.train_frac / (total_frac)))
+		num_val = len(dataset) - num_train
+		train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, num_val])
+		print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
+		trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
+	else:
+		print("No Validation Set. Training on Whole Dataset.")
+		trainer.fit(training_dataset=dataset, cfg=cfg)
+
 	
 	print("*" * 50)
 	print("Cleaning up resources...")
@@ -102,7 +116,6 @@ def main(cfg:DictConfig) -> None:
 	if torch.cuda.is_available():
 		torch.cuda.synchronize()
 	print("Cleanup complete.")
-	'''
 
 if __name__ == '__main__':
     main()
