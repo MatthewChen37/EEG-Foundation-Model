@@ -21,11 +21,11 @@ class signal2spd(nn.Module):
         tra = cov.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
         tra = tra.view(-1, 1, 1)
         # To avoid division by 0 error
-        tra = tra + (1E-5)*torch.ones(tra.shape).to(tra.device)
+        tra = tra + (1e-7)*torch.ones(tra.shape).to(tra.device)
         cov /= tra
         identity = torch.eye(cov.shape[-1], cov.shape[-1], device=self.dev).to(self.dev).repeat(x.shape[0], 1, 1)
         # Notice how they also added 1e-5 originally
-        cov = cov+(1e-5*identity)
+        cov = cov+(1e-7*identity)
         return cov 
 
 class E2R(nn.Module):
