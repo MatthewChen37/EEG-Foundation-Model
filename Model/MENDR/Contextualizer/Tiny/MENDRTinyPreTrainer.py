@@ -14,7 +14,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, autoencoder, contextualizer, cfg, **kwargs):
+	def __init__(self, autoencoder, contextualizer, optimizer, cfg, **kwargs):
 		self.mask_ratio = cfg.training_params.mask_ratio
 		self.svd = SVD.apply
 		self.contrastive_loss_fn = nn.MSELoss()
@@ -22,32 +22,30 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		assert isinstance(contextualizer, MENDRContextualizerTiny), f"Contextualizer must be of type MENDRContextualizerTiny, but got {type(contextualizer)}"
 
 		super(MENDRTinyPreTrainer, self).__init__(autoencoder=autoencoder, contextualizer=contextualizer,
-			contrastive_loss_fn=self.contrastive_loss_fn,
-			lr=cfg.train_params.learning_rate,
-			l2_weight_decay=cfg.training_params.l2_weight_decay,
-			metrics=dict(),
-			ckpt_dir=cfg.training_params.ckpt_dir,
+			optimizer=optimizer,
+			cfg=cfg,
 			**kwargs)
 
 		# Clamp gradients
 		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
 		for p in self.parameters():
-			p.register_hook(lambda grad: torch.clamp(grad, -cfg.training_params.gradient_clip_value, cfg.training_params.gradient_clip_value))
+			if p.requires_grad:
+				p.register_hook(lambda grad: torch.clamp(grad,
+				-cfg.training_params.gradient_clip_value,
+				cfg.training_params.gradient_clip_value))
 
 	def forward(self, data):
 		'''
 		Looks similar to MENDR_model forward
 		but is modified for the contrastive learning task(s)
 		'''
-		patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
+		_, encodings, _ = self.autoencoder.forward(data)
 
 		# Combined contrastive loss
 		riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self._epochMaskedRecon(encodings, self.contrastive_loss_fn)
 
 		return {
-				'patchified_inputs': patchified_inputs,
 				'encodings': encodings,
-				'decodings': decodings,
 				'combined_manifold_output': combined_manifold_output,
 				'combined_manifold_output_masked': combined_manifold_output_masked,
 				'riemannian_loss': riemannian_loss,
@@ -75,14 +73,10 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 			if step_idx == 0: # Log only the first batch in the validation set
 				combined_manifold_output = outputs['combined_manifold_output']
 				combined_manifold_output_masked = outputs['combined_manifold_output_masked']
-				'''
-				assert outputs['mask_idxes'].shape[0] == batch_size, f"Masked Index Shape: {outputs['mask_idxes'].shape} Batch Size: {batch_size}"
-				assert outputs['mask_idxes'].shape[1] == num_patches, f"Masked Index Shape: {outputs['mask_idxes'].shape} Batch Size: {batch_size}"
-				assert len(inputs['subject_name']) == batch_size, f"Subject Name Length: {len(inputs['subject_name'])} Batch Size: {batch_size}"
-				'''
-				combined_manifold_output= combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
+				batch_size, num_patches, _, _ = combined_manifold_output.shape
+				combined_manifold_output = combined_manifold_output.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
 				combined_manifold_output_masked = combined_manifold_output_masked.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
-				_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'])
+				_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], num_patches=num_patches, num_cols=num_patches)
 				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
 				plt.close(combined_fig)
 		return eval_metrics
@@ -108,7 +102,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				train_pbar.set_postfix(train_metrics)
 				mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
 				epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
-				if cfg.meta_params.log_encoder_params_and_grads:
+				if cfg.meta_params.log_model_params_and_grads:
 					self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(train_pbar) + iteration)
 
 				if self.scheduler_after_batch:
@@ -125,26 +119,26 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 					pbar.set_postfix(val_metrics)
 					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
 					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
-					if cfg.meta_params.log_encoder_params_and_grads:
+					if cfg.meta_params.log_model_params_and_grads:
 						self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(pbar) + iteration)
 
 			### SAVE ###
 			if cfg.meta_params.save_model:
 				self._retain_best(epoch, epoch_metrics)
 				self.standard_logging(epoch_metrics, "End of Epoch")
-			if cfg.meta_params.log_encoder_params_and_grads: 
+			if cfg.meta_params.log_model_params_and_grads: 
 				self.logger.logContextualizerParams(self.contextualizer, step=epoch)
-				self.logger.logMENDRTrainerParams(None, self.contextualizer.mask, step=epoch)
+				self.logger.logMENDRTrainerParams(None, self.contextualizer.Contextualizer.mask, step=epoch)
 			mlflow.log_metrics(epoch_metrics, step=epoch)
 
-			if not self.scheduler_after_batch:
-				self.optimizer.scheduler_step_cosine_annealing()
-			if cfg.meta_params.save_final_model:
-				self._retain_best(epoch, epoch_metrics)
-			mlflow.end_run()
+		if not self.scheduler_after_batch:
+			self.optimizer.scheduler_step_cosine_annealing()
+		if cfg.meta_params.save_final_model:
+			self._retain_best(epoch, epoch_metrics)
+		mlflow.end_run()
 			
-			if cfg.meta_params.log_encoder_params_and_grads:
-				self.logger.closeWriter()
+		if cfg.meta_params.log_model_params_and_grads:
+			self.logger.closeWriter()
 
 
 	def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
@@ -167,7 +161,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		batch_size = wavelet_manifold_output['delta'].shape[0]
 		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output_masked, combined_manifold_output, mask_idxes = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
+		combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
 		# of shape Batch, epoch, C, C
 
 		# Masked Reconstruction loss
