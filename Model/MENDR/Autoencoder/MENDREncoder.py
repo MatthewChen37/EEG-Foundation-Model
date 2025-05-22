@@ -47,10 +47,10 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
         self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=1).to(self.device)
+
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=self.L_out_2).to(self.device)
-
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
                                                                  encoded_h=encoded_h, L_out_2=self.L_out_2,
@@ -65,6 +65,10 @@ class WaveletEncoderDecoder(nn.Module):
         patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
         gnn_spatial_harmonizer_count = sum(p.numel() for p in self.gnn_spatial_harmonizer.parameters() if p.requires_grad)
         return patch_embedder_count + patch_norm1_count + patch_embedder_lin_count + patch_embedder2_count + patch_norm2_count + patch_embedder2_lin_count + gnn_spatial_harmonizer_count
+
+    def disableDecoder(self):
+        self.subject_embeddings = None
+        self.reconstruction_decoder = None
 
     def getDecoderParamCount(self):
         reconstruction_decoder_count = sum(p.numel() for p in self.reconstruction_decoder.parameters() if p.requires_grad)
@@ -105,12 +109,14 @@ class WaveletEncoderDecoder(nn.Module):
 
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         x = x.reshape(B, P, self.encoded_h, self.L_out_2)
-        decoding = x.clone()
-        subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, L_out_2]
-        decoding =  decoding + subject_embeddings
-        # decoding: [Batch Size * Patches, Channels, self.seq_len]
-        decoding = decoding.reshape(B * P, self.encoded_h, self.L_out_2)
-        decoding = self.reconstruction_decoder(decoding)
+        decoding = None
+        if self.reconstruction_decoder is not None and self.subject_embeddings is not None:
+            decoding = x.clone()
+            subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, L_out_2]
+            decoding =  decoding + subject_embeddings
+            # decoding: [Batch Size * Patches, Channels, self.seq_len]
+            decoding = decoding.reshape(B * P, self.encoded_h, self.L_out_2)
+            decoding = self.reconstruction_decoder(decoding)
         return x, decoding
 
 class GNNSpatialHarmonizer(nn.Module):
@@ -286,7 +292,10 @@ class MENDRPatchEncoder(nn.Module):
     def forward(self, data):
         patchified_data = self._super_patchify(data)
         graphs = data['graph']
-        subjects = data['subject_idx']
+        try: # used only when decoder frozen
+            subjects = data['subject_idx']
+        except KeyError:
+            subjects = None
         assert patchified_data.keys() == self.encoder_decoders.keys()
         encodings = {}
         decodings = {}
@@ -318,7 +327,7 @@ class MENDRPatchEncoder(nn.Module):
         # Truncate patches to the minimum number of patches
         for band, band_decomposition in patchified_data.items():
             patchified_data[band] = band_decomposition[:, :min_patches]
-            patchified_data[band] = self.patch_normalizers[band](patchified_data[band])
+            #patchified_data[band] = self.patch_normalizers[band](patchified_data[band])
         return patchified_data
 
     # For downstream tasks
