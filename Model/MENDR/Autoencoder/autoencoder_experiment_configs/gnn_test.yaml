@@ -12,11 +12,11 @@ patch_encoder_params:
   sampling_rate: 128
   super_patch_seconds: 2
   hop_length: 0.5
-  delta_encoded_h: 15
-  theta_encoded_h: 15
-  alpha_encoded_h: 30
-  beta_encoded_h: 60
-  gamma_encoded_h: 120
+  delta_encoded_h: 19
+  theta_encoded_h: 19
+  alpha_encoded_h: 38
+  beta_encoded_h: 76
+  gamma_encoded_h: 152
   # high_encoded_h: 64
   n_gnn_transformer_layers: 6
   hidden_encoded_ratio: 2

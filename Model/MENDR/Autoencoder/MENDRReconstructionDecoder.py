@@ -11,7 +11,7 @@ class MENDRReconstructionDecoder(nn.Module):
         super().__init__()
         self.num_channels = num_channels
         self.patch_size = sub_patch_size
-        self.stride = self.patch_size // 2
+        self.stride = max(self.patch_size // 2, 1)
         self.device = device
         self.hidden_seq_length = hidden_seq_length
         self.seq_len = seq_len
@@ -31,11 +31,11 @@ class MENDRReconstructionDecoder(nn.Module):
         self.decode_L_out = (self.hidden_seq_length - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
-        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=19).to(self.device)
+        self.SEBlock1 = SEBasicBlock(encoded_h*2, encoded_h*2, reduction=15).to(self.device)
         self.up2 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h * 2, out_channels=encoded_h * 2, kernel_size=2, stride=self.stride, groups=1).to(self.device), self.act)
-        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (encoded_h - 1) - 1
-        self.decode_L_out = floor((self.decode_L_out / (self.stride)) + 1)
-        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=encoded_h, stride=self.stride, groups=1).to(self.device), self.act)
+        self.decode_L_out = self.decode_L_out + 2 * 0 - 1 * (1 - 1) - 1
+        self.decode_L_out = floor((self.decode_L_out / 1) + 1)
+        self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=1, stride=1, groups=1).to(self.device), self.act)
         self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
 
     def forward(self, x):

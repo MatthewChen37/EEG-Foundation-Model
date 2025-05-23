@@ -20,9 +20,10 @@ class WaveletEncoderDecoder(nn.Module):
                 encoded_h, hidden_encoded_ratio, n_gnn_transformer_layers, num_subjects, device):
         super().__init__()
         self.num_channels = num_channels
-        self.channel_dropout = nn.Dropout1d(0.1)
-        self.patch_size = sub_patch_size
-        self.stride = self.patch_size // 2
+        self.channel_dropout = nn.Dropout1d(0.2)
+        self.patch_size = int(sub_patch_size // 2)
+        self.stride = max(self.patch_size // 2, 1)
+    
         self.device = device
         self.encoded_h = encoded_h
         assert isinstance(hidden_encoded_ratio, int) and hidden_encoded_ratio > 0, "hidden_encoded_ratio must be a positive integer"
@@ -33,7 +34,6 @@ class WaveletEncoderDecoder(nn.Module):
         self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.seq_len,
                                                            device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
                                                            heads=self.hidden_encoded_ratio)
-
         # Pre-Harmonization Patch Embedder 
         self.L_out_1 = self.seq_len + 2 * (0) - 1 * (self.patch_size - 1) - 1
         self.L_out_1 = floor((self.L_out_1 / self.stride) + 1)
@@ -43,13 +43,13 @@ class WaveletEncoderDecoder(nn.Module):
         self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.hidden_encoded_h)).to(self.device)
 
         # Post-Harmonization Patch Embedder
-        self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (2 - 1) - 1
+        self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (4 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
-        self.patch_embedder2 = nn.Conv1d(in_channels=encoded_h, out_channels=encoded_h, kernel_size=2, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_embedder2 = nn.Conv1d(in_channels=encoded_h, out_channels=encoded_h, kernel_size=4, stride=1, groups=1, padding=0).to(self.device)
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
         self.hidden_encoded_length = self.L_out_2
-        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.hidden_encoded_length)).to(self.device)
-        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=19).to(self.device)
+        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
+        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=15).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
@@ -93,22 +93,25 @@ class WaveletEncoderDecoder(nn.Module):
     def forward(self, graph, x, subjects):
         # x: [Batch Size, Patches, Channels, Time Steps]
         B, P, C, T = x.shape
+        #print(B, P, C, T, x.shape)
         x = x.reshape(B*P, C, T)
         # x: [Batch Size * Patches, Channels, Time Steps]
+        '''
         x = self.channel_dropout(x)
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
         x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
-
+        '''
         x = self.patch_embedder(x)
-        x = self.SEBlock(x)
         x = self.patch_norm1(x)
         x = self.patch_embedder_lin(x)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
 
+        x = self.SEBlock(x)
+
         x = self.patch_embedder2(x)
         x = self.patch_norm2(x)
-        x = self.patch_embedder2_lin(x)
+        x = x + self.patch_embedder2_lin(x)
 
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         x = x.reshape(B, P, self.encoded_h, self.hidden_encoded_length)
@@ -116,7 +119,7 @@ class WaveletEncoderDecoder(nn.Module):
         if self.reconstruction_decoder is not None and self.subject_embeddings is not None:
             decoding = x.clone()
             subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, self.hidden_encoded_length]
-            decoding =  decoding + subject_embeddings
+            decoding = decoding + subject_embeddings
             # decoding: [Batch Size * Patches, Channels, self.seq_len]
             decoding = decoding.reshape(B * P, self.encoded_h, self.hidden_encoded_length)
             decoding = self.reconstruction_decoder(decoding)
@@ -344,6 +347,26 @@ class MENDRPatchEncoder(nn.Module):
     def reset_subject_embedding(self, num_subjects):
         self.subject = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=1)
+
+class Dropout1dWithIndexTracking(nn.Dropout1d):
+    def __init__(self, p=0.5, inplace=False):
+        super(Dropout1dWithIndexTracking, self).__init__(p, inplace)
+        self.dropped_indices = None
+
+    def forward(self, input):
+        if not self.training:
+            return input
+        
+        # Generate a random mask (0s and 1s) for dropout
+        mask = (torch.rand(input.size(1)) > self.p).float()
+
+        # Apply the mask to the input
+        output = input * mask.view(1, -1, 1) 
+        
+        # Store the dropped channel indices
+        self.dropped_indices = torch.nonzero(mask == 0).squeeze()
+        
+        return output
 
 # DEPRECATED
 '''
