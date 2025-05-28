@@ -11,32 +11,33 @@ patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
   super_patch_seconds: 2
-  hop_length: 1.0
-  delta_encoded_h: 19
-  theta_encoded_h: 19
-  alpha_encoded_h: 38
-  beta_encoded_h: 76
-  gamma_encoded_h: 114
+  hop_length: 0.5
+  delta_encoded_h: 15
+  theta_encoded_h: 15
+  alpha_encoded_h: 30
+  beta_encoded_h: 60
+  gamma_encoded_h: 120
   # high_encoded_h: 64
-  n_gnn_transformer_layers: 2
+  n_gnn_transformer_layers: 1
+  hidden_encoded_ratio: 2
 contextualizer_params:
-  encoded_out: 3
-  contextualizer_layers: 2
+  encoded_out: 19
+  contextualizer_layers: 4
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
   pretrained_patch_encoder_dir: null
-  train_frac: 0.01
-  val_frac: 0.001
+  train_frac: 0.1
+  val_frac: 0.01
   random_seed: 42
   learning_rate: 0.001
   l2_weight_decay: 0.0005
-  batch_size: 512
-  epochs: 3
-  T_max: 3
+  batch_size: 64
+  epochs: 5
+  T_max: 5
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
-  num_workers: 16
+  num_workers: 32
   gradient_clip_value: 1e7
-  autoencoder_ckpt_path: ./checkpoint/8bbef61331c64e06bc23e82252143f6a_19/autoencoder_weights.pth
+  autoencoder_ckpt_path: ./checkpoint/0b613767267b498eb9571922142d6927_19/autoencoder_weights.pth 
   mask_ratio: 0.15

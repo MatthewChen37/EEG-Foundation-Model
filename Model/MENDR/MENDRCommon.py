@@ -124,6 +124,18 @@ class Std_Norm(nn.Module):
 		#x = self.layer_norm(x)
 		return x
 
+class Std_Norm2(nn.Module):
+	def __init__(self):
+		super().__init__()
+		#self.layer_norm = nn.LayerNorm(num_channels, elementwise_affine=False)
+
+	def forward(self, x):
+		# Expects x [Batch Size, Channels, Time Steps]
+		mean = torch.mean(x, dim=(1, 2), keepdim=True)
+		std = torch.std(x, dim=(1, 2), keepdim=True)
+		x = (x - mean) / std
+		return x
+
 if __name__ == "__main__":
 	# Test Positional Encoding
 	pe = PositionalEncoding("cpu", 114, 37)

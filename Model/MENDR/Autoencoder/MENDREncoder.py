@@ -7,6 +7,7 @@ from torch_geometric.data import Data, Batch
 from math import floor
 from .MENDRReconstructionDecoder import MENDRReconstructionDecoder, SEBasicBlock
 from ..MENDRCommon import Std_Norm
+from Model.MENDR.Harmonizer.GNNSpatialHarmonizer import GNNSpatialHarmonizer
 
 '''
 We break each Wavelet sequence into patches. There are two patch scales: Super-Patch and Sub-Patch. 
@@ -20,7 +21,7 @@ class WaveletEncoderDecoder(nn.Module):
                 encoded_h, hidden_encoded_ratio, n_gnn_transformer_layers, num_subjects, device):
         super().__init__()
         self.num_channels = num_channels
-        self.channel_dropout = nn.Dropout1d(0.2)
+        self.channel_dropout = nn.Dropout1d(0.1)
         self.patch_size = int(sub_patch_size // 2)
         self.stride = max(self.patch_size // 2, 1)
     
@@ -31,21 +32,24 @@ class WaveletEncoderDecoder(nn.Module):
         self.seq_len = super_patch_seq_len
         self.act = nn.GELU()
 
-        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.seq_len,
-                                                           device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
-                                                           heads=self.hidden_encoded_ratio)
+
         # Pre-Harmonization Patch Embedder 
         self.L_out_1 = self.seq_len + 2 * (0) - 1 * (self.patch_size - 1) - 1
         self.L_out_1 = floor((self.L_out_1 / self.stride) + 1)
-        self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=self.patch_size, stride=self.stride).to(self.device)
-        self.patch_norm1 = nn.LayerNorm((encoded_h, self.L_out_1))
+        self.patch_embedder = nn.Conv1d(in_channels=19, out_channels=19, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device)
+        self.patch_norm1 = nn.LayerNorm((19, self.L_out_1))
         self.hidden_encoded_h = self.hidden_encoded_ratio * self.L_out_1
         self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.L_out_1, self.hidden_encoded_h)).to(self.device)
+
+        self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=19, num_features=self.hidden_encoded_h,
+                                                           device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
+                                                           heads=self.hidden_encoded_ratio)
+
 
         # Post-Harmonization Patch Embedder
         self.L_out_2 = self.hidden_encoded_h + 2 * (0) - 1 * (4 - 1) - 1
         self.L_out_2 = floor(self.L_out_2 / 1) + 1
-        self.patch_embedder2 = nn.Conv1d(in_channels=encoded_h, out_channels=encoded_h, kernel_size=4, stride=1, groups=1, padding=0).to(self.device)
+        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=4, stride=1, groups=1, padding=0).to(self.device)
         self.patch_norm2 = nn.LayerNorm((encoded_h, self.L_out_2))
         self.hidden_encoded_length = self.L_out_2
         self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.L_out_2, self.L_out_2)).to(self.device)
@@ -96,23 +100,18 @@ class WaveletEncoderDecoder(nn.Module):
         #print(B, P, C, T, x.shape)
         x = x.reshape(B*P, C, T)
         # x: [Batch Size * Patches, Channels, Time Steps]
-        '''
         x = self.channel_dropout(x)
-        edge_index = graph.edge_index.to(self.device)
-        edge_dist = graph.edge_attr.to(self.device)
-        x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
-        '''
         x = self.patch_embedder(x)
         x = self.patch_norm1(x)
         x = self.patch_embedder_lin(x)
         # x: [Batch Size * Patches, Channels, self.L_out_1]
-
-        x = self.SEBlock(x)
-
+        edge_index = graph.edge_index.to(self.device)
+        edge_dist = graph.edge_attr.to(self.device)
+        x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
         x = self.patch_embedder2(x)
         x = self.patch_norm2(x)
         x = x + self.patch_embedder2_lin(x)
-
+        x = self.SEBlock(x)
         # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
         x = x.reshape(B, P, self.encoded_h, self.hidden_encoded_length)
         decoding = None
@@ -125,54 +124,6 @@ class WaveletEncoderDecoder(nn.Module):
             decoding = self.reconstruction_decoder(decoding)
         return x, decoding
 
-class GNNSpatialHarmonizer(nn.Module):
-    def __init__(self, num_channels, num_features, device, n_gnn_transformer_layers=2, heads=2):
-        super().__init__()
-        self.num_channels = num_channels
-        self.num_features = num_features
-        self.n_gnn_transformer_layers = n_gnn_transformer_layers
-        self.gnn_transformers = nn.ModuleList([GNNTransformer(num_features=self.num_features, num_channels=num_channels, 
-                                               device=device, hidden_ratio=4, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
-
-    def forward(self, x, edge_index, edge_dist, B, P, C):
-        # x: [Batch Size*Patches, Channels, num_features]
-        for gnn_transformer in self.gnn_transformers:
-            x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
-        return x
-
-class GNNTransformer(nn.Module):
-    def __init__(self, num_features, num_channels, device, hidden_ratio=2, heads=2):
-        super().__init__()
-        self.num_channels = num_channels
-        self.num_features = num_features
-        self.heads = heads
-        self.device = device
-        self.hidden_ratio = hidden_ratio
-        self.act = nn.GELU()
-
-        self.gnn_channel_encoder = GATConv(num_features, num_features, heads=self.heads, concat=False).to(self.device)
-        self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
-        self.gnn_lin = nn.Sequential(self.act, nn.Linear(self.num_features, self.hidden_ratio * self.num_features),
-                                     self.act, nn.Linear(self.hidden_ratio * self.num_features, self.num_features)
-                                     ).to(self.device)
-        self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
-
-    def forward(self, x, edge_index, edge_dist, B, P, C):
-        # x: [Batch Size*Patches, Channels, num_features]
-        x = x.view(B, P, C, self.num_features)
-        for patch_idx in range(x.shape[1]):
-            gnn_channel_encoder_input = x[:, patch_idx, :, :].reshape(B * C, self.num_features).clone()
-            # gnn_channel_encoder_input: [Batch Size * Channels (Each entry is a node), self.num_features]
-            channel_encoding = self.gnn_channel_encoder(gnn_channel_encoder_input, edge_index, edge_dist)
-            # channel_encoding: [Batch Size, Channels, Time Steps, self.L_out_1, self.num_features]
-            x[:, patch_idx, :, :] = x[:, patch_idx, :, :] + channel_encoding.reshape(B, C, self.num_features)
-
-        x = x.view(B*P, C, self.num_features)
-        # x: [Batch Size * Patches, Channels, self.hidden_ratio * self.num_features]
-        x = self.layer_norm1(x)
-        x = x + self.gnn_lin(x)
-        x = self.layer_norm2(x)
-        return x
 
 '''
 Initialize Encoders for each wavelet band and 
@@ -348,25 +299,6 @@ class MENDRPatchEncoder(nn.Module):
         self.subject = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=1)
 
-class Dropout1dWithIndexTracking(nn.Dropout1d):
-    def __init__(self, p=0.5, inplace=False):
-        super(Dropout1dWithIndexTracking, self).__init__(p, inplace)
-        self.dropped_indices = None
-
-    def forward(self, input):
-        if not self.training:
-            return input
-        
-        # Generate a random mask (0s and 1s) for dropout
-        mask = (torch.rand(input.size(1)) > self.p).float()
-
-        # Apply the mask to the input
-        output = input * mask.view(1, -1, 1) 
-        
-        # Store the dropped channel indices
-        self.dropped_indices = torch.nonzero(mask == 0).squeeze()
-        
-        return output
 
 # DEPRECATED
 '''

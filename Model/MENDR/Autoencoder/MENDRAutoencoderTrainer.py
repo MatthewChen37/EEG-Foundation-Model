@@ -85,7 +85,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
                 epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
                 if cfg.meta_params.log_model_params_and_grads:
-                    self.logger.log_model_gradients(self.autoencoder, epoch=epoch * len(train_pbar) + iteration)
+                    self.logger.log_model_gradients(self.autoencoder, epoch=epoch*len(train_pbar) + iteration)
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step_cosine_annealing()
             

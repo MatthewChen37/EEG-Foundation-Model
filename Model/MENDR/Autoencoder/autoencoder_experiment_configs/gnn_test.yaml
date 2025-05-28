@@ -12,24 +12,24 @@ patch_encoder_params:
   sampling_rate: 128
   super_patch_seconds: 2
   hop_length: 0.5
-  delta_encoded_h: 19
-  theta_encoded_h: 19
-  alpha_encoded_h: 38
-  beta_encoded_h: 76
-  gamma_encoded_h: 152
+  delta_encoded_h: 15
+  theta_encoded_h: 15
+  alpha_encoded_h: 30
+  beta_encoded_h: 60
+  gamma_encoded_h: 120
   # high_encoded_h: 64
-  n_gnn_transformer_layers: 6
+  n_gnn_transformer_layers: 1
   hidden_encoded_ratio: 2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.1
-  val_frac: 0.01
+  train_frac: 0.00005
+  val_frac: 0.00003
   random_seed: 42
   learning_rate: 1.0e-3
   l2_weight_decay: 0.0005
-  batch_size: 128
-  epochs: 10
-  T_max: 10
+  batch_size: 4
+  epochs: 1
+  T_max: 1
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint

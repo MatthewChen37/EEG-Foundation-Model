@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, AttentionManifold, SPDRectified
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
-from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization
+from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization, LogEuclidLayerNorm
 from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer
 
 '''
@@ -43,12 +43,10 @@ class MENDRContextualizerTiny(nn.Module):
 		if self.position_encoder:
 			signal = signal + self.position_encoder(signal)
 		cov_matrices = self.e2r(signal)
-		#assert (cov_matrices[0, 0] - cov_matrices[0, 1]).abs().sum() >= 0.001, f"Cov: {cov_matrices[0, 0]}, {cov_matrices[0, 1]}"
-		signal_transformed = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
-		#assert (signal_transformed[0] - signal_transformed[1]).abs().sum() >= 0.001, f"Signal Transformed: {signal_transformed[0]}, {signal_transformed[1]}"
-		signal_transformed = signal_transformed.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
-		signal, mask_idxes = self.Contextualizer(signal_transformed.clone(), batch_size, num_patches, mask_ratio)
-		return signal_transformed, signal, mask_idxes 
+		signal_unmasked = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
+		signal_unmasked = signal_unmasked.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
+		signal_masked, mask_idxes = self.Contextualizer(signal_unmasked.clone(), batch_size, num_patches, mask_ratio)
+		return signal_unmasked, signal_masked, mask_idxes 
 	
 class MENDRContextualizer(nn.Module):
 	def __init__(self, device, encoded_out, n_transformer_layers=3):
@@ -67,6 +65,8 @@ class MENDRContextualizer(nn.Module):
 
 		self.manifold_transformer = nn.ModuleList(manifold_transformers)
 
+
+		#self.log_euclid_layer_norm = LogEuclidLayerNorm(device, num_channels=self.encoded_out, epsilon=1e-5)
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD

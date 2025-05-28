@@ -91,11 +91,11 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		for epoch in range(cfg.training_params.epochs):
 			epoch_metrics = {}
 			self.epoch = epoch
-
 			### TRAINING ###
 			train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
 			train_data_iterator = iter(training_dataloader)
 			self.train(True)
+
 			for iteration in train_pbar:
 				input_batch = self._get_batch(train_data_iterator)
 				train_metrics = self.train_step(input_batch)
@@ -103,8 +103,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
 				epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
 				if cfg.meta_params.log_model_params_and_grads:
-					self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(train_pbar) + iteration)
-
+					self.logger.log_model_gradients(self.contextualizer, epoch=epoch*len(train_pbar) + iteration)
 				if self.scheduler_after_batch:
 					self.optimizer.scheduler_step_cosine_annealing()
 
@@ -120,7 +119,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
 					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
 					if cfg.meta_params.log_model_params_and_grads:
-						self.logger.log_model_gradients(self.contextualizer, epoch=epoch * len(pbar) + iteration)
+						self.logger.log_model_gradients(self.contextualizer, epoch=epoch*len(pbar) + iteration)
 
 			### SAVE ###
 			if cfg.meta_params.save_model:
@@ -131,8 +130,8 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				self.logger.logMENDRTrainerParams(None, self.contextualizer.Contextualizer.mask, step=epoch)
 			mlflow.log_metrics(epoch_metrics, step=epoch)
 
-		if not self.scheduler_after_batch:
-			self.optimizer.scheduler_step_cosine_annealing()
+			if not self.scheduler_after_batch:
+				self.optimizer.scheduler_step_cosine_annealing()
 		if cfg.meta_params.save_final_model:
 			self._retain_best(epoch, epoch_metrics)
 		mlflow.end_run()
