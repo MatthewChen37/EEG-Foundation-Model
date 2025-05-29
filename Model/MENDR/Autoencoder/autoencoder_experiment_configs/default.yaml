@@ -19,7 +19,7 @@ patch_encoder_params:
   # high_encoded_h: 64
   n_gnn_transformer_layers: 1
   hidden_gnn_ratio: 2
-  n_gnn_heads: 1
+  n_gnn_heads: 4
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
   train_frac: 0.01

@@ -35,23 +35,9 @@ class WaveletEncoderDecoder(nn.Module):
                                                            device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
                                                            hidden_ratio=hidden_gnn_ratio, heads=self.hidden_encoded_ratio)
 
-        # Pre-Harmonization Patch Embedder 
-        self.patch_embedder = nn.Conv1d(in_channels=self.num_channels,
-                                        out_channels=self.num_channels,
-                                        kernel_size=self.patch_size,
-                                        stride=self.patch_size,
-                                        padding=(self.patch_size - 1) // 2,
-                                        groups=1).to(self.device)
-        self.patch_norm1 = nn.LayerNorm((self.num_channels, self.seq_len))
-        self.hidden_encoded_h = self.hidden_encoded_ratio * self.seq_len
-        self.patch_embedder_lin = nn.Sequential(self.act, nn.Linear(self.seq_len, self.hidden_encoded_h)).to(self.device)
+        self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=19).to(self.device)
 
-        # Post-Harmonization Patch Embedder
-        self.patch_embedder2 = nn.Conv1d(in_channels=19, out_channels=encoded_h, kernel_size=3, stride=1, groups=1, padding=1).to(self.device)
-        self.patch_norm2 = nn.LayerNorm((encoded_h, self.seq_len))
-        self.hidden_encoded_length = self.seq_len 
-        self.patch_embedder2_lin = nn.Sequential(self.act, nn.Linear(self.seq_len, self.seq_len)).to(self.device)
-        self.SEBlock = SEBasicBlock(encoded_h, encoded_h, reduction=15).to(self.device)
+        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=8).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
@@ -95,23 +81,19 @@ class WaveletEncoderDecoder(nn.Module):
     def forward(self, graph, x, subjects):
         # x: [Batch Size, Patches, Channels, Time Steps]
         B, P, C, T = x.shape
+        x = self.channel_dropout(x)
         #print(B, P, C, T, x.shape)
-        x = x.reshape(B*P, C, T)
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
         x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
+        x = self.SEBlock(x)
 
         # x: [Batch Size * Patches, Channels, Time Steps]
-        x = self.channel_dropout(x)
+        x = rearrange(x, '(B P) C T -> B P C T', B=B, P=P, C=C, T=T)
+        # x: [Batch Size, Patches, Channels, Time Steps]
         x = self.patch_embedder(x)
-        x = self.patch_norm1(x)
-        x = self.patch_embedder_lin(x)
-        # x: [Batch Size * Patches, Channels, self.L_out_1]
-        x = self.patch_embedder2(x)
-        x = self.patch_norm2(x)
-        x = x + self.patch_embedder2_lin(x)
-        x = self.SEBlock(x)
-        # x: [Batch Size * Patches, self.encoded_h, self.L_out_2]
+        # x: [Batch Size, Patches * Channels, patch_embedder.out_dim * Time Steps]
+
         x = x.reshape(B, P, self.encoded_h, self.hidden_encoded_length)
         decoding = None
         if self.reconstruction_decoder is not None and self.subject_embeddings is not None:
@@ -290,6 +272,41 @@ class MENDRPatchEncoder(nn.Module):
         self.subject = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=1)
 
+class PatchEmbedder(nn.Module):
+    def __init__(self, patch_size, in_dim=1, out_dim=8):
+        super().__init__()
+        self.patch_size = patch_size // 4
+        self.stride = max(1, self.patch_size // 2)
+
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.kernel_size = kernel_size
+        # https://github.com/935963004/LaBraM/blob/5f5ec3e702199ef0f16ee0bbaa8c2997cb77b786/modeling_pretrain.py#L28
+
+        # Maintain sequence length
+        self.proj1 = nn.Sequential(
+            nn.Conv2d(in_channels=self.in_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GELU(),
+        )
+
+        self.proj2 = nn.Sequential(
+            nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GELU(),
+        )
+
+    def forward(self, x):
+        B, P, C, T = x.shape
+        x = rearrange(x, 'B P C T -> B (P C) T', B=B, T=T)
+        x = x.unsqueeze(1)
+        # x: [Batch Size, 1, Patches * Channels, Time Steps]
+        x = self.proj1(x)
+        # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
+        x = self.proj2(x)
+        x = rearrange(x, 'B O PC T -> B PC (O T)', B=B, P=P, C=C, T=T, O=self.out_dim)
+        # x: [Batch Size, Patches * Channels, out_dim * Time Steps]
+        return x
 
 # DEPRECATED
 '''

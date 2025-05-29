@@ -15,18 +15,11 @@ class GNNSpatialHarmonizer(nn.Module):
         self.gnn_transformers = nn.ModuleList([GNNTransformer(num_features=self.num_features, num_channels=num_channels, 
                                                               hidden_ratio=hidden_ratio, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
 
-        self.dropout = Dropout1dWithIndexTracking(p=0.1)
-
-    def forward(self, x, edge_index, edge_dist, B, P, C, dropout=False):
+    def forward(self, x, edge_index, edge_dist, B, P, C):
         # x: [Batch Size*Patches, Channels, num_features]
-        if dropout:
-            x = self.dropout(x.clone().reshape(B*P, C, self.num_features))
         for gnn_transformer in self.gnn_transformers:
             x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
-        if dropout:
-            return x, self.dropout.dropped_indices
-        else:
-            return x
+        return x
 
 class GNNTransformer(nn.Module):
     def __init__(self, num_features, num_channels, hidden_ratio, heads):
@@ -75,9 +68,11 @@ class GNNTransformer(nn.Module):
 
         # Reshape to concatenate all edge indices
         batch_patch_edge_index = batch_patch_edge_index.permute(1, 0, 2).reshape(2, -1)
+        # it is now [2, P * B * C * C]
 
         # Vectorized edge distance creation
         batch_patch_edge_dist = edge_dist.repeat(P)
+        # this is just [P * B * C * C]
 
         # Apply GNN to all patches simultaneously
         channel_encoding = self.gnn_channel_encoder(gnn_input, batch_patch_edge_index, batch_patch_edge_dist)
