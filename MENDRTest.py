@@ -1,23 +1,24 @@
 import torch
+import torch.nn as nn
+import torch.utils.data as torchdata
+from torch.utils.data import ConcatDataset
+from torch.profiler import profile, record_function, ProfilerActivity
+
 import numpy as np
 import pandas as pd
-import random, os
-from torch.utils.data import ConcatDataset
+import random, os, math
 from torch_geometric.data import Data
 from Model.MENDR.MENDRCommon import _make_mask_idxes
-from Model.MENDR.MENDREncoder import MENDRPatchEncoder
-from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
-from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
+from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
+from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
-from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
+#from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-from Model.transforms import RandomTemporalCrop
 from Datasets.datasetPretrain import WaveletPretrainDataset
 from types import SimpleNamespace
-import torch.utils.data as torchdata
-import torch.nn as nn
-import math
-from torch.profiler import profile, record_function, ProfilerActivity
+from time import perf_counter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
@@ -37,31 +38,89 @@ def check_sanity(m):
 
 def testMENDRSuperPatching():
     example_input = {
-            'delta': torch.randn(4, 19, 246).to(device).float(),
-            'theta': torch.randn(4, 19, 246).to(device).float(),
-            'alpha': torch.randn(4, 19, 486).to(device).float(),
-            'beta': torch.randn(4, 19, 966).to(device).float(),
-            'gamma': torch.randn(4, 19, 1925).to(device).float()
+            'delta': torch.randn(128, 19, 240).to(device).float(),
+            'theta': torch.randn(128, 19, 240).to(device).float(),
+            'alpha': torch.randn(128, 19, 480).to(device).float(),
+            'beta': torch.randn(128, 19, 960).to(device).float(),
+            'gamma': torch.randn(128, 19, 1920).to(device).float()
     }
 
-    model = MENDR_model(device=device)
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            delta_encoded_h=1,
+                            theta_encoded_h=1,
+                            alpha_encoded_h=1,
+                            beta_encoded_h=1,
+                            gamma_encoded_h=1,
+                            high_encoded_h=None,
+                            hidden_encoded_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            device=device,
+                            )
 
     assert model.WAVELET_LENGTHS == {'delta': 4, 'theta': 4, 'alpha': 8, 'beta': 16,  'gamma': 32, 'high': 64}, f"model.WAVELET_LENGTHS: {model.WAVELET_LENGTHS}"
-    assert model.WAVELET_SUPER_PATCH_LENGTHS == {'delta': 40, 'theta': 40, 'alpha': 80, 'beta': 160,  'gamma': 320, 'high': 640}, f"model.WAVELET_SUPER_PATCH_LENGTHS: {model.WAVELET_SUPER_PATCH_LENGTHS}"
-    assert model.WAVELET_SUPER_PATCH_HOP_LENGTHS == {'delta': 20, 'theta': 20, 'alpha': 40, 'beta': 80,  'gamma': 160, 'high': 320}, f"modelWAVELET_SUPER_PATCH_HOP_LENGTHS: {model.WAVELET_SUPER_PATCH_HOP_LENGTHS}"
+    assert model.WAVELET_SUPER_PATCH_LENGTHS == {'delta': 20, 'theta': 20, 'alpha': 40, 'beta': 80,  'gamma': 160, 'high': 320}, f"model.WAVELET_SUPER_PATCH_LENGTHS: {model.WAVELET_SUPER_PATCH_LENGTHS}"
 
-    patchified_data = model._super_patchify(example_input)
+
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 5 seconds: {time_end - time_start}")
 
     expected_shape = {
-        'delta': torch.Size([4, 11, 19, 40]),
-        'theta': torch.Size([4, 11, 19, 40]),
-        'alpha': torch.Size([4, 11, 19, 80]),
-        'beta': torch.Size([4, 11, 19, 160]),
-        'gamma': torch.Size([4, 11, 19, 320]),
+        'delta': torch.Size([128, 12, 19, 20]),
+        'theta': torch.Size([128, 12, 19, 20]),
+        'alpha': torch.Size([128, 12, 19, 40]),
+        'beta':  torch.Size([128, 12, 19, 80]),
+        'gamma': torch.Size([128, 12, 19, 160]),
     }
 
     for band in patchified_data:
         assert patchified_data[band].shape == expected_shape[band], f"{band}: Actual Shape: {patchified_data[band].shape} Expected Shape: {expected_shape[band]}"
+
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=1,
+                            delta_encoded_h=1,
+                            theta_encoded_h=1,
+                            alpha_encoded_h=1,
+                            beta_encoded_h=1,
+                            gamma_encoded_h=1,
+                            high_encoded_h=None,
+                            hidden_encoded_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            device=device,
+                            )
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 1 second: {time_end - time_start}")
+
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=10,
+                            delta_encoded_h=1,
+                            theta_encoded_h=1,
+                            alpha_encoded_h=1,
+                            beta_encoded_h=1,
+                            gamma_encoded_h=1,
+                            high_encoded_h=None,
+                            hidden_encoded_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            device=device,
+                            )
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 10 seconds: {time_end - time_start}")
+
 
 def testMakeMaskIdxes():
     torch.manual_seed(42)
@@ -847,11 +906,11 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
+    '''
     print("Testing MENDR Make Mask Idxes...")
     testMakeMaskIdxes()
     print("MENDR Make Mask Idxes Test Passed!")
@@ -908,13 +967,11 @@ if __name__ == "__main__":
     print("Testing MENDR Parameters passed!")
 
 
-    '''
     print("Testing pretrainer fit with validation...")
     testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
 
 
-    '''
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
     print("PreTrainer fit with tiny contextualizer with validation test passed!")

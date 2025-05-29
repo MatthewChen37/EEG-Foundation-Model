@@ -12,6 +12,33 @@ class WaveletPretrainDataset(Dataset):
 		super().__init__(root, transform)
 		self.frac = frac
 		self.suffix = suffix
+		'''
+		Data segments for pretraining are 60 seconds long
+		For 128Hz, this should mean the original EEG data length is 128 * 60 = 7680 time points,
+		which would imply that wavelet lengths are 7680 / 2^N  long for each level. However,
+		https://pywavelets.readthedocs.io/en/latest/ref/dwt-discrete-wavelet-transform.html#single-level-dwt
+		in preprocessing we use the default symmetric mode. Thus, series lengths are: 
+		len(cA) == len(cD) == floor((len(data) + wavelet.dec_len - 1) / 2) long. One can set: 
+		mode to "periodization" to a better match:
+		len(cA) == len(cD) == ceil(len(data) / 2).
+
+		Here we force the length to be "nice" by truncating regardless of the mode.
+		'''
+		if self.suffix == "v128Hz":
+			self.data_length = 7680
+			self.segment_length = {
+				'delta': 240,
+				'theta': 240,
+				'alpha': 480,
+				'beta': 960,
+				'gamma': 1920,
+				'high': 3840,
+			}
+		elif self.suffix == "v256Hz":
+			self.data_length = 15360
+			self.segment_length = None # TODO
+		else:
+			raise ValueError("Suffix must be v128Hz or v256Hz")
 
 		# Prevents the FutureWarning: from loading without setting weights_only to True
 		warnings.filterwarnings("ignore", category=FutureWarning)
@@ -31,6 +58,7 @@ class WaveletPretrainDataset(Dataset):
 			for future in tqdm(futures):
 				future.result()
 		self.length = len(self.epochs)
+
 	def _process_subject(self, subject):
 		subject_graph_folder = os.path.join(self.root, subject, f"graphs_{self.suffix}")
 		wavelet_path = os.path.join(self.root, subject, f"wavelet_decompositions_{self.suffix}")
@@ -49,12 +77,13 @@ class WaveletPretrainDataset(Dataset):
 				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name), weights_only=False)
 			for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
 				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx,
-							   epoch_wavelet_dict['delta'],
-								epoch_wavelet_dict['theta'],
-								epoch_wavelet_dict['alpha'],
-								epoch_wavelet_dict['beta'],
-								epoch_wavelet_dict['gamma'])
+							   epoch_wavelet_dict['delta'][:, :self.segment_length['delta']],
+								epoch_wavelet_dict['theta'][:, :self.segment_length['theta']],
+								epoch_wavelet_dict['alpha'][:, :self.segment_length['alpha']],
+								epoch_wavelet_dict['beta'][:, :self.segment_length['beta']],
+								epoch_wavelet_dict['gamma'][:, :self.segment_length['gamma']])
 				self.epochs.append(epoch_tuple)
+
 	def len(self):
 		return self.length
 	def get(self, idx):

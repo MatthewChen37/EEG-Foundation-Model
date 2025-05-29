@@ -11,7 +11,6 @@ patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
   super_patch_seconds: 2
-  hop_length: 0.5
   delta_encoded_h: 15
   theta_encoded_h: 15
   alpha_encoded_h: 30
@@ -19,11 +18,12 @@ patch_encoder_params:
   gamma_encoded_h: 120
   # high_encoded_h: 64
   n_gnn_transformer_layers: 1
-  hidden_encoded_ratio: 2
+  hidden_gnn_ratio: 2
+  n_gnn_heads: 1
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.9
-  val_frac: 0.1
+  train_frac: 0.01
+  val_frac: 0.005
   random_seed: 42
   learning_rate: 1.0e-3
   l2_weight_decay: 0.0005

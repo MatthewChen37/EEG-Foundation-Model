@@ -110,29 +110,15 @@ class LogEuclidLayerNorm(nn.Module):
 
         return C_norm
 
-class Std_Norm(nn.Module):
+class std_norm(nn.Module):
 	def __init__(self):
 		super().__init__()
-		#self.layer_norm = nn.LayerNorm(num_channels, elementwise_affine=False)
-
 	def forward(self, x):
 		# Expects x [Batch Size, Patches, Channels, Time Steps]
+		# To make each patch normalized
 		# https://github.com/935963004/LaBraM/blob/5f5ec3e702199ef0f16ee0bbaa8c2997cb77b786/modeling_vqnsp.py#L143
 		mean = torch.mean(x, dim=(1, 2, 3), keepdim=True)
 		std = torch.std(x, dim=(1, 2, 3), keepdim=True)
-		x = (x - mean) / std
-		#x = self.layer_norm(x)
-		return x
-
-class Std_Norm2(nn.Module):
-	def __init__(self):
-		super().__init__()
-		#self.layer_norm = nn.LayerNorm(num_channels, elementwise_affine=False)
-
-	def forward(self, x):
-		# Expects x [Batch Size, Channels, Time Steps]
-		mean = torch.mean(x, dim=(1, 2), keepdim=True)
-		std = torch.std(x, dim=(1, 2), keepdim=True)
 		x = (x - mean) / std
 		return x
 
