@@ -5,16 +5,17 @@ import math
 from math import floor
 import copy
 from copy import deepcopy
+from einops import rearrange
 
 class MENDRReconstructionDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, encoded_h, hidden_seq_length, seq_len, device):
         super().__init__()
         self.num_channels = num_channels
-        self.patch_size = sub_patch_size
-        self.stride = max(self.patch_size // 2, 1)
+        self.patch_size = sub_patch_size // 4
+        self.stride = max(1, self.patch_size // 2)
         self.device = device
-        self.hidden_seq_length = hidden_seq_length
         self.seq_len = seq_len
+        self.encoded_h = encoded_h
 
         '''
         self.decode_L_out = (self.L_out_2 - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
@@ -27,7 +28,7 @@ class MENDRReconstructionDecoder(nn.Module):
         self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
         '''
 
-        self.act = nn.GELU()
+        '''
         self.decode_L_out = (self.hidden_seq_length - 1) * self.stride - 2 * 0 + 1 * (self.patch_size - 1) + 0 + 1
         self.up1 = nn.Sequential(nn.ConvTranspose1d(in_channels=encoded_h, out_channels=encoded_h * 2, kernel_size=self.patch_size, stride=self.stride, groups=1).to(self.device), self.act)
         self.decode_L_out = (self.decode_L_out - 1) * (self.stride) - 2 * 0 + 1 * (2 - 1) + 0 + 1
@@ -37,15 +38,47 @@ class MENDRReconstructionDecoder(nn.Module):
         self.decode_L_out = floor((self.decode_L_out / 1) + 1)
         self.up3 = nn.Sequential(nn.Conv1d(in_channels=encoded_h * 2, out_channels=19, kernel_size=1, stride=1, groups=1).to(self.device), self.act)
         self.up4 = nn.Linear(self.decode_L_out, self.seq_len).to(self.device)
+        '''
+
+        self.act = nn.GELU()
+
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=self.encoded_h, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
+            nn.GELU(),
+        )
+
+        self.up2 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=self.encoded_h, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
+            nn.GELU(),
+        )
+
+        self.up3 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=1, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
+            nn.GELU(),
+        )
+
+        self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=19)
+
+        self.up4 = nn.Sequential(self.act, nn.Linear(self.seq_len, self.seq_len))
 
     def forward(self, x):
-        # x: [Batch Size*Patches, encoded_h, L_out_2]
+        # x: [Batch Size, Patches, Channels * patch_embedder.out_dim, Time Steps]
         #x  = self.SEBlock(x)
+        x = rearrange(x, 'B P (C O) T -> B O (P C) T')
+        # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
         x = self.up1(x)
-        x = self.SEBlock1(x)
         x = self.up2(x)
         x = self.up3(x) 
+        # x: [Batch Size, 1, Patches * Channels, Time Steps]
+        x = x.squeeze(1)
+        x = rearrange(x, 'B (P C) T -> (B P) C T')
+        # x: [Batch Size * Patches, Channels, Time Steps]
+        x = self.SEBlock(x)
         x = self.up4(x)
+        # x: [Batch Size * Patches, Channels, Time Steps]
         return x
 
 # The Conv -> BN -> GELU -> Conv part of the anwswer

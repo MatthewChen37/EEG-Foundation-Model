@@ -92,16 +92,14 @@ class WaveletEncoderDecoder(nn.Module):
         x = rearrange(x, '(B P) C T -> B P C T', B=B, P=P, C=C, T=T)
         # x: [Batch Size, Patches, Channels, Time Steps]
         x = self.patch_embedder(x)
-        # x: [Batch Size, Patches * Channels, patch_embedder.out_dim * Time Steps]
+        # x: [Batch Size, Patches, Channels * patch_embedder.out_dim, Time Steps]
 
-        x = x.reshape(B, P, self.encoded_h, self.hidden_encoded_length)
         decoding = None
         if self.reconstruction_decoder is not None and self.subject_embeddings is not None:
             decoding = x.clone()
-            subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, self.hidden_encoded_length]
+            subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, Time Steps]
             decoding = decoding + subject_embeddings
             # decoding: [Batch Size * Patches, Channels, self.seq_len]
-            decoding = decoding.reshape(B * P, self.encoded_h, self.hidden_encoded_length)
             decoding = self.reconstruction_decoder(decoding)
         return x, decoding
 
@@ -304,8 +302,8 @@ class PatchEmbedder(nn.Module):
         x = self.proj1(x)
         # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
         x = self.proj2(x)
-        x = rearrange(x, 'B O PC T -> B PC (O T)', B=B, P=P, C=C, T=T, O=self.out_dim)
-        # x: [Batch Size, Patches * Channels, out_dim * Time Steps]
+        x = rearrange(x, 'B O (P C) T -> B P (C O) T)', B=B, P=P, C=C, T=T, O=self.out_dim)
+        # x: [Batch Size, Patches, Channels * out_dim, Time Steps]
         return x
 
 # DEPRECATED
