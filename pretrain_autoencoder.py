@@ -83,6 +83,7 @@ def main(cfg:DictConfig) -> None:
     print("Total Decoder Params: ", total_decoder_params)
     print("Total number of parameters: ", total_encoder_params + total_decoder_params)
 
+    '''
     ### Training ###
     if cfg.training_params.val_frac > 0:
         print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -94,6 +95,7 @@ def main(cfg:DictConfig) -> None:
     else:
         print("No Validation Set. Training on Whole Dataset.")
         trainer.fit(training_dataset=dataset, cfg=cfg)
+    '''
 
     print("*" * 50)
     print("Cleaning up resources...")

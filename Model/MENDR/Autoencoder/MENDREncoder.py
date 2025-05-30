@@ -19,21 +19,21 @@ intepretation.
 '''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
-                encoded_h, hidden_gnn_ratio, n_gnn_transformer_layers, num_subjects, device):
+                hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads, num_subjects, device):
         super().__init__()
         self.num_channels = num_channels
-        self.channel_dropout = Dropout1dWithIndexTracking(device, p=0.1)
+        self.channel_dropout = Dropout1dWithIndexTracking(p=0.1)
         self.patch_size = sub_patch_size
         self.device = device
-        self.encoded_h = encoded_h
-        assert isinstance(hidden_encoded_ratio, int) and hidden_encoded_ratio > 0, "hidden_encoded_ratio must be a positive integer"
-        self.hidden_encoded_ratio = hidden_encoded_ratio
+        assert isinstance(hidden_gnn_mlp_ratio, int) and hidden_gnn_mlp_ratio > 0, "hidden_gnn_mlp_ratio must be a positive integer"
+        self.hidden_gnn_mlp_ratio = hidden_gnn_mlp_ratio
+        self.n_gnn_heads = n_gnn_heads
         self.seq_len = super_patch_seq_len
         self.act = nn.GELU()
 
         self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=self.num_channels, num_features=self.seq_len,
-                                                           device=self.device, n_gnn_transformer_layers=n_gnn_transformer_layers,
-                                                           hidden_ratio=hidden_gnn_ratio, heads=self.hidden_encoded_ratio)
+                                                        n_gnn_transformer_layers=n_gnn_transformer_layers,
+                                                        hidden_ratio=hidden_gnn_mlp_ratio, heads=self.n_gnn_heads)
 
         self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=19).to(self.device)
 
@@ -41,21 +41,16 @@ class WaveletEncoderDecoder(nn.Module):
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
-                                    embedding_dim=self.hidden_encoded_length).to(self.device)
+                                    embedding_dim=self.seq_len).to(self.device)
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=encoded_h, hidden_seq_length=self.hidden_encoded_length,
+                                                                 encoded_h=8 * self.num_channels, hidden_seq_length=self.seq_len,
                                                                  seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)
-        patch_norm1_count = sum(p.numel() for p in self.patch_norm1.parameters() if p.requires_grad)
-        patch_embedder_lin_count = sum(p.numel() for p in self.patch_embedder_lin.parameters() if p.requires_grad)
-        patch_embedder2_count = sum(p.numel() for p in self.patch_embedder2.parameters() if p.requires_grad)
-        patch_norm2_count = sum(p.numel() for p in self.patch_norm2.parameters() if p.requires_grad)
-        patch_embedder2_lin_count = sum(p.numel() for p in self.patch_embedder2_lin.parameters() if p.requires_grad)
         gnn_spatial_harmonizer_count = sum(p.numel() for p in self.gnn_spatial_harmonizer.parameters() if p.requires_grad)
-        return patch_embedder_count + patch_norm1_count + patch_embedder_lin_count + patch_embedder2_count + patch_norm2_count + patch_embedder2_lin_count + gnn_spatial_harmonizer_count
+        return patch_embedder_count + gnn_spatial_harmonizer_count
 
     def disableDecoder(self):
         self.subject_embeddings = None
@@ -67,13 +62,8 @@ class WaveletEncoderDecoder(nn.Module):
 
     def getEncoderParams(self):
         patch_embedder_params = list(self.patch_embedder.parameters())
-        patch_norm1_params = list(self.patch_norm1.parameters())
-        patch_embedder_lin_params = list(self.patch_embedder_lin.parameters())
-        patch_embedder2_params = list(self.patch_embedder2.parameters())
-        patch_norm2_params = list(self.patch_norm2.parameters())
-        patch_embedder2_lin_params = list(self.patch_embedder2_lin.parameters())
         gnn_encoder_params = list(self.gnn_spatial_harmonizer.parameters())
-        return patch_embedder_params + patch_norm1_params + patch_embedder_lin_params + patch_embedder2_params + patch_norm2_params + patch_embedder2_lin_params + gnn_encoder_params
+        return patch_embedder_params + gnn_encoder_params
                 
     def getDecoderParams(self):
         return list(self.reconstruction_decoder.parameters())
@@ -113,13 +103,9 @@ class MENDRPatchEncoder(nn.Module):
                 num_channels, 
                 sampling_rate,
                 super_patch_seconds,
-                delta_encoded_h,
-                theta_encoded_h,
-                alpha_encoded_h,
-                beta_encoded_h,
-                gamma_encoded_h,
-                hidden_encoded_ratio,
+                hidden_gnn_mlp_ratio,
                 n_gnn_transformer_layers,
+                n_gnn_heads,
                 num_subjects,
                 device,
                 high_encoded_h=None,
@@ -156,50 +142,50 @@ class MENDRPatchEncoder(nn.Module):
             'delta': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['delta'],
-                    encoded_h=delta_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['delta'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device
                     ),
             'theta': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['theta'],
-                    encoded_h=theta_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['theta'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device
                     ),
             'alpha': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['alpha'],
-                    encoded_h=alpha_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['alpha'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device 
                     ),
             'beta': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['beta'],
-                    encoded_h=beta_encoded_h,
                     super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['beta'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device
                     ),
             'gamma': WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size = self.WAVELET_LENGTHS['gamma'],
-                    encoded_h = gamma_encoded_h,
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device
                     ),
@@ -209,17 +195,17 @@ class MENDRPatchEncoder(nn.Module):
             self.encoder_decoders['high'] = WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size = self.WAVELET_LENGTHS['high'],
-                    encoded_h = high_encoded_h,
                     super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['high'],
-                    hidden_encoded_ratio=hidden_encoded_ratio,
+                    hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
+                    n_gnn_heads=n_gnn_heads,
                     device = device
                     )
             self.patch_normalizers['high'] = LayerNormChannelOnly(num_channels=num_channels)
         self.encoder_decoders = nn.ParameterDict(self.encoder_decoders)
 
         for band, encoder_decoder in self.encoder_decoders.items():
-            print(f"{band} Hidden Token Sequence Length: {encoder_decoder.hidden_encoded_length}")
+            print(f"{band} Hidden Token Sequence Length: {encoder_decoder.seq_len}")
 
     def forward(self, data):
         patchified_data = self._super_patchify(data)
@@ -278,7 +264,6 @@ class PatchEmbedder(nn.Module):
 
         self.in_dim = in_dim
         self.out_dim = out_dim
-        self.kernel_size = kernel_size
         # https://github.com/935963004/LaBraM/blob/5f5ec3e702199ef0f16ee0bbaa8c2997cb77b786/modeling_pretrain.py#L28
 
         # Maintain sequence length
