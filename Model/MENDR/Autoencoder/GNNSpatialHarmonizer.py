@@ -5,6 +5,7 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
+from einops import rearrange
 
 class GNNSpatialHarmonizer(nn.Module):
     def __init__(self, num_channels, num_features, n_gnn_transformer_layers, hidden_ratio, heads):
@@ -71,18 +72,18 @@ class GNNTransformer(nn.Module):
         # it is now [2, P * B * C * C]
 
         # Vectorized edge distance creation
-        batch_patch_edge_dist = edge_dist.repeat(P)
+        batch_patch_edge_dist = edge_dist.repeat((P, 1))
         # this is just [P * B * C * C]
 
         # Apply GNN to all patches simultaneously
         channel_encoding = self.gnn_channel_encoder(gnn_input, batch_patch_edge_index, batch_patch_edge_dist)
         
         # Reshape back and add residual connection
-        channel_encoding = channel_encoding.view(B, P, C, self.num_features)
+        channel_encoding = rearrange(channel_encoding, '(B P C) F -> B P C F', B=B, P=P, C=C)
         x = x + channel_encoding
-        
-        x = x.view(B*P, C, self.num_features)
-        # x: [Batch Size * Patches, Channels, self.hidden_ratio * self.num_features]
+
+        x = rearrange(x, 'B P C F -> (B P) C F', B=B, P=P, C=C)
+        # x: [Batch Size * Patches, Channels, self.num_features]
         x = self.layer_norm1(x)
         x = x + self.gnn_lin(x)
         x = self.layer_norm2(x)
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         edge_index = torch.tensor([first_row, second_row], device=device)
 
         # Create edge distances
-        edge_dist = torch.randn(edge_index.size(1), device=device)
+        edge_dist = torch.randn((edge_index.size(1), 1), device=device)
         assert edge_index.shape == torch.Size([2, B * C * C]), f"Edge Index Shape: {edge_index.shape}, should be: (2, {B * C * C})"
         
         return {
