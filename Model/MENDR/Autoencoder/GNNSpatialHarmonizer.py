@@ -117,18 +117,20 @@ class GNNTransformer(nn.Module):
 class Dropout1dWithIndexTracking(nn.Dropout1d):
     def __init__(self, p):
         super().__init__()
+        self.p = p
         self.dropped_indices = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, input):
+        # input: [Batch Size, Patches, Channels, num_features]
         if not self.training:
             return input
         
         # Generate a random mask (0s and 1s) for dropout
-        mask = (torch.rand((input.size(0), input.size(1))) > self.p).float().to(self.device)
+        mask = (torch.rand((input.size(0), input.size(1), input.size(2))) > self.p).float().to(self.device)
 
         # Apply the mask to the input
-        output = input * mask.unsqueeze(2)
+        output = input * mask.unsqueeze(3)
         
         # Store the dropped channel indices
         self.dropped_indices = mask == 0

@@ -10,7 +10,7 @@ import random, os, math
 from torch_geometric.data import Data
 from Model.MENDR.MENDRCommon import _make_mask_idxes
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
-from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer
+from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer, Dropout1dWithIndexTracking
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
@@ -48,15 +48,10 @@ def testMENDRSuperPatching():
     model = MENDRPatchEncoder(num_channels=19,
                             sampling_rate=128,
                             super_patch_seconds=5,
-                            delta_encoded_h=1,
-                            theta_encoded_h=1,
-                            alpha_encoded_h=1,
-                            beta_encoded_h=1,
-                            gamma_encoded_h=1,
-                            high_encoded_h=None,
-                            hidden_encoded_ratio=1,
+                            hidden_gnn_mlp_ratio=1,
                             n_gnn_transformer_layers=1,
                             num_subjects=1,
+                            n_gnn_heads=2,
                             device=device,
                             )
 
@@ -84,15 +79,10 @@ def testMENDRSuperPatching():
     model = MENDRPatchEncoder(num_channels=19,
                             sampling_rate=128,
                             super_patch_seconds=1,
-                            delta_encoded_h=1,
-                            theta_encoded_h=1,
-                            alpha_encoded_h=1,
-                            beta_encoded_h=1,
-                            gamma_encoded_h=1,
-                            high_encoded_h=None,
-                            hidden_encoded_ratio=1,
+                            hidden_gnn_mlp_ratio=1,
                             n_gnn_transformer_layers=1,
                             num_subjects=1,
+                            n_gnn_heads=2,
                             device=device,
                             )
     time_start = perf_counter()
@@ -104,15 +94,10 @@ def testMENDRSuperPatching():
     model = MENDRPatchEncoder(num_channels=19,
                             sampling_rate=128,
                             super_patch_seconds=10,
-                            delta_encoded_h=1,
-                            theta_encoded_h=1,
-                            alpha_encoded_h=1,
-                            beta_encoded_h=1,
-                            gamma_encoded_h=1,
-                            high_encoded_h=None,
-                            hidden_encoded_ratio=1,
+                            hidden_gnn_mlp_ratio=1,
                             n_gnn_transformer_layers=1,
                             num_subjects=1,
+                            n_gnn_heads=2,
                             device=device,
                             )
     time_start = perf_counter()
@@ -121,7 +106,23 @@ def testMENDRSuperPatching():
     time_end = perf_counter()
     print(f"Time taken to patchify 10 seconds: {time_end - time_start}")
 
+def testDropout1dWithIndexTracking():
+    torch.manual_seed(42)
+    np.random.seed(42)
+    example_input = torch.randn(2, 2, 10, 8).to(device).float()
 
+    dropout = Dropout1dWithIndexTracking(p=0.1)
+
+    with torch.no_grad():
+        output = dropout(example_input)
+
+    assert output.shape == example_input.shape, f"Output Shape: {output.shape} does not match {example_input.shape}"
+
+    dropped_indices = dropout.dropped_indices
+    assert dropped_indices.shape == torch.Size([2, 2, 10]), f"Dropped Indices Shape: {dropped_indices.shape} does not match {torch.Size([2, 2, 10])}"
+
+    assert output[0, 0, 5].all() == 0, f"Output[0, 0, 2] is not 0: {output[0, 0, 5]}"
+    
 def testMakeMaskIdxes():
     torch.manual_seed(42)
     np.random.seed(42)
@@ -910,11 +911,15 @@ if __name__ == "__main__":
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
 
-    '''
+    print("Testing Dropout1dWithIndexTracking...")
+    testDropout1dWithIndexTracking()
+    print("Dropout1dWithIndexTracking Test Passed!")
+
     print("Testing MENDR Make Mask Idxes...")
     testMakeMaskIdxes()
     print("MENDR Make Mask Idxes Test Passed!")
 
+    '''
     print("Testing Encoder...")
     testEncoder()
     print("Encoder test passed!")
