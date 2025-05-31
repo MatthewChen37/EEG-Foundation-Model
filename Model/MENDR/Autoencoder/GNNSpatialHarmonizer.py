@@ -32,12 +32,14 @@ class GNNTransformer(nn.Module):
         self.act = nn.GELU()
 
         self.gnn_channel_encoder = GATConv(num_features, num_features, heads=self.heads, concat=False)
-        self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
+        #self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
         self.gnn_lin = nn.Sequential(self.act, nn.Linear(self.num_features, self.hidden_ratio * self.num_features),
                                      self.act, nn.Linear(self.hidden_ratio * self.num_features, self.num_features)
                                      )
-        self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
-
+        #self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
+        # Are layer norm and graph norm equivalent in this case?
+        self.graph_norm1 = GraphNorm(in_channels=self.num_features)
+        self.graph_norm2 = GraphNorm(in_channels=self.num_features)
 
     def forward(self, x, edge_index, edge_dist, B, P, C):
         # x: [Batch Size * Patches, Channels, num_features]
@@ -81,11 +83,12 @@ class GNNTransformer(nn.Module):
         # Reshape back and add residual connection
         channel_encoding = rearrange(channel_encoding, '(B P C) F -> B P C F', B=B, P=P, C=C)
         x = x + channel_encoding
-
-        x = rearrange(x, 'B P C F -> (B P) C F', B=B, P=P, C=C)
-        # x: [Batch Size * Patches, Channels, self.num_features]
+        # x: [Batch Size * Patches * Channels, self.num_features]
         #x = self.layer_norm1(x)
+        x = rearrange(x, 'B P C F -> (B P) C F', B=B, P=P, C=C)
+        x = self.graph_norm1(x, batch_size=B * P)
         x = x + self.gnn_lin(x)
+        x = self.graph_norm2(x, batch_size=B * P)
         #x = self.layer_norm2(x)
         return x
 

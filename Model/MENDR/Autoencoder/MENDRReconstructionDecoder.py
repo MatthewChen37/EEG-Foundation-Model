@@ -45,13 +45,11 @@ class MENDRReconstructionDecoder(nn.Module):
 
         self.up = nn.Sequential(
             nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=self.encoded_h, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
+            nn.GroupNorm(num_groups=4, num_channels=self.encoded_h),
             nn.GELU(),
             nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=self.encoded_h, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
             nn.GELU(),
             nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=self.encoded_h, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),
             nn.GELU(),
             nn.ConvTranspose2d(in_channels=self.encoded_h, out_channels=1, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
             #nn.GroupNorm(num_groups=4, num_channels=self.num_channels),

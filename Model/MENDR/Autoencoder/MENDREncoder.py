@@ -37,14 +37,14 @@ class WaveletEncoderDecoder(nn.Module):
 
         self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=1).to(self.device)
 
-        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=8, seq_len=self.seq_len).to(self.device)
+        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=24, seq_len=self.seq_len).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=self.seq_len).to(self.device)
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=8, hidden_seq_length=self.seq_len,
+                                                                 encoded_h=24, hidden_seq_length=self.seq_len,
                                                                  seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
@@ -247,6 +247,7 @@ class MENDRPatchEncoder(nn.Module):
                 '''
                 patched_wavelet_data = rearrange(wavelet_data, 'b c (pn pl) -> b pn c pl', pl=wavelet_super_patch_length)
                 patchified_data[band] = self.patch_normalizer(patched_wavelet_data)
+                #patchified_data[band] = patched_wavelet_data
         # Truncate patches to the minimum number of patches
         return patchified_data
 
@@ -284,6 +285,12 @@ class PatchEmbedder(nn.Module):
             nn.GELU(),
         )
 
+        self.proj3 = nn.Sequential(
+            nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
+            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GELU(),
+        )
+
     def forward(self, x):
         B, P, C, T = x.shape
         x = rearrange(x, 'B P C T -> B (P C) T', B=B, T=T)
@@ -292,6 +299,8 @@ class PatchEmbedder(nn.Module):
         x = self.proj1(x)
         # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
         x = self.proj2(x)
+        # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
+        x = self.proj3(x)
         x = rearrange(x, 'B O (P C) T -> B P (C O) T', B=B, P=P, C=C, T=T, O=self.out_dim)
         # x: [Batch Size, Patches, Channels * out_dim, Time Steps]
         return x
