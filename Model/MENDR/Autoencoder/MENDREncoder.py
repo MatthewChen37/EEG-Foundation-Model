@@ -35,16 +35,16 @@ class WaveletEncoderDecoder(nn.Module):
                                                         n_gnn_transformer_layers=n_gnn_transformer_layers,
                                                         hidden_ratio=hidden_gnn_mlp_ratio, heads=self.n_gnn_heads)
 
-        self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=19).to(self.device)
+        self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=1).to(self.device)
 
-        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=8).to(self.device)
+        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=8, seq_len=self.seq_len).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=self.seq_len).to(self.device)
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=8 * self.num_channels, hidden_seq_length=self.seq_len,
+                                                                 encoded_h=8, hidden_seq_length=self.seq_len,
                                                                  seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
@@ -76,9 +76,8 @@ class WaveletEncoderDecoder(nn.Module):
         edge_index = graph.edge_index.to(self.device)
         edge_dist = graph.edge_attr.to(self.device)
         x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
-        x = self.SEBlock(x)
-
         # x: [Batch Size * Patches, Channels, Time Steps]
+        x = self.SEBlock(x)
         x = rearrange(x, '(B P) C T -> B P C T', B=B, P=P, C=C, T=T)
         # x: [Batch Size, Patches, Channels, Time Steps]
         x = self.patch_embedder(x)
@@ -90,7 +89,7 @@ class WaveletEncoderDecoder(nn.Module):
             subject_embeddings = self.subject_embeddings(subjects.long()).unsqueeze(1).unsqueeze(1) # Make it [Batch, 1, 1, Time Steps]
             decoding = decoding + subject_embeddings
             # decoding: [Batch Size * Patches, Channels, self.seq_len]
-            decoding = self.reconstruction_decoder(decoding)
+            decoding = self.reconstruction_decoder(decoding, B, P, C, T)
         return x, decoding
 
 
@@ -257,24 +256,30 @@ class MENDRPatchEncoder(nn.Module):
                                     embedding_dim=1)
 
 class PatchEmbedder(nn.Module):
-    def __init__(self, patch_size, in_dim=1, out_dim=8):
+    def __init__(self, patch_size, seq_len, in_dim=1, out_dim=8):
         super().__init__()
-        self.patch_size = patch_size // 4
-        self.stride = max(1, self.patch_size // 2)
+        self.seq_len = seq_len
+        self.patch_size = (patch_size // 2) + 1
+        self.stride = 1
+        self.padding = max(1, (self.patch_size - 1) // 2)
 
         self.in_dim = in_dim
         self.out_dim = out_dim
         # https://github.com/935963004/LaBraM/blob/5f5ec3e702199ef0f16ee0bbaa8c2997cb77b786/modeling_pretrain.py#L28
 
+        L_out = self.seq_len + 2 * (self.padding) - 1 * (self.patch_size - 1) - 1
+        L_out = floor((L_out / self.stride) + 1)
+        assert L_out == self.seq_len, f"Patch Sequence Length {L_out} does not match {self.seq_len}, patch_size: {self.patch_size}, stride: {self.stride}"
+
         # Maintain sequence length
         self.proj1 = nn.Sequential(
-            nn.Conv2d(in_channels=self.in_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            nn.Conv2d(in_channels=self.in_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
             nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
             nn.GELU(),
         )
 
         self.proj2 = nn.Sequential(
-            nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, (self.patch_size - 1)//2)),
+            nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
             nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
             nn.GELU(),
         )
@@ -287,7 +292,7 @@ class PatchEmbedder(nn.Module):
         x = self.proj1(x)
         # x: [Batch Size, out_dim, Patches * Channels, Time Steps]
         x = self.proj2(x)
-        x = rearrange(x, 'B O (P C) T -> B P (C O) T)', B=B, P=P, C=C, T=T, O=self.out_dim)
+        x = rearrange(x, 'B O (P C) T -> B P (C O) T', B=B, P=P, C=C, T=T, O=self.out_dim)
         # x: [Batch Size, Patches, Channels * out_dim, Time Steps]
         return x
 

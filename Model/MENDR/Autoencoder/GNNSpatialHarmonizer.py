@@ -84,9 +84,9 @@ class GNNTransformer(nn.Module):
 
         x = rearrange(x, 'B P C F -> (B P) C F', B=B, P=P, C=C)
         # x: [Batch Size * Patches, Channels, self.num_features]
-        x = self.layer_norm1(x)
+        #x = self.layer_norm1(x)
         x = x + self.gnn_lin(x)
-        x = self.layer_norm2(x)
+        #x = self.layer_norm2(x)
         return x
 
     def _sequential_forward(self, x, edge_index, edge_dist, B, P, C):
