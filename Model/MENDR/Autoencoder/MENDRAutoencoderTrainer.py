@@ -64,17 +64,26 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
 
         return {band: loss.item() for band, loss in loss_dict.items()}
 
-    def fit(self, training_dataset, cfg, validation_dataset=None):
+    def fit(self, training_dataset, cfg, validation_dataset=None, train_sampler=None, val_sampler=None):
+        distributed = isinstance(train_sampler, DistributedSampler)
+        rank  = dist.get_rank()  if distributed else 0
+        world = dist.get_world_size() if distributed else 1
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
-        training_dataloader, validation_dataloader = self._setup_experiment(cfg)
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg, train_sampler, val_sampler)
 
         for epoch in range(cfg.training_params.epochs):
+            if distributed:
+                train_sampler.set_epoch(epoch)
             epoch_metrics = {}
             self.epoch = epoch
             ### TRAINING ###
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+            if rank == 0:
+                train_pbar = tqdm.trange(len(training_dataloader), desc=f"Epoch {epoch}", ncols=400, position=0, leave=True)
+            else:
+                train_pbar = range(len(training_dataloader))
+            # train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
 
@@ -100,12 +109,14 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                     epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                     pbar.set_postfix(val_metrics)
             ### SAVE ###
-            if cfg.meta_params.save_model:
+            if rank == 0 and cfg.meta_params.save_model:
                 self._retain_best(epoch, epoch_metrics)
-            self.standard_logging(epoch_metrics, "End of Epoch")
+            if rank == 0:
+                self.standard_logging(epoch_metrics, "End of Epoch")
+                mlflow.log_metrics(epoch_metrics, step=epoch)
             if cfg.meta_params.log_model_params_and_grads: 
                 self.logger.logEncoderParams(self.autoencoder, step=epoch)
-            mlflow.log_metrics(epoch_metrics, step=epoch)
+            #mlflow.log_metrics(epoch_metrics, step=epoch)
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step_cosine_annealing()
         if cfg.meta_params.save_final_model:

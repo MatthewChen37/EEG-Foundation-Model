@@ -7,6 +7,8 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
@@ -21,6 +23,17 @@ from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConc
             config_path="Model/MENDR/Autoencoder/autoencoder_experiment_configs/",
             config_name="default")
 def main(cfg:DictConfig) -> None:
+    world_size = int(os.environ.get("WORLD_SIZE",1))
+    rank = int(os.environ.get("RANK",0))
+    local_rank = int(os.environ.get("LOCAL_RANK",0))
+
+    distributed = world_size > 1
+    if distributed:
+        dist.init_process_group(backend="nccl", init_method="env://")
+        torch.cuda.set_device(local_rank)
+
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+
     # Start Run
     print("Job Started. Parameters:")
     print(OmegaConf.to_yaml(cfg))
@@ -31,7 +44,10 @@ def main(cfg:DictConfig) -> None:
         if cfg.training_params.val_frac <= 0:
             raise Exception("Must have validation dataset to save to dir")
 
-    Path(cfg.training_params.ckpt_dir).mkdir(parents=True, exist_ok=True)
+    if rank == 0:
+        Path(cfg.training_params.ckpt_dir).mkdir(parents=True, exist_ok=True)
+    # dist.barrier() # optional: let every worker wait until the dir exists? 
+
 
     ### Seed ###
     torch.cuda.empty_cache()
@@ -58,6 +74,15 @@ def main(cfg:DictConfig) -> None:
 
     ### Model ###
     mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, num_subjects=dataset.num_subjects, device=device)
+    if distributed:
+        mendr_autoencoder = torch.nn.parallel.DistributedDataParallel(
+            mendr_autoencoder.to(device),
+            device_ids=[local_rank],
+            output_device=local_rank,
+            find_unused_parameters=False
+        )
+    else:
+        mendr_autoencoder = mendr_autoencoder.to(device)
     optimizer = torch.optim.AdamW(mendr_autoencoder.parameters(),
                 betas=(0.9, 0.99),
                 lr=cfg.training_params.learning_rate,
@@ -89,8 +114,10 @@ def main(cfg:DictConfig) -> None:
         num_train = int(len(dataset) * (cfg.training_params.train_frac / (total_frac)))
         num_val = len(dataset) - num_train
         train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, num_val])
+        train_sampler = (DistributedSampler(train_dataset,num_replicas=world_size,rank=rank, shuffle=True) if distributed else None)
+        val_sampler   = (DistributedSampler(val_dataset,num_replicas=world_size, rank=rank, shuffle=False) if distributed else None)
         print("Train and Validation Dataset Length: ", len(train_dataset), len(val_dataset))
-        trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
+        trainer.fit(train_dataset, cfg, val_dataset, train_sampler, val_sampler)
     else:
         print("No Validation Set. Training on Whole Dataset.")
         trainer.fit(training_dataset=dataset, cfg=cfg)
@@ -104,6 +131,11 @@ def main(cfg:DictConfig) -> None:
     # If using multiple GPUs, synchronize them (optional but recommended)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
+    # If using distributed training, clean up the process group
+    if distributed:
+        dist.barrier()
+        dist.destroy_process_group()
+
     print("Cleanup complete.")
 
 if __name__ == '__main__':
