@@ -19,7 +19,7 @@ intepretation.
 '''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
-                hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads, num_subjects, device):
+                hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads, num_subjects, device, out_dim=24):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = Dropout1dWithIndexTracking(p=0.1)
@@ -30,6 +30,7 @@ class WaveletEncoderDecoder(nn.Module):
         self.n_gnn_heads = n_gnn_heads
         self.seq_len = super_patch_seq_len
         self.act = nn.GELU()
+        self.out_dim = out_dim
 
         self.gnn_spatial_harmonizer = GNNSpatialHarmonizer(num_channels=self.num_channels, num_features=self.seq_len,
                                                         n_gnn_transformer_layers=n_gnn_transformer_layers,
@@ -37,14 +38,14 @@ class WaveletEncoderDecoder(nn.Module):
 
         self.SEBlock = SEBasicBlock(self.num_channels, self.num_channels, reduction=1).to(self.device)
 
-        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=24, seq_len=self.seq_len).to(self.device)
+        self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=self.out_dim, seq_len=self.seq_len).to(self.device)
 
         # Subject Embeddings
         self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                     embedding_dim=self.seq_len).to(self.device)
         # Decoders
         self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=24, hidden_seq_length=self.seq_len,
+                                                                 encoded_h=self.out_dim, hidden_seq_length=self.seq_len,
                                                                  seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
@@ -186,7 +187,7 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
-                    device = device
+                    device = device,
                     ),
         }
 
