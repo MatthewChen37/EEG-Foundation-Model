@@ -30,6 +30,7 @@ class MENDRContextualizerTiny(nn.Module):
 											encoded_out=encoded_out,
 											n_transformer_layers=contextualizer_layers)
 
+
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels*out_dim=encoded_h, #time_step]
 		# Each patch gets coagulated into the same time scale through the covariance matrix
@@ -94,4 +95,21 @@ class MENDRContextualizer(nn.Module):
 			x_input = transformer(x_input, batch_size, num_patches)
 
 		return x_input, mask_idxes
-	
+
+
+class EuclideanPositionalEncoding(nn.Module):
+	def __init__(self, encoded_h, patch_len, dropout=0.1):
+		super().__init__()
+		self.encoded_h = encoded_h
+		self.len = patch_len
+		self.dropout = nn.Dropout(p=dropout)
+
+		self.positional_encoders = nn.ParameterDict({
+			'delta': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+			'theta': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+			'alpha': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+			'beta':  PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+			'gamma': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+			#'high': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
+		})
+

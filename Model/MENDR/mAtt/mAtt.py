@@ -10,8 +10,8 @@ class signal2spd(nn.Module):
     # convert signal epoch to SPD matrix
     def __init__(self):
         super().__init__()
-        self.dev = torch.device('cpu')
     def forward(self, x):
+        dev = x.device
         x = x.squeeze()
         mean = x.mean(axis=-1).unsqueeze(-1).repeat(1, 1, x.shape[-1])
         x = x - mean
@@ -23,7 +23,7 @@ class signal2spd(nn.Module):
         # To avoid division by 0 error
         tra = tra + (1e-7)*torch.ones(tra.shape).to(tra.device)
         cov /= tra
-        identity = torch.eye(cov.shape[-1], cov.shape[-1], device=self.dev).to(self.dev).repeat(x.shape[0], 1, 1)
+        identity = torch.eye(cov.shape[-1], cov.shape[-1], device=dev).repeat(x.shape[0], 1, 1)
         # Notice how they also added 1e-5 originally
         cov = cov+(1e-7*identity)
         return cov 
@@ -34,12 +34,10 @@ class E2R(nn.Module):
         self.signal2spd = signal2spd()
     def forward(self, x):
         # X is with shape [Batch, #patch, #encoded_h, #time_step]
-        device = x.device
         x_list = list(x.unbind(1))
         for i, item in enumerate(x_list):
             x_list[i] = self.signal2spd(item)
         x = torch.stack(x_list).permute(1, 0, 2, 3)
-        x = x.to(device)
         return x
 
 class AttentionManifold(nn.Module):

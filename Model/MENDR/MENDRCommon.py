@@ -2,48 +2,49 @@ import torch
 import torch.nn as nn
 import math
 import numpy as np
+from einops import rearrange
 
-# Based on BENDR's Convolutional Position Encoding Scheme
-# Positional as in "Temporal"
+# Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
+# Positional as in "Temporal" w.r.t to Patches
 class PositionalEncoding(nn.Module):
-	def __init__(self, encoded_h, patch_len, dropout=0.1):
+	def __init__(self, num_channels, out_dim, patch_len):
 		super().__init__()
-		self.encoded_h = encoded_h
-		self.len = patch_len
+		self.num_channels = num_channels
+		self.out_dim = out_dim
+		self.patch_len = patch_len
 
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
-		conv = nn.Conv2d(self.len, 1, kernel_size=(3, self.encoded_h), stride=(1, 1), padding=(1, (self.encoded_h - 1) // 2))
-		nn.init.normal_(conv.weight, mean=0, std=1)
-		nn.init.constant_(conv.bias, 0)
-		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
+		self.conv = nn.Conv2d(self.out_dim*self.patch_len, self.out_dim*self.patch_len,
+					kernel_size=(19, 3), stride=(1, 1), padding=(9, (3 - 1) // 2), groups=self.out_dim*self.patch_len)
 		#self.act = nn.GELU()
-		self.conv = nn.Sequential(conv, nn.Dropout(p=dropout))
-		self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
-		self.W_out = math.floor((self.W_out / 1) + 1)
+		#self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
+		#self.W_out = math.floor((self.W_out / 1) + 1)
 		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
 
 	def forward(self, x):
 		"""
 		Arguments:
-			x: Tensor, shape ``[Batch, #patch, encoded_h, #time_step]``
+			x: Tensor, shape [Batch Size, Patches, Channels * out_dim, Time Steps]
 		"""
-		x = x.permute(0, 3, 1, 2)
-		# x is now [Batch, #time_step, #patch, encoded_h]
-		#print(x.shape, x, "Is Nan: ", torch.isnan(x).any())
-		# Positional encoding is broadcast against x:
-		# [Batch, #time_step, #patch, encoded_h] + [Batch, 1, #patch, encoded_h] = [Batch, #time_step, #patch, encoded_h]
+		B, P = x.shape[0], x.shape[1]
+		x = rearrange(x, 'B P (C O) T -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		# x is now [Batch Size, out_dim * time_steps, Patches, Channels]
 		positional_encoding = self.conv(x)
-		#positional_encoding = self.act(positional_encoding)
-		# Positional Encoding is now [Batch, 1, #patch, W_out]
-		# positional_encoding = self.conv_lin(positional_encoding)
-		# Positional encoding is now [Batch, 1, #patch, encoded_h]
+		# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
 		x = x + positional_encoding 
-		# x is now back to [Batch, #patch, encoded_h, #time_step]
-		x = x.permute(0, 2, 3, 1)
+		# x is now back to [Batch Size, Patches, Channels * out_dim, Time Steps]
+		x = rearrange(x, 'B (O T) C P -> B P (C O) T', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		return x
 
-
 	
+def _make_mask_idxes(batch_size, num_patches, mask_ratio):
+		num_masked = int(mask_ratio * num_patches)
+		batch_mask_idxes = torch.zeros(batch_size, num_patches, dtype=torch.bool)
+		for i in range(batch_size):
+			indices = np.random.choice(num_patches, num_masked, replace=False)
+			batch_mask_idxes[i,indices] = True
+		return batch_mask_idxes
+
 class BatchTraceNormalization(nn.Module):
 	def __init__(self, num_channels=19, epsilon=1e-5):
 		super().__init__()
@@ -59,14 +60,6 @@ class BatchTraceNormalization(nn.Module):
 		identity = torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], 1, 1)
 		x = x + (self.epsilon * identity)
 		return x
-
-def _make_mask_idxes(batch_size, num_patches, mask_ratio):
-		num_masked = int(mask_ratio * num_patches)
-		batch_mask_idxes = torch.zeros(batch_size, num_patches, dtype=torch.bool)
-		for i in range(batch_size):
-			indices = np.random.choice(num_patches, num_masked, replace=False)
-			batch_mask_idxes[i,indices] = True
-		return batch_mask_idxes
 
 class LogEuclidLayerNorm(nn.Module):
     def __init__(self, num_channels=19, epsilon=1e-5):
@@ -122,10 +115,12 @@ class std_norm(nn.Module):
 		return x
 
 if __name__ == "__main__":
+	B, P, C, O, T = 4, 10, 19, 24, 64
+
 	# Test Positional Encoding
-	pe = PositionalEncoding("cpu", 114, 37)
+	pe = PositionalEncoding(num_channels=C, out_dim=O, patch_len=T)
 	print(f"Positional Encoding Test Parameters: {sum(p.numel() for p in pe.parameters() if p.requires_grad)}")
-	x = torch.randn(4, 11, 114, 37)
+	x = torch.randn(B, P, C*O, T)
 	x = pe(x)
-	assert x.shape == torch.Size([4, 11, 114, 37]), f"Positional Encoding Test Failed: {x.shape}"
+	assert x.shape == torch.Size([B, P, C*O, T]), f"Positional Encoding Test Failed: {x.shape}"
 	print("Positional Encoding Test Passed")
