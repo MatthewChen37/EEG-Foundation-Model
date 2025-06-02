@@ -6,21 +6,20 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
 from Model.MENDR.MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes, LogEuclidLayerNorm
 
 class ManifoldTransformer(nn.Module):
-    def __init__(self, device, encoded_h, hidden_scale=1.5, norm_output=True):
+    def __init__(self, encoded_h, hidden_scale=1.5, norm_output=True):
         super().__init__()
         self.encoded_h = encoded_h
         self.hidden_scale = hidden_scale
-        self.device = device
         self.norm_output = norm_output
 
-        self.manifold_self_attention = AttentionManifold(self.encoded_h, self.encoded_h, self.device)
+        self.manifold_self_attention = AttentionManifold(self.encoded_h, self.encoded_h)
         self.activation = SPDRectified()
-        self.manifold_self_spd_transform = nn.Sequential(SPDTransform(self.encoded_h, int(self.hidden_scale * self.encoded_h), self.device),
+        self.manifold_self_spd_transform = nn.Sequential(SPDTransform(self.encoded_h, int(self.hidden_scale * self.encoded_h)),
                                                          self.activation,
-                                                         SPDTransform(int(self.hidden_scale * self.encoded_h), self.encoded_h, self.device))
+                                                         SPDTransform(int(self.hidden_scale * self.encoded_h), self.encoded_h))
 
-        self.trace_normalization = BatchTraceNormalization(self.device)
-        self.layer_normalization = LogEuclidLayerNorm(self.device, self.encoded_h)
+        self.trace_normalization = BatchTraceNormalization()
+        self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
 
     def forward(self, x, batch_size, num_patches):
         # X is list of [Batch_Size, epochs, C, C]

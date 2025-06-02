@@ -19,10 +19,11 @@ intepretation.
 '''
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
-                hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads, num_subjects, device, out_dim=24):
+                hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads,
+                channel_dropout_p, num_subjects, device, out_dim=24):
         super().__init__()
         self.num_channels = num_channels
-        self.channel_dropout = Dropout1dWithIndexTracking(p=0.1)
+        self.channel_dropout = Dropout1dWithIndexTracking(p=channel_dropout_p)
         self.patch_size = sub_patch_size
         self.device = device
         assert isinstance(hidden_gnn_mlp_ratio, int) and hidden_gnn_mlp_ratio > 0, "hidden_gnn_mlp_ratio must be a positive integer"
@@ -108,6 +109,7 @@ class MENDRPatchEncoder(nn.Module):
                 n_gnn_heads,
                 num_subjects,
                 device,
+                channel_dropout_p=0.1,
                 high_encoded_h=None,
                 ):
         super().__init__()
@@ -147,7 +149,8 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
-                    device = device
+                    device = device,
+                    channel_dropout_p=channel_dropout_p
                     ),
             'theta': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -157,7 +160,8 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
-                    device = device
+                    device = device,
+                    channel_dropout_p=channel_dropout_p
                     ),
             'alpha': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -167,7 +171,8 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
-                    device = device 
+                    device = device,
+                    channel_dropout_p=channel_dropout_p
                     ),
             'beta': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -177,7 +182,8 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
-                    device = device
+                    device = device,
+                    channel_dropout_p=channel_dropout_p
                     ),
             'gamma': WaveletEncoderDecoder(
                     num_channels = num_channels,
@@ -188,6 +194,7 @@ class MENDRPatchEncoder(nn.Module):
                     n_gnn_heads=n_gnn_heads,
                     num_subjects=num_subjects,
                     device = device,
+                    channel_dropout_p=channel_dropout_p
                     ),
         }
 

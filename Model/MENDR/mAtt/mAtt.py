@@ -29,29 +29,28 @@ class signal2spd(nn.Module):
         return cov 
 
 class E2R(nn.Module):
-    def __init__(self, device):
+    def __init__(self):
         super().__init__()
         self.signal2spd = signal2spd()
-        self.device = device
     def forward(self, x):
         # X is with shape [Batch, #patch, #encoded_h, #time_step]
+        device = x.device
         x_list = list(x.unbind(1))
         for i, item in enumerate(x_list):
             x_list[i] = self.signal2spd(item)
         x = torch.stack(x_list).permute(1, 0, 2, 3)
-        x = x.to(self.device)
+        x = x.to(device)
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size, device):
+    def __init__(self, in_embed_size, out_embed_size):
         super(AttentionManifold, self).__init__()
         
         self.d_in = in_embed_size
         self.d_out = out_embed_size
-        self.device = device
-        self.q_trans = SPDTransform(self.d_in, self.d_out, self.device)
-        self.k_trans = SPDTransform(self.d_in, self.d_out, self.device)
-        self.v_trans = SPDTransform(self.d_in, self.d_out, self.device)
+        self.q_trans = SPDTransform(self.d_in, self.d_out)
+        self.k_trans = SPDTransform(self.d_in, self.d_out)
+        self.v_trans = SPDTransform(self.d_in, self.d_out)
 
         self.svd = SVD.apply
 

@@ -6,11 +6,10 @@ import numpy as np
 # Based on BENDR's Convolutional Position Encoding Scheme
 # Positional as in "Temporal"
 class PositionalEncoding(nn.Module):
-	def __init__(self, device, encoded_h, patch_len, dropout=0.1):
+	def __init__(self, encoded_h, patch_len, dropout=0.1):
 		super().__init__()
 		self.encoded_h = encoded_h
 		self.len = patch_len
-		self.device = device
 
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
 		conv = nn.Conv2d(self.len, 1, kernel_size=(3, self.encoded_h), stride=(1, 1), padding=(1, (self.encoded_h - 1) // 2))
@@ -18,7 +17,7 @@ class PositionalEncoding(nn.Module):
 		nn.init.constant_(conv.bias, 0)
 		conv = nn.utils.parametrizations.weight_norm(conv, dim=2)
 		#self.act = nn.GELU()
-		self.conv = nn.Sequential(conv, nn.Dropout(p=dropout)).to(self.device)
+		self.conv = nn.Sequential(conv, nn.Dropout(p=dropout))
 		self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
 		self.W_out = math.floor((self.W_out / 1) + 1)
 		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
@@ -42,21 +41,22 @@ class PositionalEncoding(nn.Module):
 		# x is now back to [Batch, #patch, encoded_h, #time_step]
 		x = x.permute(0, 2, 3, 1)
 		return x
+
+
 	
 class BatchTraceNormalization(nn.Module):
-	def __init__(self, device, num_channels=19, epsilon=1e-5):
+	def __init__(self, num_channels=19, epsilon=1e-5):
 		super().__init__()
 		self.num_channels = num_channels
 		self.epsilon = epsilon
-		self.device = device
 
 	def forward(self, x):
 		# Expects [B, C, C]
 		trace = x.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 		trace = trace.view(-1, 1, 1)
-		trace = trace + self.epsilon*torch.ones(trace.shape).to(self.device)
+		trace = trace + self.epsilon*torch.ones(trace.shape).to(x.device)
 		x /= trace
-		identity = torch.eye(x.shape[-1], x.shape[-1], device=self.device).to(self.device).repeat(x.shape[0], 1, 1)
+		identity = torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], 1, 1)
 		x = x + (self.epsilon * identity)
 		return x
 
@@ -69,14 +69,13 @@ def _make_mask_idxes(batch_size, num_patches, mask_ratio):
 		return batch_mask_idxes
 
 class LogEuclidLayerNorm(nn.Module):
-    def __init__(self, device, num_channels=19, epsilon=1e-5):
+    def __init__(self, num_channels=19, epsilon=1e-5):
         super().__init__()
-        self.device       = device
         self.num_channels = num_channels
         self.epsilon      = epsilon
         # params
-        self.gamma = nn.Parameter(torch.ones(num_channels, device=device))
-        self.beta  = nn.Parameter(torch.zeros(num_channels, device=device))
+        self.gamma = nn.Parameter(torch.ones(num_channels))
+        self.beta  = nn.Parameter(torch.zeros(num_channels))
 
     def forward(self, C):
         # assume SPD
@@ -105,7 +104,7 @@ class LogEuclidLayerNorm(nn.Module):
         C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.transpose(-2, -1) 
 
         # ensure PD
-        I = torch.eye(self.num_channels, device=self.device).unsqueeze(0)
+        I = torch.eye(self.num_channels, device=C.device).unsqueeze(0)
         C_norm = C_norm + self.epsilon * I
 
         return C_norm

@@ -88,7 +88,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                     self.logger.log_model_gradients(self.autoencoder, epoch=epoch*len(train_pbar) + iteration)
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step_cosine_annealing()
-            
+
             ### VALIDATION ###
             if validation_dataloader != None:
                 self.train(False)
@@ -97,8 +97,15 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 for iteration in pbar:
                     input_batch = self._get_batch(val_data_iterator)
                     val_metrics = self.evaluate_step(input_batch, iteration)
-                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
                     pbar.set_postfix(val_metrics)
+                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+
+            for metric in epoch_metrics:
+                if 'val' in metric.lower():
+                    epoch_metrics[metric] = epoch_metrics[metric] / len(validation_dataloader)
+                else:
+                    epoch_metrics[metric] = epoch_metrics[metric] / len(training_dataloader)
+
             ### SAVE ###
             if cfg.meta_params.save_model:
                 self._retain_best(epoch, epoch_metrics)

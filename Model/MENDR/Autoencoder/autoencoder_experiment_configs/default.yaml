@@ -14,16 +14,17 @@ patch_encoder_params:
   n_gnn_transformer_layers: 3
   hidden_gnn_mlp_ratio: 2
   n_gnn_heads: 8
+  channel_dropout_p: 0.2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.1
-  val_frac: 0.05
+  train_frac: 0.005
+  val_frac: 0.0001
   random_seed: 42
   learning_rate: 1.0e-3
-  l2_weight_decay: 0.0005
+  l2_weight_decay: 0.005
   batch_size: 256
-  epochs: 20
-  T_max: 20
+  epochs: 2
+  T_max: 2
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
