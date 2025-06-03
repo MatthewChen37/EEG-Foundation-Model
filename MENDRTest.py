@@ -336,7 +336,7 @@ def testContextualizerTiny():
 
     with torch.no_grad():
         contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24, patch_len=None, encoded_out=19)
-        #combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=11)
+        combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=10)
 
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
         #assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"

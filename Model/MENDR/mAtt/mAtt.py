@@ -18,7 +18,7 @@ class signal2spd(nn.Module):
         mean = x.mean(axis=-1).unsqueeze(-1).repeat(1, 1, x.shape[-1])
         x = x - mean
         cov = x@x.permute(0, 2, 1)
-        cov = cov.to(self.dev)
+        cov = cov.to(dev)
         cov = cov/(x.shape[-1]-1)
         tra = cov.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
         tra = tra.view(-1, 1, 1)
@@ -141,6 +141,7 @@ def log_euclidean_distance(A, B):
     final = torch.sum(s, dim=-1)
     return final
 
+# This is a WEIGHTED version of the LogEuclideanMean
 def LogEuclideanMean(weight, cov):
     # cov:[bs, #p, s, s]
     # weight:[bs, #p, #p]
@@ -151,3 +152,23 @@ def LogEuclideanMean(weight, cov):
     output = weight @ cov#[bs, #p, -1]
     output = output.view(bs, num_p, size, size)
     return tensor_exp(output)
+
+def WaveletLogEuclideanMean(x):
+    # x is dict where each entry is [Batch_Size * epochs, C, C]
+    x_input = dict()
+    if len(x['delta'].shape) == 4:
+        for band in x.keys():
+            x_input[band] = x[band].clone().reshape(x[band].shape[0]*x[band].shape[1], x[band].shape[2], x[band].shape[3])
+    else:
+        for band in x.keys():
+            x_input[band] = x[band].clone()
+    combined_manifold_output = torch.stack(list(x_input.values()), dim=1)
+    print(combined_manifold_output.shape)
+    # Combined Manifold Output is something like [Batch_num * Patches, # of Wavelet Bands, C, C]
+    combined_manifold_output = tensor_log(combined_manifold_output)
+    combined_manifold_output = tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
+
+    if len(x['delta'].shape) == 4:
+        combined_manifold_output = combined_manifold_output.reshape(x['delta'].shape[0], x['delta'].shape[1],
+                                                                    x['delta'].shape[2], x['delta'].shape[3])
+    return combined_manifold_output
