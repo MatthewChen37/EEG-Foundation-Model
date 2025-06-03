@@ -335,7 +335,7 @@ def testContextualizerTiny():
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24, patch_len=None, encoded_out=19)
+        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24, patch_len=None, encoded_out=19).to(device)
         combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=10)
 
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))

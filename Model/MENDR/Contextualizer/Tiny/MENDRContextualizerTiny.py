@@ -49,15 +49,14 @@ class MENDRContextualizerTiny(nn.Module):
 		# Thus different patches will have different number of samples for calculating the covariance matrix
 		cov_matrices = dict()
 		for band in x.keys():
-			#print(band, x[band].shape)
+			x[band] = self.position_encoders[band](x[band])
 			cov_matrices[band] = self.e2r(x[band])
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
 		print(combined_manifold_output.shape)
-		if self.position_encoder:
-			signal = signal + self.position_encoder(signal)
+		#cov_matrices = self.e2r(signal)
+		#signal_unmasked = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
+
 		'''
-		cov_matrices = self.e2r(signal)
-		signal_unmasked = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
 		signal_unmasked = signal_unmasked.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
 		signal_masked, mask_idxes = self.Contextualizer(signal_unmasked.clone(), batch_size, num_patches, mask_ratio)
 		return signal_unmasked, signal_masked, mask_idxes 

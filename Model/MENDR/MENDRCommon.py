@@ -28,13 +28,13 @@ class PositionalEncoding(nn.Module):
 			x: Tensor, shape [Batch Size, Patches, Channels * out_dim, Time Steps]
 		"""
 		B, P = x.shape[0], x.shape[1]
-		x = rearrange(x, 'B P (C O) T -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		x = rearrange(x, 'B P C (O T) -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		# x is now [Batch Size, out_dim * time_steps, Patches, Channels]
 		positional_encoding = self.conv(x)
 		# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
 		x = x + positional_encoding 
 		# x is now back to [Batch Size, Patches, Channels * out_dim, Time Steps]
-		x = rearrange(x, 'B (O T) C P -> B P (C O) T', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		x = rearrange(x, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		return x
 
 	
