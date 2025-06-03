@@ -27,9 +27,8 @@ class ManifoldTransformer(nn.Module):
         # X is list of [Batch_Size, epochs, C, C]
         x_res, shape = self.manifold_self_attention(x)
         # x_res is [Batch_Size*epochs, C, C]
-        x_res = rearrange(x_res, '(B P) C C -> B P C C', B=batch_size, P=num_patches, C = self.encoded_h)
+        x = rearrange(x, 'B P C C -> (B P) C C', B=batch_size, P=num_patches, C = self.encoded_h)
         x = self.riemannian_residual(x, x_res)
-        x = rearrange(x, 'B P C C -> (B P) C C', B=batch_size, P=num_patches)
         x = self.layer_normalization(x)
         x = x + self.manifold_self_spd_transform(x)
         if self.norm_output:
@@ -49,7 +48,7 @@ class _RiemannianResidual(nn.Module):
     # Identical to:
     # https://github.com/CUAI/Riemannian-Residual-Neural-Networks/blob/a3b4d6cfd066e636349311bc197ae06934cacf0c/rresnet/manifolds/spd.py#L100
     def forward(self, x, y, shape):
-        # x: [Batch, #patches, C, C]
-        # y: [Batch, #patches, C, C]
+        # x: [Batch*#patches, C, C]
+        # y: [Batch*#patches, C, C]
         x = tensor_exp(tensor_log(x) + tensor_log(y))
         return x
