@@ -92,6 +92,7 @@ class WaveletEncoderDecoder(nn.Module):
             decoding = decoding + subject_embeddings
             # decoding: [Batch Size * Patches, Channels, self.seq_len]
             decoding = self.reconstruction_decoder(decoding, B, P, C, T)
+        x = rearrange(x, 'B P (C O) T -> B P C (O T)', B=B, P=P, C=C, T=T)
         return x, decoding
 
 

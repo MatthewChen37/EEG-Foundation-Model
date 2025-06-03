@@ -10,26 +10,38 @@ from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, encoded_h, patch_len=18, encoded_out=19, contextualizer_layers=3):
+	def __init__(self, num_channels, out_dim, patch_len, encoded_out, patch_lens=None,contextualizer_layers=3):
 		super(MENDRContextualizerTiny, self).__init__()
-		self.encoded_h = encoded_h
-		self.encoded_out = encoded_out
+		self.num_channels = num_channels
+		self.out_dim = out_dim
 		self.patch_len = patch_len
+		self.encoded_out = encoded_out
+		if patch_lens is None:
+			self.patch_lens = {
+				'delta': 8,
+				'theta': 8,
+				'alpha': 16,
+				'beta': 32,
+				'gamma': 64,
+			}
+		else:
+			self.patch_lens = patch_lens
 
-		self.learnable_padding = None
-		if self.encoded_h % 2 == 0:
-			self.encoded_h += 1
-			print(f"Encoded_H {self.encoded_h - 1} is even, adding 1 to make it odd")
-			self.learnable_padding = nn.Parameter(torch.zeros(1, 1, 1, self.patch_len), requires_grad=True)
-
-		self.position_encoder = PositionalEncoding(self.encoded_h, self.patch_len, 0.1)
 		self.e2r = E2R()
 		self.ract = SPDRectified()
-		self.pre_attention_transform = SPDTransform(self.encoded_h, self.encoded_out)
+		self.pre_attention_transform = SPDTransform(self.num_channels, self.encoded_out)
 		self.Contextualizer = MENDRContextualizer(
-											encoded_out=encoded_out,
+											encoded_out=self.encoded_out,
 											n_transformer_layers=contextualizer_layers)
 
+		self.position_encoders = {
+			'delta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['delta']),
+			'theta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['theta']),
+			'alpha': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['alpha']),
+			'beta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['beta']),
+			'gamma': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['gamma']),
+		}
+		self.position_encoders = nn.ParameterDict(self.position_encoders)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels*out_dim=encoded_h, #time_step]

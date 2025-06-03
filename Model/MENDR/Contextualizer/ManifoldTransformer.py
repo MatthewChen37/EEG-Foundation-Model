@@ -43,7 +43,7 @@ class ManifoldTransformer(nn.Module):
 # https://proceedings.neurips.cc/paper_files/paper/2023/file/c868aa7437dc9b29e674cd2e25689021-Paper-Conference.pdf
 # For some cool theory!!!$!!
 class _RiemannianResidual(nn.Module):
-    def __init__():
+    def __init__(self):
         super().__init__()
 
     # Identical to:

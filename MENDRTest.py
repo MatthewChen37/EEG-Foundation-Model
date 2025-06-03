@@ -327,15 +327,15 @@ def testLargeContextualizerWaveletLEM():
 
 def testContextualizerTiny():
     example_input = {
-            'delta': torch.randn(4, 10, 452, 8).to(device).float(),
-            'theta': torch.randn(4, 10, 452, 8).to(device).float(),
-            'alpha': torch.randn(4, 10, 452, 16).to(device).float(),
-            'beta':  torch.randn(4, 10, 452, 32).to(device).float(),
-            'gamma': torch.randn(4, 10, 452, 64).to(device).float()
+            'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerTiny(encoded_h=452)
+        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24, patch_len=None, encoded_out=19)
         #combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=11)
 
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
