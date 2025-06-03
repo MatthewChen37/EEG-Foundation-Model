@@ -113,7 +113,9 @@ def tensor_log(t):#4dim
     #return u @ torch.diag_embed(torch.log(s)) @ u.permute(0, 1, 3, 2)
     #u, s, v = torch.svd(t)
     #return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
-    
+
+# https://github.com/pytorch/pytorch/issues/105225
+# Not sure if this works so still writing a custom implementation 
 def tensor_exp(t):#4dim
     # condition: t is symmetric!
     s, u = torch.linalg.eigh(t)
