@@ -77,11 +77,11 @@ class WaveletPretrainDataset(Dataset):
 				subject_epochs[epoch_idx][band] = torch.load(os.path.join(wavelet_path, file_name), weights_only=False)
 			for epoch_idx, epoch_wavelet_dict in subject_epochs.items():
 				epoch_tuple = (epoch_wavelet_dict['graph_name'], subject, epoch_idx,
-							   epoch_wavelet_dict['delta'][:, :self.segment_length['delta']],
-								epoch_wavelet_dict['theta'][:, :self.segment_length['theta']],
-								epoch_wavelet_dict['alpha'][:, :self.segment_length['alpha']],
-								epoch_wavelet_dict['beta'][:, :self.segment_length['beta']],
-								epoch_wavelet_dict['gamma'][:, :self.segment_length['gamma']])
+							   epoch_wavelet_dict['delta'][:, 3:3 + self.segment_length['delta']],  # 246
+								epoch_wavelet_dict['theta'][:, 3:3 + self.segment_length['theta']], # 246
+								epoch_wavelet_dict['alpha'][:, 3:3 + self.segment_length['alpha']], # 486
+								epoch_wavelet_dict['beta'][:, 3:3 + self.segment_length['beta']],   # 926
+								epoch_wavelet_dict['gamma'][:, 2:2 + self.segment_length['gamma']]) # 1925
 				self.epochs.append(epoch_tuple)
 
 	def len(self):

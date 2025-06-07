@@ -256,7 +256,7 @@ class BaseModelTrainer(object):
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
         for metric in metric_dict:
             if metric != 'lr':
-                if metric not in aggregated_metrics :
+                if f'total_epoch_{step}_{metric}' not in aggregated_metrics:
                     aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
                 else:
                     aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]

@@ -5,6 +5,7 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.nn import Sequential
 from torch_geometric.data import Data, Batch
 from math import floor
+from einops import rearrange
 
 class GNNSpatialHarmonizer(nn.Module):
     def __init__(self, num_channels, num_features, n_gnn_transformer_layers, hidden_ratio, heads):
@@ -15,18 +16,11 @@ class GNNSpatialHarmonizer(nn.Module):
         self.gnn_transformers = nn.ModuleList([GNNTransformer(num_features=self.num_features, num_channels=num_channels, 
                                                               hidden_ratio=hidden_ratio, heads=heads) for _ in range(self.n_gnn_transformer_layers)])
 
-        self.dropout = Dropout1dWithIndexTracking(p=0.1)
-
-    def forward(self, x, edge_index, edge_dist, B, P, C, dropout=False):
+    def forward(self, x, edge_index, edge_dist, B, P, C):
         # x: [Batch Size*Patches, Channels, num_features]
-        if dropout:
-            x = self.dropout(x.clone().reshape(B*P, C, self.num_features))
         for gnn_transformer in self.gnn_transformers:
             x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
-        if dropout:
-            return x, self.dropout.dropped_indices
-        else:
-            return x
+        return x
 
 class GNNTransformer(nn.Module):
     def __init__(self, num_features, num_channels, hidden_ratio, heads):
@@ -38,12 +32,14 @@ class GNNTransformer(nn.Module):
         self.act = nn.GELU()
 
         self.gnn_channel_encoder = GATConv(num_features, num_features, heads=self.heads, concat=False)
-        self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
+        #self.layer_norm1 = nn.LayerNorm((self.num_channels, self.num_features))
         self.gnn_lin = nn.Sequential(self.act, nn.Linear(self.num_features, self.hidden_ratio * self.num_features),
                                      self.act, nn.Linear(self.hidden_ratio * self.num_features, self.num_features)
                                      )
-        self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
-
+        #self.layer_norm2 = nn.LayerNorm((self.num_channels, self.num_features))
+        # Are layer norm and graph norm equivalent in this case?
+        self.graph_norm1 = GraphNorm(in_channels=self.num_features)
+        self.graph_norm2 = GraphNorm(in_channels=self.num_features)
 
     def forward(self, x, edge_index, edge_dist, B, P, C):
         # x: [Batch Size * Patches, Channels, num_features]
@@ -75,22 +71,25 @@ class GNNTransformer(nn.Module):
 
         # Reshape to concatenate all edge indices
         batch_patch_edge_index = batch_patch_edge_index.permute(1, 0, 2).reshape(2, -1)
+        # it is now [2, P * B * C * C]
 
         # Vectorized edge distance creation
-        batch_patch_edge_dist = edge_dist.repeat(P)
+        batch_patch_edge_dist = edge_dist.repeat((P, 1))
+        # this is just [P * B * C * C]
 
         # Apply GNN to all patches simultaneously
         channel_encoding = self.gnn_channel_encoder(gnn_input, batch_patch_edge_index, batch_patch_edge_dist)
         
         # Reshape back and add residual connection
-        channel_encoding = channel_encoding.view(B, P, C, self.num_features)
+        channel_encoding = rearrange(channel_encoding, '(B P C) F -> B P C F', B=B, P=P, C=C)
         x = x + channel_encoding
-        
-        x = x.view(B*P, C, self.num_features)
-        # x: [Batch Size * Patches, Channels, self.hidden_ratio * self.num_features]
-        x = self.layer_norm1(x)
+        # x: [Batch Size * Patches * Channels, self.num_features]
+        #x = self.layer_norm1(x)
+        x = rearrange(x, 'B P C F -> (B P) C F', B=B, P=P, C=C)
+        x = self.graph_norm1(x, batch_size=B * P)
         x = x + self.gnn_lin(x)
-        x = self.layer_norm2(x)
+        x = self.graph_norm2(x, batch_size=B * P)
+        #x = self.layer_norm2(x)
         return x
 
     def _sequential_forward(self, x, edge_index, edge_dist, B, P, C):
@@ -122,18 +121,20 @@ class GNNTransformer(nn.Module):
 class Dropout1dWithIndexTracking(nn.Dropout1d):
     def __init__(self, p):
         super().__init__()
+        self.p = p
         self.dropped_indices = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, input):
+        # input: [Batch Size, Patches, Channels, num_features]
         if not self.training:
             return input
         
         # Generate a random mask (0s and 1s) for dropout
-        mask = (torch.rand((input.size(0), input.size(1))) > self.p).float().to(self.device)
+        mask = (torch.rand((input.size(0), input.size(1), input.size(2))) > self.p).float().to(self.device)
 
         # Apply the mask to the input
-        output = input * mask.unsqueeze(2)
+        output = input * mask.unsqueeze(3)
         
         # Store the dropped channel indices
         self.dropped_indices = mask == 0
@@ -163,7 +164,7 @@ if __name__ == "__main__":
         edge_index = torch.tensor([first_row, second_row], device=device)
 
         # Create edge distances
-        edge_dist = torch.randn(edge_index.size(1), device=device)
+        edge_dist = torch.randn((edge_index.size(1), 1), device=device)
         assert edge_index.shape == torch.Size([2, B * C * C]), f"Edge Index Shape: {edge_index.shape}, should be: (2, {B * C * C})"
         
         return {
