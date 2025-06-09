@@ -49,7 +49,7 @@ class MENDRContextualizerTiny(nn.Module):
 		# Thus different patches will have different number of samples for calculating the covariance matrix
 		cov_matrices = dict()
 		for band in x.keys():
-			x[band] = self.position_encoders[band](x[band])
+			x[band] = x[band] + self.position_encoders[band](x[band])
 			cov_matrices[band] = self.e2r(x[band])
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
 		print(combined_manifold_output.shape)
@@ -105,21 +105,3 @@ class MENDRContextualizer(nn.Module):
 			x_input = transformer(x_input, batch_size, num_patches)
 
 		return x_input, mask_idxes
-
-
-class EuclideanPositionalEncoding(nn.Module):
-	def __init__(self, encoded_h, patch_len, dropout=0.1):
-		super().__init__()
-		self.encoded_h = encoded_h
-		self.len = patch_len
-		self.dropout = nn.Dropout(p=dropout)
-
-		self.positional_encoders = nn.ParameterDict({
-			'delta': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-			'theta': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-			'alpha': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-			'beta':  PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-			'gamma': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-			#'high': PositionalEncoding(self.encoded_h, self.len, dropout=dropout),
-		})
-
