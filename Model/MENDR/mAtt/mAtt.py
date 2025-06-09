@@ -43,10 +43,12 @@ class E2R(nn.Module):
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size):
+    def __init__(self, in_embed_size, out_embed_size, heads):
         super(AttentionManifold, self).__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
+        self.heads = heads
+
         self.q_trans = SPDTransform(self.d_in, self.d_out)
         self.k_trans = SPDTransform(self.d_in, self.d_out)
         self.v_trans = SPDTransform(self.d_in, self.d_out)
@@ -59,6 +61,8 @@ class AttentionManifold(nn.Module):
         bs = x.shape[0]
         m = x.shape[1]
         x = x.reshape(bs*m, self.d_in, self.d_in)
+
+        # repeat 
         Q = self.q_trans(x).view(bs, m, self.d_out, self.d_out)
         K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
         V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
@@ -67,7 +71,6 @@ class AttentionManifold(nn.Module):
         #assert torch.allclose(Q, Q.mT, atol=(10 ** -10)), f"Q: {Q}"
         #assert torch.allclose(K, K.mT, atol=(10 ** -10)), "K"
         #assert torch.allclose(V, V.mT, atol=(10 ** -10)), "V"
-
         # calculate the attention score
         Q_expand = Q.repeat(1, V.shape[1], 1, 1)
     
