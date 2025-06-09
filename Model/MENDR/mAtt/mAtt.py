@@ -43,11 +43,10 @@ class E2R(nn.Module):
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size, heads):
+    def __init__(self, in_embed_size, out_embed_size):
         super(AttentionManifold, self).__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
-        self.heads = heads
 
         self.q_trans = SPDTransform(self.d_in, self.d_out)
         self.k_trans = SPDTransform(self.d_in, self.d_out)
