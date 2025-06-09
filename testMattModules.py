@@ -121,8 +121,6 @@ def check_eigh():
     return eigenvalue_assert and dA_assert
 
 def check_TensorLog():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
-
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -130,19 +128,17 @@ def check_TensorLog():
 
     assert simple_spd.shape == torch.Size([1, 1, 3, 3]), f'Shape: {simple_spd,shape}'
 
-    tensor_log = attention_manifold.tensor_log(simple_spd)
+    tensor_log_result = tensor_log(simple_spd)
 
     # Expected (as per the original mATT implementation)
     u, s, v = torch.svd(simple_spd)
     expected = u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
 
-    tensor_log_assert = assertTensorEqual(tensor_log, expected)
+    tensor_log_assert = assertTensorEqual(tensor_log_result, expected)
 
     return tensor_log_assert
 
 def check_LogEuclideanMean():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
-
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -154,7 +150,7 @@ def check_LogEuclideanMean():
 
     assert mock_weights.shape == torch.Size([2, 2, 2]), f'Mock Weights Shape: {mock_weights}'
 
-    log_euclidean_mean = attention_manifold.LogEuclideanMean(mock_weights, simple_spd)
+    log_euclidean_mean = LogEuclideanMean(mock_weights, simple_spd)
 
     lem_assert = assertTensorEqual(log_euclidean_mean, simple_spd)
 
@@ -164,8 +160,6 @@ def check_LogEuclideanMean():
     return lem_assert
 
 def check_CustomLogEuclideanMean():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
-
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -175,13 +169,13 @@ def check_CustomLogEuclideanMean():
 
     mock_weights = torch.diag(torch.ones(2)).repeat(2, 1, 1).double()
 
-    log_euclidean_mean = attention_manifold.LogEuclideanMean(mock_weights, simple_spd)
+    log_euclidean_mean = LogEuclideanMean(mock_weights, simple_spd)
 
-    simple_spd_log = attention_manifold.tensor_log(simple_spd)
+    simple_spd_log = tensor_log(simple_spd)
 
     simple_spd_log = simple_spd_log.sum(dim=1, keepdim=True) / simple_spd_log.shape[1]
 
-    simple_spd_LEM = attention_manifold.tensor_exp((simple_spd_log))
+    simple_spd_LEM = tensor_exp((simple_spd_log))
 
     lem_assert = assertTensorEqual(log_euclidean_mean, simple_spd_LEM)
 
@@ -193,13 +187,9 @@ def check_NearestSymPosDef():
                                                 [1, 3, 1],
                                                 [0, 1, 2]], np.float32)).float()
 
-    
     output = SVD._nearest_sym_pos_def(simple_non_spd)
-
     nearest_sym_pos_def_assert = torch.allclose(output, output.mT)
-
     return nearest_sym_pos_def_assert
-
 
 def check_safeSVD():
     B, N, N = 4, 4, 4
