@@ -27,8 +27,9 @@ class ManifoldTransformer(nn.Module):
         # X is list of [Batch_Size, epochs, C, C]
         x_res, shape = self.manifold_self_attention(x)
         # x_res is [Batch_Size*epochs, C, C]
-        x = rearrange(x, 'B P C C -> (B P) C C', B=batch_size, P=num_patches, C=self.encoded_h)
+        x = rearrange(x, 'B P C C -> (B P) C C', B=batch_size, P=num_patches, C = self.encoded_h)
         x = self.riemannian_residual(x, x_res)
+        x = rearrange(x, 'B P C C -> (B P) C C', B=batch_size, P=num_patches)
         x = self.layer_normalization(x)
         x = x + self.manifold_self_spd_transform(x)
         if self.norm_output:
