@@ -30,7 +30,7 @@ class MENDR_model(nn.Module):
             'wavelet_contextualizer': True,
         }
 
-        self.tangent_space = SPDTangentSpace(self.combined_contextualizer.encoded_out, device=device)
+        self.tangent_space = SPDTangentSpace(self.encoder.num_channels)
         
     def forward(self, data):
         """

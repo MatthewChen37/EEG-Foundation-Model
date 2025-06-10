@@ -115,6 +115,7 @@ class MENDRPatchEncoder(nn.Module):
                 ):
         super().__init__()
         self.device = device
+        self.num_channels = num_channels
         self.sampling_rate = sampling_rate
         self.super_patch_seconds = super_patch_seconds
 
@@ -143,7 +144,7 @@ class MENDRPatchEncoder(nn.Module):
 
         self.encoder_decoders = {
             'delta': WaveletEncoderDecoder(
-                    num_channels = num_channels,
+                    num_channels = self.num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['delta'],
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['delta'],
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
@@ -154,7 +155,7 @@ class MENDRPatchEncoder(nn.Module):
                     channel_dropout_p=channel_dropout_p
                     ),
             'theta': WaveletEncoderDecoder(
-                    num_channels = num_channels,
+                    num_channels = self.num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['theta'],
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['theta'],
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
@@ -165,7 +166,7 @@ class MENDRPatchEncoder(nn.Module):
                     channel_dropout_p=channel_dropout_p
                     ),
             'alpha': WaveletEncoderDecoder(
-                    num_channels = num_channels,
+                    num_channels = self.num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['alpha'],
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['alpha'],
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
@@ -176,7 +177,7 @@ class MENDRPatchEncoder(nn.Module):
                     channel_dropout_p=channel_dropout_p
                     ),
             'beta': WaveletEncoderDecoder(
-                    num_channels = num_channels,
+                    num_channels = self.num_channels,
                     sub_patch_size=self.WAVELET_LENGTHS['beta'],
                     super_patch_seq_len = self.WAVELET_SUPER_PATCH_LENGTHS['beta'],
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
@@ -187,7 +188,7 @@ class MENDRPatchEncoder(nn.Module):
                     channel_dropout_p=channel_dropout_p
                     ),
             'gamma': WaveletEncoderDecoder(
-                    num_channels = num_channels,
+                    num_channels = self.num_channels,
                     sub_patch_size = self.WAVELET_LENGTHS['gamma'],
                     super_patch_seq_len=self.WAVELET_SUPER_PATCH_LENGTHS['gamma'],
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,

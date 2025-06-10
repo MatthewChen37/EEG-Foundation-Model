@@ -68,12 +68,11 @@ class ParametricVectorize(nn.Module):
 
 class SPDVectorize(nn.Module):
 
-    def __init__(self, input_size, device):
+    def __init__(self, input_size):
         super(SPDVectorize, self).__init__()
-        self.device = device
         row_idx, col_idx = torch.triu_indices(input_size, input_size)
-        self.register_buffer('row_idx', torch.LongTensor(row_idx).to(self.device))
-        self.register_buffer('col_idx', torch.LongTensor(col_idx).to(self.device))
+        self.register_buffer('row_idx', torch.LongTensor(row_idx))
+        self.register_buffer('col_idx', torch.LongTensor(col_idx))
 
     def forward(self, input):
         output = input[:, self.row_idx, self.col_idx]
@@ -236,11 +235,11 @@ class SPDTangentSpaceFunction(Function):
     
 class SPDTangentSpace(nn.Module):
 
-    def __init__(self, input_size, device, vectorize=True):
+    def __init__(self, input_size, vectorize=True):
         super().__init__()
         self.vectorize = vectorize
         if vectorize:
-            self.vec = SPDVectorize(input_size, device)
+            self.vec = SPDVectorize(input_size)
 
     def forward(self, input):
         output = SPDTangentSpaceFunction.apply(input)

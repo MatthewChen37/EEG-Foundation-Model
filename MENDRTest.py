@@ -335,12 +335,13 @@ def testContextualizerTiny():
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24, patch_len=None, encoded_out=19).to(device)
-        combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=10)
+        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+        combined_manifold_output, combined_manifold_output_masked, mask_idxes = contextualizer(example_input, batch_size=4, num_patches=10)
 
+        print("Positional Encoder Parameters: ", sum(p.numel() for p in contextualizer.position_encoders.parameters() if p.requires_grad))
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-        #assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
-        #assert cov_matrices.shape == torch.Size([4, 11, 19, 19])
+        assert combined_manifold_output.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output_masked.shape}"
 
 def testContextualizerLarge():
     example_input = {

@@ -44,7 +44,7 @@ class E2R(nn.Module):
 
 class AttentionManifold(nn.Module):
     def __init__(self, in_embed_size, out_embed_size):
-        super(AttentionManifold, self).__init__()
+        super().__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
 
@@ -76,11 +76,11 @@ class AttentionManifold(nn.Module):
         K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1 )
         K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
 
-        atten_energy = self.log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
+        atten_energy = log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
         atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
 
         # calculate outputs(v_i') of attention module
-        output = self.LogEuclideanMean(atten_prob, V)
+        output = LogEuclideanMean(atten_prob, V)
 
         output = output.view(V.shape[0], V.shape[1], self.d_out, self.d_out)
 
@@ -90,8 +90,7 @@ class AttentionManifold(nn.Module):
         output = output.contiguous().view(-1, self.d_out, self.d_out)
         return output, shape
 
-
-def tensor_log(t):#4dim
+def tensor_log(t):
     '''
     output = torch.zeros(t.shape).to(self.device)
     for i in range(t.shape[0]):
@@ -100,13 +99,12 @@ def tensor_log(t):#4dim
             output[i, j] = u @ torch.diag_embed(torch.log(s)) @ v.permute(1, 0)
     return output
     '''
-    batch = t.shape[0]
-    epochs = t.shape[1]
-    u, s, v = svd(t.view(batch * epochs, t.shape[2], t.shape[3]))
-    u = u.view(batch, epochs, u.shape[1], u.shape[2])
-    s = s.view(batch, epochs, s.shape[1])
-    v = v.view(batch, epochs, v.shape[1], v.shape[2])
-    return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+    u, s, v = svd(t)
+    #s, u = torch.linalg.eigh(t)
+    if len(t.shape) == 4:
+        return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+    else:
+        return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)
     # condition: t is symmetric!
     #s, u = torch.linalg.eigh(t)
     #print(s, u)
@@ -122,7 +120,10 @@ def tensor_log(t):#4dim
 def tensor_exp(t):#4dim
     # condition: t is symmetric!
     s, u = torch.linalg.eigh(t)
-    return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+    if len(t.shape) == 4:
+        return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+    else:
+        return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 2, 1)
     '''
     batch = t.shape[0]
     epochs = t.shape[1]
@@ -165,7 +166,6 @@ def WaveletLogEuclideanMean(x):
         for band in x.keys():
             x_input[band] = x[band].clone()
     combined_manifold_output = torch.stack(list(x_input.values()), dim=1)
-    print(combined_manifold_output.shape)
     # Combined Manifold Output is something like [Batch_num * Patches, # of Wavelet Bands, C, C]
     combined_manifold_output = tensor_log(combined_manifold_output)
     combined_manifold_output = tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])

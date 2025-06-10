@@ -3,19 +3,21 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, AttentionManifold, SPDRectified, WaveletLogEuclideanMean
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
-from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes, BatchTraceNormalization, LogEuclidLayerNorm
+from Model.MENDR.MENDRCommon import (PositionalEncoding,
+							_make_mask_idxes,
+							BatchTraceNormalization,
+							LogEuclidLayerNorm)
 from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer
+from einops import rearrange
 
 '''
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, num_channels, out_dim, patch_len, encoded_out, patch_lens=None,contextualizer_layers=3):
-		super(MENDRContextualizerTiny, self).__init__()
+	def __init__(self, num_channels, out_dim, patch_lens=None, contextualizer_layers=12):
+		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
-		self.patch_len = patch_len
-		self.encoded_out = encoded_out
 		if patch_lens is None:
 			self.patch_lens = {
 				'delta': 8,
@@ -29,9 +31,9 @@ class MENDRContextualizerTiny(nn.Module):
 
 		self.e2r = E2R()
 		self.ract = SPDRectified()
-		self.pre_attention_transform = SPDTransform(self.num_channels, self.encoded_out)
+		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
 		self.Contextualizer = MENDRContextualizer(
-											encoded_out=self.encoded_out,
+											encoded_out=self.num_channels,
 											n_transformer_layers=contextualizer_layers)
 
 		self.position_encoders = {
@@ -52,19 +54,17 @@ class MENDRContextualizerTiny(nn.Module):
 			x[band] = x[band] + self.position_encoders[band](x[band])
 			cov_matrices[band] = self.e2r(x[band])
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
-		print(combined_manifold_output.shape)
-		#cov_matrices = self.e2r(signal)
-		#signal_unmasked = self.pre_attention_transform(cov_matrices.reshape(batch_size*num_patches, self.encoded_h, self.encoded_h))
-
-		'''
-		signal_unmasked = signal_unmasked.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out)
-		signal_masked, mask_idxes = self.Contextualizer(signal_unmasked.clone(), batch_size, num_patches, mask_ratio)
-		return signal_unmasked, signal_masked, mask_idxes 
-		'''
+		# this is an issue: https://github.com/arogozhnikov/einops/issues/204
+		combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
+		# This is a transformation to generate a "token embedding" for each patch
+		combined_manifold_output = self.pre_attention_transform(combined_manifold_output)
+		combined_manifold_output = rearrange(combined_manifold_output, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
+		combined_manifold_output_masked, mask_idxes = self.Contextualizer(combined_manifold_output.clone(), batch_size, num_patches, mask_ratio)
+		return combined_manifold_output, combined_manifold_output_masked, mask_idxes 
 	
 class MENDRContextualizer(nn.Module):
 	def __init__(self, encoded_out, n_transformer_layers=3):
-		super(MENDRContextualizer, self).__init__()
+		super().__init__()
 		self.encoded_out = encoded_out
 
 		assert n_transformer_layers >= 1, "Must have at least one transformer layer"
@@ -77,9 +77,6 @@ class MENDRContextualizer(nn.Module):
 				manifold_transformers.append(ManifoldTransformer(self.encoded_out, hidden_scale=1.5))
 
 		self.manifold_transformer = nn.ModuleList(manifold_transformers)
-
-
-		#self.log_euclid_layer_norm = LogEuclidLayerNorm(device, num_channels=self.encoded_out, epsilon=1e-5)
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
