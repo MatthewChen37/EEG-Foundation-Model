@@ -20,7 +20,7 @@ intepretation.
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
                 hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads,
-                channel_dropout_p, num_subjects, device, out_dim=24):
+                channel_dropout_p, device, num_subjects=None, out_dim=24):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = Dropout1dWithIndexTracking(p=channel_dropout_p)
@@ -41,13 +41,15 @@ class WaveletEncoderDecoder(nn.Module):
 
         self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=self.out_dim, seq_len=self.seq_len).to(self.device)
 
-        # Subject Embeddings
-        self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
-                                    embedding_dim=self.seq_len).to(self.device)
-        # Decoders
-        self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
-                                                                 encoded_h=self.out_dim, hidden_seq_length=self.seq_len,
-                                                                 seq_len=self.seq_len, device=self.device)
+
+        if num_subjects is not None:
+            # Subject Embeddings
+            self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
+                                        embedding_dim=self.seq_len).to(self.device)
+            # Decoders
+            self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
+                                                                    encoded_h=self.out_dim, hidden_seq_length=self.seq_len,
+                                                                    seq_len=self.seq_len, device=self.device)
 
     def getEncoderParamCount(self):
         patch_embedder_count = sum(p.numel() for p in self.patch_embedder.parameters() if p.requires_grad)

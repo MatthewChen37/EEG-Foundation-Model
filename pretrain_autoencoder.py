@@ -26,7 +26,6 @@ def main(cfg:DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Create input directory if it doesn't exist
     if cfg.training_params.ckpt_dir is not None:
         if cfg.training_params.val_frac <= 0:
             raise Exception("Must have validation dataset to save to dir")

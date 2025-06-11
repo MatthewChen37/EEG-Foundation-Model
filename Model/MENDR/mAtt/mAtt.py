@@ -102,6 +102,8 @@ def tensor_log(t):
     u, s, v = svd(t)
     #s, u = torch.linalg.eigh(t)
     if len(t.shape) == 4:
+        batch_size = t.shape[0]
+
         return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
     else:
         return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)

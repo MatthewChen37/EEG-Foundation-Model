@@ -2,6 +2,7 @@ model_params:
   model_name: MENDR
   pretrained_autoencoder_path: null
   pretrained_contextualizer_path: null
+  contextualizer_size: TINY
 dataset_params:
   name: TUAB
   train_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train"
@@ -12,5 +13,15 @@ training_params:
   task_loss: BCEWithLogitsLoss
   learning_rate: 0.001
   l2_weight_decay: 0.0005
-  ckpt_dir: ./checkpoint
-
+  ckpt_dir: ./checkpoints
+  random_seed: 42
+  epochs: 3
+  batch_size: 128
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2 
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_transformer_layers: 3
+  n_gnn_heads: 8
+  num_subjects: null
