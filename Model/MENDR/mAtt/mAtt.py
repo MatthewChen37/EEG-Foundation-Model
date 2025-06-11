@@ -99,14 +99,20 @@ def tensor_log(t):
             output[i, j] = u @ torch.diag_embed(torch.log(s)) @ v.permute(1, 0)
     return output
     '''
-    u, s, v = svd(t)
     #s, u = torch.linalg.eigh(t)
+    patch_num = None
     if len(t.shape) == 4:
         batch_size = t.shape[0]
-
-        return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
+        patch_num = t.shape[1]
+        channel_num = t.shape[2]
+        t = t.reshape(batch_size*patch_num, channel_num, channel_num)
+    u, s, v = svd(t)
+    
+    output = u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)
+    if patch_num is not None:
+        return output.reshape(batch_size, patch_num, channel_num, channel_num)
     else:
-        return u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)
+        return output
     # condition: t is symmetric!
     #s, u = torch.linalg.eigh(t)
     #print(s, u)
