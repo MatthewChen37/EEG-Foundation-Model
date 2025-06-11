@@ -20,13 +20,15 @@ from sklearn.metrics import (
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 class MENDRFinetuner(BaseModelTrainer):
-    def __init__(self, MENDR, Decoder, cfg, **kwargs):
+    def __init__(self, MENDR, Decoder, optimizer, cfg, **kwargs):
         if cfg.training_params.task_loss == 'BCEWithLogitsLoss':
             self.loss_fn = nn.BCEWithLogitsLoss()
         else:
             raise ValueError(f"Unsupported task loss function: {cfg.training_params.task_loss}")
 
-        super(MENDRFinetuner, self).__init__(mendr_model=MENDR, 
+        super(MENDRFinetuner, self).__init__(optimizer=optimizer,
+            cfg=cfg,
+            mendr_model=MENDR,  
             decoder=Decoder,
             task_loss_fn=self.loss_fn,
             lr=cfg.training_params.learning_rate,
@@ -49,8 +51,16 @@ class MENDRFinetuner(BaseModelTrainer):
     
 
     def fit(self, training_dataset, cfg, validation_dataset=None):
-        return self.mendr_model, self.decoder
+        self.epoch = 0
+        self.train_dataset = training_dataset
+        self.validation_dataset = validation_dataset
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg)
 
+        for epoch in range(cfg.training_params.epochs):
+            epoch_metrics = {}
+            self.epoch = epoch
+
+        return self.mendr_model, self.decoder
 
     def train_one_epoch(self):
         task_loss_sum = 0

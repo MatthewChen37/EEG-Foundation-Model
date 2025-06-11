@@ -38,10 +38,18 @@ class MENDR_model(nn.Module):
         """
 
         patchified_inputs, encodings, decodings = self.encoder(data)
+        for band, inp in patchified_inputs.items():
+            assert not torch.isnan(inp).any(), f"Band: {band}"
+        for band, inp in encodings.items():
+            assert not torch.isnan(inp).any(), f"Band: {band}"
+        for band, inp in decodings.items():
+            assert not torch.isnan(inp).any(), f"Band: {band}"
+
         if self.contextualizer_size == "TINY":
             batch_size = patchified_inputs['delta'].shape[0]
             patch_num = patchified_inputs['delta'].shape[1]
             _, output, _ = self.combined_contextualizer(encodings, batch_size, patch_num, mask_ratio=0.0)
+            assert not torch.isnan(output).any()
             return patchified_inputs, encodings, decodings, None, output
         elif self.contextualizer_size == "LARGE":
             combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings, batch_size, patch_num) # Mask indices should never be used here

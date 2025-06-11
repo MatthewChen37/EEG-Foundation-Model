@@ -19,6 +19,7 @@ from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRConte
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder
 from Model.MENDR.mAtt.optimizer import MixOptimizer
+from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
 
 @hydra.main(version_base="1.2", 
@@ -62,7 +63,7 @@ def main(cfg:DictConfig) -> None:
     for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
         encoder_decoder.disableDecoder()
 
-    if cfg.model_params.contextualizer_size == "TINY":
+    if cfg.meta_params.contextualizer_size == "TINY":
         contextualizer = MENDRContextualizerTiny(
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
@@ -70,12 +71,12 @@ def main(cfg:DictConfig) -> None:
     else:
         raise Exception("Contextualizer size not found")
 
-    if cfg.model_params.pretrained_autoencoder_path is not None:
-        mendr_autoencoder.load_state_dict(torch.load(cfg.model_params.pretrained_autoencoder_path, weights_only=True), strict=False)
-    if cfg.model_params.pretrained_contextualizer_path is not None:
-        contextualizer.load_state_dict(torch.load(cfg.model_params.pretrained_contextualizer_path, weights_only=True), strict=False)
+    if cfg.meta_params.pretrained_autoencoder_path is not None:
+        mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True), strict=False)
+    if cfg.meta_params.pretrained_contextualizer_path is not None:
+        contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True), strict=False)
 
-    model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.model_params.contextualizer_size).to(device)
+    model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
 
     optim_params = []
     optim_params += model.parameters()
@@ -86,8 +87,10 @@ def main(cfg:DictConfig) -> None:
                                                             eta_min=1e-7)
     optimizer = MixOptimizer(optimizer, scheduler)
 
+    trainer = MENDRFinetuner(MENDR=mendr_autoencoder, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
-
+    ### Training ###
+    model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
 if __name__ == '__main__':
     main()
