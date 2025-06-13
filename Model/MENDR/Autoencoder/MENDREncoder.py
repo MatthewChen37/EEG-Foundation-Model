@@ -41,7 +41,6 @@ class WaveletEncoderDecoder(nn.Module):
 
         self.patch_embedder = PatchEmbedder(patch_size=self.patch_size, in_dim=1, out_dim=self.out_dim, seq_len=self.seq_len).to(self.device)
 
-
         if num_subjects is not None:
             # Subject Embeddings
             self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
@@ -113,13 +112,14 @@ class MENDRPatchEncoder(nn.Module):
                 num_subjects,
                 device,
                 channel_dropout_p=0.1,
-                high_encoded_h=None,
+                include_high=False
                 ):
         super().__init__()
         self.device = device
         self.num_channels = num_channels
         self.sampling_rate = sampling_rate
         self.super_patch_seconds = super_patch_seconds
+        self.include_high = include_high
 
         
         # Each represents one second of data
@@ -202,7 +202,7 @@ class MENDRPatchEncoder(nn.Module):
                     ),
         }
 
-        if high_encoded_h != None:
+        if self.include_high:
             self.encoder_decoders['high'] = WaveletEncoderDecoder(
                     num_channels = num_channels,
                     sub_patch_size = self.WAVELET_LENGTHS['high'],
@@ -210,9 +210,10 @@ class MENDRPatchEncoder(nn.Module):
                     hidden_gnn_mlp_ratio=hidden_gnn_mlp_ratio,
                     n_gnn_transformer_layers=n_gnn_transformer_layers,
                     n_gnn_heads=n_gnn_heads,
-                    device = device
+                    num_subjects=num_subjects,
+                    device = device,
+                    channel_dropout_p=channel_dropout_p
                     )
-            self.patch_normalizers['high'] = LayerNormChannelOnly(num_channels=num_channels)
         self.encoder_decoders = nn.ParameterDict(self.encoder_decoders)
 
         for band, encoder_decoder in self.encoder_decoders.items():
