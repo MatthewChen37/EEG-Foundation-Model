@@ -47,10 +47,10 @@ def main(cfg:DictConfig) -> None:
 
     # Load Dataset
     total_frac = cfg.training_params.train_frac + cfg.training_params.val_frac
-    dataset = WaveletPretrainDataset(root=cfg.training_params.input_dir, frac=total_frac)
+    dataset = WaveletPretrainDataset(root=cfg.training_params.input_dir, frac=total_frac, include_high="high" in cfg.meta_params.bands)
     if "input_dir_2" in cfg.training_params:
         print(f"Second Data Dir specified: {cfg.training_params.input_dir_2}")
-        dataset2 = WaveletPretrainDataset(root=cfg.training_params.input_dir_2, frac=total_frac)
+        dataset2 = WaveletPretrainDataset(root=cfg.training_params.input_dir_2, frac=total_frac, include_high="high" in cfg.meta_params.bands)
         dataset = WaveletPretrainConcatDataset([dataset, dataset2])
     print("*" * 50)
     print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", total_frac)
@@ -83,7 +83,6 @@ def main(cfg:DictConfig) -> None:
     print("Total Decoder Params: ", total_decoder_params)
     print("Total number of parameters: ", total_encoder_params + total_decoder_params)
 
-    '''
     ### Training ###
     if cfg.training_params.val_frac > 0:
         print("Splitting Dataset into Train and Validation because Val Fraction > 0.")
@@ -106,7 +105,6 @@ def main(cfg:DictConfig) -> None:
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     print("Cleanup complete.")
-    '''
 
 if __name__ == '__main__':
     main()

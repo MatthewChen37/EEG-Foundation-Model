@@ -54,14 +54,13 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         if step_idx == 0:
             recon_enc = dict()
             recon_dec = dict()
-            for band in BANDS: # Just look at patches from first sample/subject
+            for band in self.cfg.meta_params.bands: # Just look at patches from first sample/subject
                 decodings[band] = decodings[band].view(patchified_inputs[band].shape)
                 recon_enc[band] = patchified_inputs[band][0, :self.num_recons].detach().cpu().numpy()
                 recon_dec[band] = decodings[band][0, :self.num_recons].detach().cpu().numpy()
             fig = plotReconstruction(recon_enc, recon_dec, f"epoch_{self.epoch} wavelet patch reconstructions")
             mlflow.log_figure(fig, f"epoch_{self.epoch}_reconstruction.pdf")
             plt.close(fig)
-
         return {band: loss.item() for band, loss in loss_dict.items()}
 
     def fit(self, training_dataset, cfg, validation_dataset=None):

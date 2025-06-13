@@ -28,13 +28,25 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
         alpha_real_loss = loss_fn(inputs_copy['alpha'], outputs['alpha'])
         beta_real_loss =  loss_fn(inputs_copy['beta'],  outputs['beta'])
         gamma_real_loss = loss_fn(inputs_copy['gamma'], outputs['gamma'])
-        real_loss_dict = {
-                'delta_real_loss': delta_real_loss,
-                'theta_real_loss': theta_real_loss,
-                'alpha_real_loss': alpha_real_loss,
-                'beta_real_loss':  beta_real_loss,
-                'gamma_real_loss': gamma_real_loss,
-            }
+
+        if 'high' in inputs_copy:
+            high_real_loss = loss_fn(inputs_copy['high'], outputs['high'])
+            real_loss_dict = {
+                    'delta_real_loss': delta_real_loss,
+                    'theta_real_loss': theta_real_loss,
+                    'alpha_real_loss': alpha_real_loss,
+                    'beta_real_loss':  beta_real_loss,
+                    'gamma_real_loss': gamma_real_loss,
+                    'high_real_loss': high_real_loss,
+                }
+        else:
+            real_loss_dict = {
+                    'delta_real_loss': delta_real_loss,
+                    'theta_real_loss': theta_real_loss,
+                    'alpha_real_loss': alpha_real_loss,
+                    'beta_real_loss':  beta_real_loss,
+                    'gamma_real_loss': gamma_real_loss,
+                }
         return real_loss_dict
 
     elif loss_type == 'fft':
@@ -44,13 +56,24 @@ def WaveletReconstructionLoss(inputs, outputs, loss_type='real'):
         beta_fft_loss = fft_loss(inputs_copy['beta'], outputs['beta'])
         gamma_fft_loss = fft_loss(inputs_copy['gamma'], outputs['gamma'])
 
-        fft_loss_dict = {
-                'delta_fft_loss': delta_fft_loss,
-                'theta_fft_loss': theta_fft_loss,
-                'alpha_fft_loss': alpha_fft_loss,
-                'beta_fft_loss':  beta_fft_loss,
-                'gamma_fft_loss': gamma_fft_loss,
+        if 'high' in inputs_copy:
+            high_fft_loss = fft_loss(inputs_copy['high'], outputs['high'])
+            fft_loss_dict = {
+                    'delta_fft_loss': delta_fft_loss,
+                    'theta_fft_loss': theta_fft_loss,
+                    'alpha_fft_loss': alpha_fft_loss,
+                    'beta_fft_loss':  beta_fft_loss,
+                    'gamma_fft_loss': gamma_fft_loss,
+                    'high_fft_loss': high_fft_loss,
             }
+        else:
+            fft_loss_dict = {
+                    'delta_fft_loss': delta_fft_loss,
+                    'theta_fft_loss': theta_fft_loss,
+                    'alpha_fft_loss': alpha_fft_loss,
+                    'beta_fft_loss':  beta_fft_loss,
+                    'gamma_fft_loss': gamma_fft_loss,
+                }
         return fft_loss_dict
     
     # Otherwise combine real and fft losses

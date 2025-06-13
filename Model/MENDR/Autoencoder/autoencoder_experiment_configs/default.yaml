@@ -22,7 +22,7 @@ training_params:
   random_seed: 42
   learning_rate: 1.0e-3
   l2_weight_decay: 0.005
-  batch_size: 256
+  batch_size: 128
   epochs: 1
   T_max: 1
   eta_min: 1.0e-7
