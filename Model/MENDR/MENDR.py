@@ -38,11 +38,14 @@ class MENDR_model(nn.Module):
         """
 
         patchified_inputs, encodings, decodings = self.encoder(data)
+
+        #print(patchified_inputs['delta'])
+        '''
         for band, inp in patchified_inputs.items():
             assert not torch.isnan(inp).any(), f"Band: {band}"
         for band, inp in encodings.items():
-            assert not torch.isnan(inp).any(), f"Band: {band}"
-        '''
+            # this was returning true before??
+            assert not torch.isnan(inp).any(), f"Band: {band} {inp} {patchified_inputs[band]}"
         for band, inp in decodings.items():
             assert not torch.isnan(inp).any(), f"Band: {band}"
         '''
