@@ -26,7 +26,7 @@ training_params:
   random_seed: 42
   epochs: 1
   batch_size: 128
-  scheduler_after_batch: False
+  scheduler_after_batch: True
   num_workers: 32
 patch_encoder_params:
   num_channels: 19

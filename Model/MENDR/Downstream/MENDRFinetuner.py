@@ -62,7 +62,7 @@ class MENDRFinetuner(BaseModelTrainer):
             epoch_metrics = {}
             self.epoch = epoch
             ### TRAINING ###
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=350, position=0, leave=True)
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=300, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
 
@@ -77,6 +77,23 @@ class MENDRFinetuner(BaseModelTrainer):
                 if self.scheduler_after_batch:
                     self.optimizer.scheduler_step_cosine_annealing()
 
+            if validation_dataloader != None:
+                self.train(False)
+                pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=300, position=0, leave=True)
+                val_data_iterator = iter(validation_dataloader)
+                for iteration in pbar:
+                    input_batch = self._get_batch(val_data_iterator)
+                    val_metrics = self.evaluate_step(input_batch)
+                    pbar.set_postfix(val_metrics)
+                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+
+            ### SAVE ###
+            if not self.scheduler_after_batch:
+                self.optimizer.scheduler_step_cosine_annealing()
+            
+        mlflow.end_run()
+        if cfg.meta_params.log_model_params_and_grads:
+            self.logger.closeWriter()
 
         return self.mendr_model, self.decoder
 
@@ -92,7 +109,17 @@ class MENDRFinetuner(BaseModelTrainer):
             metrics = self.calculate_metrics(prediction, ground_truth)
 
         self.backward(task_loss)
+        self.optimizer.step()
         metrics['lr'] = self.optimizer.scheduler.get_last_lr()[0]
+        return metrics
+
+    def evaluate_step(self, inputs):
+        self.train(False)
+        patchified_inputs, encodings, _, _, combined_manifold_output = self.mendr_model(inputs)
+        prediction = self.decoder(combined_manifold_output).float()
+        ground_truth = inputs['graph'].y.to(self.device).float()
+        with torch.no_grad():
+            metrics = self.calculate_metrics(prediction, ground_truth)
         return metrics
 
     def calculate_metrics(self, prediction, ground_truth):
@@ -117,54 +144,6 @@ class MENDRFinetuner(BaseModelTrainer):
             elif metric == 'auroc':
                 metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
         return metrics
-
-
-    def train_one_epoch(self):
-        task_loss_sum = 0
-        recon_loss_sum = 0
-        self.mendr_model.train()
-        self.decoder.train()
-
-        pbar = tqdm.trange(len(self.finetune_train_loader), desc="Training")
-        data_iterator = iter(self.finetune_train_loader)
-        balanced_accuracies = []
-
-        for iteration in pbar:
-            data = next(data_iterator)
-            patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output = self.forward(data)
-            
-            prediction = self.decoder(combined_manifold_output).float()
-            ground_truth = data['graph'].y.to(device).float()
-            ground_truth = torch.repeat_interleave(ground_truth, patchified_inputs['delta'].shape[1])
-
-            task_loss = self.task_loss_fn(prediction, ground_truth[:, None])
-            delta_loss, theta_loss, alpha_loss, beta_loss, gamma_loss = self._get_recon_loss(patchified_inputs, decodings, recon_loss_fn)
-
-            with torch.no_grad():
-                score_y = torch.sigmoid(prediction)
-                pred_y = torch.gt(score_y, 0.5).long().cpu().numpy()
-                score_y = score_y.cpu().numpy()
-
-                balanced_accuracy = balanced_accuracy_score(ground_truth.cpu().numpy(), pred_y)
-                accuracy = accuracy_score(ground_truth.cpu().numpy(), pred_y)
-                roc_auc = roc_auc_score(ground_truth.cpu().numpy(), score_y)
-                precision, recall, thresholds = precision_recall_curve(ground_truth.cpu().numpy(), score_y, pos_label=1)
-                pr_auc = auc(recall, precision)
-            balanced_accuracies.append(balanced_accuracy)
-
-            shared_features, task_params = self._get_mtl_backward_params(encodings)
-            optimizer.zero_grad()
-            #task_loss.backward()
-            mtl_backward(losses=[task_loss, delta_loss, theta_loss, alpha_loss, beta_loss, gamma_loss], features=shared_features, aggregator=aggregator, tasks_params=task_params)
-            optimizer.step()
-            optimizer.scheduler_step(epoch * len(train_loader) + iteration)
-            task_loss_sum += task_loss.item()
-            recon_loss = delta_loss.item() + theta_loss.item() + alpha_loss.item() + beta_loss.item() + gamma_loss.item()
-            recon_loss_sum += recon_loss
-            pbar.set_postfix(task_loss=task_loss.item(), recon_loss=recon_loss, accuracy=f'{accuracy*100:.3f}', balanced_accuracy=f'{balanced_accuracy*100:.3f}', AUROC=f'{roc_auc*100:.3f}', AUCPR=f'{pr_auc*100:.3f}', lr=optimizer.scheduler.get_last_lr()[0])
-        balanced_accuracies = np.array(balanced_accuracies)	
-        print(f'Mean Acc: {balanced_accuracies.mean()} Acc Std: {balanced_accuracies.std()}')
-        return task_loss_sum, recon_loss_sum
 
     def test_one_epoch(model, mode='Validating'):
         task_loss_sum = 0
