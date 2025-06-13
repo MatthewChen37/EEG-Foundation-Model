@@ -60,6 +60,7 @@ class BaseModelTrainer(object):
         self.loaded_from_ckpt = False
         self.train_dataset = None
         self.validation_dataset = None
+        self.cfg = cfg
 
     def _get_batch(self, iterator):
         batch = next(iterator)

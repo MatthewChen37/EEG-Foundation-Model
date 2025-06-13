@@ -14,15 +14,17 @@ dataset_params:
   name: TUAB
   train_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train"
   eval_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval"
-  train_frac: 1.0
-  eval_frac: 1.0
+  train_frac: 0.1
+  eval_frac: 0.1
+  metrics: ['accuracy', 'balanced_accuracy', 'auc_pr', 'auroc']
+  task: binary
 training_params:
   task_loss: BCEWithLogitsLoss
   learning_rate: 0.001
   l2_weight_decay: 0.0005
   ckpt_dir: ./checkpoints
   random_seed: 42
-  epochs: 3
+  epochs: 1
   batch_size: 128
   scheduler_after_batch: False
   num_workers: 32

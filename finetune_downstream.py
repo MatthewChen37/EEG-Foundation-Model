@@ -22,6 +22,8 @@ from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
 
+METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc'}
+
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
             config_name="TUAB")
@@ -30,6 +32,11 @@ def main(cfg:DictConfig) -> None:
     print("Job Started. Parameters:")
     print(OmegaConf.to_yaml(cfg))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    assert cfg.dataset_params.task in ['binary', 'multiclass'], "Task not found"
+    for metric in cfg.dataset_params.metrics:
+        if metric not in METRICS:
+            raise Exception(f"Metric {metric} not found")
 
     ### Seed ###
     torch.cuda.empty_cache()
@@ -87,7 +94,7 @@ def main(cfg:DictConfig) -> None:
                                                             eta_min=1e-7)
     optimizer = MixOptimizer(optimizer, scheduler)
 
-    trainer = MENDRFinetuner(MENDR=mendr_autoencoder, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
+    trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
     model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)

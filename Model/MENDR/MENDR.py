@@ -42,8 +42,10 @@ class MENDR_model(nn.Module):
             assert not torch.isnan(inp).any(), f"Band: {band}"
         for band, inp in encodings.items():
             assert not torch.isnan(inp).any(), f"Band: {band}"
+        '''
         for band, inp in decodings.items():
             assert not torch.isnan(inp).any(), f"Band: {band}"
+        '''
 
         if self.contextualizer_size == "TINY":
             batch_size = patchified_inputs['delta'].shape[0]

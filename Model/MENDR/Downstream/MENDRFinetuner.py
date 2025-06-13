@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import random
-import os
+import random, os, tqdm, mlflow
 from Model.baseModelTrainer import BaseModelTrainer
 from Datasets.datasetTUAB import WaveletTUABDataset
 from torch_geometric.loader import DataLoader
@@ -48,8 +47,11 @@ class MENDRFinetuner(BaseModelTrainer):
         patch_num = patchified_inputs['delta'].shape[1]
         patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output = model(data['graph'], inputs)
         return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
-    
 
+    def backward(self, task_loss):
+        self.optimizer.zero_grad()
+        task_loss.backward()
+    
     def fit(self, training_dataset, cfg, validation_dataset=None):
         self.epoch = 0
         self.train_dataset = training_dataset
@@ -59,8 +61,63 @@ class MENDRFinetuner(BaseModelTrainer):
         for epoch in range(cfg.training_params.epochs):
             epoch_metrics = {}
             self.epoch = epoch
+            ### TRAINING ###
+            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=350, position=0, leave=True)
+            train_data_iterator = iter(training_dataloader)
+            self.train(True)
+
+            for iteration in train_pbar:
+                input_batch = self._get_batch(train_data_iterator)
+                train_metrics = self.train_step(input_batch)
+                train_pbar.set_postfix(train_metrics)
+                mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+                epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
+                if cfg.meta_params.log_model_params_and_grads:
+                    self.logger.log_model_gradients(self.autoencoder, epoch=epoch*len(train_pbar) + iteration)
+                if self.scheduler_after_batch:
+                    self.optimizer.scheduler_step_cosine_annealing()
+
 
         return self.mendr_model, self.decoder
+
+    def train_step(self, inputs):
+        self.train(True)
+        patchified_inputs, encodings, _, _, combined_manifold_output = self.mendr_model(inputs)
+        prediction = self.decoder(combined_manifold_output).float()
+        # Check for NaNs
+        assert not torch.isnan(prediction).any()
+        ground_truth = inputs['graph'].y.to(self.device).float()
+        task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
+        with torch.no_grad():
+            metrics = self.calculate_metrics(prediction, ground_truth)
+
+        self.backward(task_loss)
+        metrics['lr'] = self.optimizer.scheduler.get_last_lr()[0]
+        return metrics
+
+    def calculate_metrics(self, prediction, ground_truth):
+        if self.cfg.dataset_params.task == 'binary':
+            metrics = self._calculate_metrics_binary(prediction, ground_truth)
+        return metrics
+
+    def _calculate_metrics_binary(self, prediction, ground_truth):
+        metrics = {}
+        score_y = torch.sigmoid(prediction)
+        pred_y = torch.gt(score_y, 0.5).long().cpu().numpy()
+        score_y = score_y.cpu().numpy()
+
+        for metric in self.cfg.dataset_params.metrics:
+            if metric == 'accuracy':
+                metrics['accuracy'] = accuracy_score(ground_truth.cpu().numpy(), pred_y)
+            elif metric == 'balanced_accuracy':
+                metrics['balanced_accuracy'] = balanced_accuracy_score(ground_truth.cpu().numpy(), pred_y)
+            elif metric == 'auc_pr':
+                precision, recall, thresholds = precision_recall_curve(ground_truth.cpu().numpy(), score_y, pos_label=1)
+                metrics['auc_pr'] = auc(recall, precision)
+            elif metric == 'auroc':
+                metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
+        return metrics
+
 
     def train_one_epoch(self):
         task_loss_sum = 0
