@@ -1,101 +1,0 @@
-W0614 13:42:10.461000 2674470 torch/distributed/run.py:793] 
-W0614 13:42:10.461000 2674470 torch/distributed/run.py:793] *****************************************
-W0614 13:42:10.461000 2674470 torch/distributed/run.py:793] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-W0614 13:42:10.461000 2674470 torch/distributed/run.py:793] *****************************************
-  0%|          | 0/527 [00:00<?, ?it/s]  0%|          | 0/527 [00:00<?, ?it/s]  0%|          | 1/527 [00:01<11:31,  1.31s/it]  0%|          | 1/527 [00:01<11:34,  1.32s/it]  1%|          | 4/527 [00:01<02:44,  3.18it/s]  1%|          | 4/527 [00:01<02:48,  3.10it/s]  1%|          | 6/527 [00:02<03:54,  2.22it/s]  1%|          | 6/527 [00:02<04:03,  2.14it/s]  2%|▏         | 10/527 [00:04<03:15,  2.64it/s]  2%|▏         | 10/527 [00:04<03:18,  2.61it/s]  8%|▊         | 43/527 [00:05<00:39, 12.33it/s]  8%|▊         | 43/527 [00:05<00:40, 12.09it/s] 17%|█▋        | 89/527 [00:07<00:24, 18.02it/s] 17%|█▋        | 89/527 [00:07<00:24, 17.81it/s] 20%|█▉        | 104/527 [00:08<00:24, 17.30it/s] 20%|█▉        | 104/527 [00:08<00:24, 17.11it/s] 24%|██▎       | 125/527 [00:08<00:18, 22.31it/s] 24%|██▎       | 125/527 [00:08<00:18, 21.55it/s] 26%|██▌       | 135/527 [00:09<00:19, 20.58it/s] 26%|██▌       | 135/527 [00:09<00:19, 20.33it/s] 29%|██▉       | 154/527 [00:09<00:16, 23.01it/s] 29%|██▉       | 154/527 [00:09<00:16, 22.72it/s] 32%|███▏      | 168/527 [00:10<00:16, 21.71it/s] 32%|███▏      | 168/527 [00:10<00:17, 21.03it/s] 35%|███▍      | 183/527 [00:11<00:15, 22.30it/s] 35%|███▍      | 183/527 [00:11<00:15, 21.97it/s] 38%|███▊      | 200/527 [00:12<00:16, 19.62it/s] 38%|███▊      | 200/527 [00:12<00:16, 19.41it/s] 45%|████▍     | 237/527 [00:13<00:13, 21.66it/s] 45%|████▍     | 237/527 [00:13<00:13, 21.36it/s] 55%|█████▍    | 289/527 [00:14<00:06, 37.68it/s] 55%|█████▍    | 289/527 [00:14<00:06, 37.08it/s] 57%|█████▋    | 300/527 [00:14<00:05, 41.14it/s] 57%|█████▋    | 300/527 [00:14<00:05, 40.48it/s] 58%|█████▊    | 308/527 [00:14<00:06, 36.36it/s] 58%|█████▊    | 308/527 [00:14<00:06, 35.26it/s] 61%|██████    | 320/527 [00:14<00:05, 38.13it/s] 61%|██████    | 320/527 [00:15<00:05, 37.53it/s] 62%|██████▏   | 326/527 [00:15<00:05, 35.44it/s] 62%|██████▏   | 326/527 [00:15<00:05, 35.06it/s] 63%|██████▎   | 331/527 [00:15<00:07, 27.74it/s] 63%|██████▎   | 331/527 [00:15<00:07, 26.35it/s] 64%|██████▍   | 336/527 [00:15<00:07, 27.23it/s] 64%|██████▍   | 336/527 [00:15<00:07, 26.56it/s] 65%|██████▌   | 343/527 [00:18<00:22,  8.32it/s] 65%|██████▌   | 343/527 [00:18<00:22,  8.25it/s] 77%|███████▋  | 408/527 [00:18<00:03, 33.01it/s] 77%|███████▋  | 408/527 [00:18<00:03, 31.71it/s] 79%|███████▉  | 418/527 [00:18<00:03, 33.86it/s] 81%|████████  | 427/527 [00:19<00:02, 34.40it/s] 81%|████████  | 427/527 [00:19<00:02, 33.93it/s] 83%|████████▎ | 435/527 [00:20<00:04, 20.64it/s] 84%|████████▍ | 442/527 [00:20<00:03, 24.45it/s] 87%|████████▋ | 457/527 [00:20<00:02, 28.46it/s] 87%|████████▋ | 457/527 [00:20<00:02, 28.33it/s] 88%|████████▊ | 463/527 [00:21<00:02, 27.15it/s] 88%|████████▊ | 466/527 [00:21<00:02, 27.50it/s] 89%|████████▉ | 469/527 [00:21<00:02, 26.36it/s] 90%|████████▉ | 473/527 [00:21<00:01, 28.98it/s] 90%|████████▉ | 474/527 [00:21<00:01, 27.84it/s] 91%|█████████ | 478/527 [00:22<00:04, 11.54it/s] 91%|█████████ | 480/527 [00:22<00:03, 14.19it/s] 99%|█████████▉| 521/527 [00:22<00:00, 36.10it/s]100%|██████████| 527/527 [00:22<00:00, 22.93it/s]
- 99%|█████████▉| 521/527 [00:23<00:00, 33.94it/s]100%|██████████| 527/527 [00:23<00:00, 22.89it/s]
-Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/20 [00:00<?, ?it/s]Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/20 [00:00<?, ?it/s]Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/20 [00:01<?, ?it/s]
-Error executing job with overrides: ['training_params.epochs=1', 'training_params.batch_size=256', 'training_params.train_frac=0.02', 'training_params.val_frac=0.02', 'meta_params.save_model=false', 'meta_params.save_final_model=false', 'meta_params.log_system_metrics=false', 'meta_params.log_model_params_and_grads=false']
-Traceback (most recent call last):
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 92, in main
-    trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 83, in fit
-    train_metrics = self.train_step(input_batch)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 41, in train_step
-    patchified_inputs, encodings, decodings = self.forward(inputs)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 27, in forward
-    patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 232, in forward
-    encoding, decoding = self.encoder_decoders[band](graphs, band_decomposition, subjects)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 82, in forward
-    x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 22, in forward
-    x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 81, in forward
-    channel_encoding = self.gnn_channel_encoder(gnn_input, batch_patch_edge_index, batch_patch_edge_dist)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch_geometric/nn/conv/gat_conv.py", line 366, in forward
-    out = self.propagate(edge_index, x=x, alpha=alpha, size=size)
-  File "/tmp/torch_geometric.nn.conv.gat_conv_GATConv_propagate_9h5s8kst.py", line 176, in propagate
-    out = self.message(
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch_geometric/nn/conv/gat_conv.py", line 414, in message
-    return alpha.unsqueeze(-1) * x_j
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.57 GiB. GPU 0 has a total capacity of 139.81 GiB of which 102.44 MiB is free. Process 2674496 has 75.98 GiB memory in use. Including non-PyTorch memory, this process has 63.72 GiB memory in use. Of the allocated memory 58.62 GiB is allocated by PyTorch, and 4.43 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
-
-Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
-Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/20 [00:01<?, ?it/s]
-Error executing job with overrides: ['training_params.epochs=1', 'training_params.batch_size=256', 'training_params.train_frac=0.02', 'training_params.val_frac=0.02', 'meta_params.save_model=false', 'meta_params.save_final_model=false', 'meta_params.log_system_metrics=false', 'meta_params.log_model_params_and_grads=false']
-Traceback (most recent call last):
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 92, in main
-    trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 83, in fit
-    train_metrics = self.train_step(input_batch)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 43, in train_step
-    self.backward(loss_dict)
-  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 33, in backward
-    combined_loss.backward()
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/_tensor.py", line 581, in backward
-    torch.autograd.backward(
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/autograd/__init__.py", line 347, in backward
-    _engine_run_backward(
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/autograd/graph.py", line 825, in _engine_run_backward
-    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.57 GiB. GPU 0 has a total capacity of 139.81 GiB of which 1.15 GiB is free. Including non-PyTorch memory, this process has 74.93 GiB memory in use. Process 2674495 has 63.72 GiB memory in use. Of the allocated memory 65.12 GiB is allocated by PyTorch, and 9.06 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
-
-Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
-W0614 13:42:44.124000 2674470 torch/distributed/elastic/multiprocessing/api.py:897] Sending process 2674496 closing signal SIGTERM
-E0614 13:42:44.538000 2674470 torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 0 (pid: 2674495) of binary: /home/hice1/mchen439/scratch/miniconda3/envs/chungus/bin/python
-Traceback (most recent call last):
-  File "/home/hice1/mchen439/scratch/miniconda3/envs/chungus/bin/torchrun", line 10, in <module>
-    sys.exit(main())
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 355, in wrapper
-    return f(*args, **kwargs)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/run.py", line 919, in main
-    run(args)
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/run.py", line 910, in run
-    elastic_launch(
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
-    raise ChildFailedError(
-torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
-============================================================
-pretrain_autoencoder.py FAILED
-------------------------------------------------------------
-Failures:
-  <NO_OTHER_FAILURES>
-------------------------------------------------------------
-Root Cause (first observed failure):
-[0]:
-  time      : 2025-06-14_13:42:44
-  host      : atl1-1-03-017-2-0.pace.gatech.edu
-  rank      : 0 (local_rank: 0)
-  exitcode  : 1 (pid: 2674495)
-  error_file: <N/A>
-  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
-============================================================

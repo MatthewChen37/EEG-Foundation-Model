@@ -1,9 +1,0 @@
-timestamp, index, utilization.gpu [%], utilization.memory [%], memory.used [MiB]
-2025/06/14 15:21:58.371, 0, 0 %, 0 %, 1 MiB
-2025/06/14 15:21:58.372, 1, 0 %, 0 %, 1 MiB
-timestamp, index, utilization.gpu [%], utilization.memory [%], memory.used [MiB]
-2025/06/14 15:22:28.413, 0, 0 %, 0 %, 4 MiB
-2025/06/14 15:22:28.415, 1, 0 %, 0 %, 526 MiB
-timestamp, index, utilization.gpu [%], utilization.memory [%], memory.used [MiB]
-2025/06/14 15:22:58.463, 0, 0 %, 0 %, 58698 MiB
-2025/06/14 15:22:58.466, 1, 0 %, 0 %, 62358 MiB
