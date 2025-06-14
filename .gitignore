@@ -19,3 +19,4 @@ ProfileData/LargeContextualizer.csv
 ProfileData/TinyContextualizer.csv
 /outputs
 /multirun
+/slurm_outputs
