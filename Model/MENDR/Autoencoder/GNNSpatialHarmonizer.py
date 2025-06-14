@@ -64,18 +64,18 @@ class GNNTransformer(nn.Module):
         batch_patch_edge_index = edge_index.unsqueeze(0).repeat(P, 1, 1)  # [P, 2, num_edges]
 
         # Create offsets for each patch
-        offsets = torch.arange(P, device=edge_index.device).view(P, 1, 1) * (B * C)
+        offsets = torch.arange(P, device=edge_index.device).view(P,1,1) * (B*C)
 
-        # Add offsets to each copy
-        batch_patch_edge_index = batch_patch_edge_index + offsets
+        # Add offsets to each copy 
+        batch_patch_edge_index = batch_patch_edge_index + offsets 
 
         # Reshape to concatenate all edge indices
         batch_patch_edge_index = batch_patch_edge_index.permute(1, 0, 2).reshape(2, -1)
         # it is now [2, P * B * C * C]
-
+        
         # Vectorized edge distance creation
         batch_patch_edge_dist = edge_dist.repeat((P, 1))
-        # this is just [P * B * C * C]
+        #  this is just [P * B * C * C]d
 
         # Apply GNN to all patches simultaneously
         channel_encoding = self.gnn_channel_encoder(gnn_input, batch_patch_edge_index, batch_patch_edge_dist)

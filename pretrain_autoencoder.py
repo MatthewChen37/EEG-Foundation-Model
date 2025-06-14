@@ -33,6 +33,8 @@ def main(cfg:DictConfig) -> None:
     Path(cfg.training_params.ckpt_dir).mkdir(parents=True, exist_ok=True)
 
     ### Seed ###
+    rank = int(os.environ.get("LOCAL_RANK", 0)) 
+    torch.cuda.set_device(rank)
     torch.cuda.empty_cache()
     random.seed(cfg.training_params.random_seed)
     os.environ['PYTHONHASHSEED'] = str(cfg.training_params.random_seed)

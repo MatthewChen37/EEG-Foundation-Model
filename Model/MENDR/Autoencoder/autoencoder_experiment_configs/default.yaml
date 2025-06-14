@@ -28,4 +28,4 @@ training_params:
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
-  num_workers: 32
+  num_workers: 4
