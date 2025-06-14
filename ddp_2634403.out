@@ -1,0 +1,305 @@
+---------------------------------------
+Begin Slurm Prolog: Jun-14-2025 16:09:37
+Job ID:    2634403
+User ID:   mchen439
+Account:   coc
+Job name:  pretrain_test
+Partition: coe-gpu
+QOS:       coe-ice
+---------------------------------------
+Job Started. Parameters:
+Job Started. Parameters:
+Job Started. Parameters:
+Job Started. Parameters:
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 2
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 2
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 2
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 2
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+Loading 527 subjects
+Loading 527 subjectsLoading 527 subjects
+
+Loading 527 subjects
+**************************************************
+Dataset Loaded. Length of Dataset: ************************************************** 
+10461 Dataset Loaded. Length of Dataset:  given frac:   104610.04 
+ given frac:  0.04
+**************************************************
+Dataset Loaded. Length of Dataset:  10461  given frac:  **************************************************0.04
+
+Dataset Loaded. Length of Dataset:  10461  given frac:  0.04
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+Trainables: ['autoencoder']
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+Trainables: ['autoencoder']
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+Trainables: ['autoencoder']
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+beta Encoder Params: 50160
+beta Decoder Params: 18503
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+beta Encoder Params: 50160
+beta Decoder Params: 18503
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+beta Encoder Params: 50160Splitting Dataset into Train and Validation because Val Fraction > 0.
+
+beta Decoder Params: 18503
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+Train and Validation Dataset Length: Train and Validation Dataset Length: Train and Validation Dataset Length:    523052305230   523152315231
+
+
+Training on 20 sample batches.
+Training on 20 sample batches.
+Validation on 21 sample batches.
+Validation on 21 sample batches.Training on 20 sample batches.
+
+Validation on 21 sample batches.
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+Trainables: ['autoencoder']
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+beta Encoder Params: 50160
+beta Decoder Params: 18503
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+Train and Validation Dataset Length:  5230 5231
+Training on 20 sample batches.
+Validation on 21 sample batches.
+End of Epoch | total_epoch_training_delta_real_loss: 1.016 | total_epoch_training_theta_real_loss: 1.028 | total_epoch_training_alpha_real_loss: 1.020 | total_epoch_training_beta_real_loss: 1.021 | total_epoch_training_gamma_real_loss: 1.011 |
+     total_epoch_validation_delta_real_loss: 0.931 | total_epoch_validation_theta_real_loss: 1.018 | total_epoch_validation_alpha_real_loss: 1.008 | total_epoch_validation_beta_real_loss: 1.008 | total_epoch_validation_gamma_real_loss: 1.003 |
+End of Epoch | total_epoch_training_delta_real_loss: 1.016 | total_epoch_training_theta_real_loss: 1.029 | total_epoch_training_alpha_real_loss: 1.020 | total_epoch_training_beta_real_loss: 1.021 | total_epoch_training_gamma_real_loss: 1.011 |
+     total_epoch_validation_delta_real_loss: 0.933 | total_epoch_validation_theta_real_loss: 1.018 | total_epoch_validation_alpha_real_loss: 1.008 | total_epoch_validation_beta_real_loss: 1.008 | total_epoch_validation_gamma_real_loss: 1.003 |
+End of Epoch | total_epoch_training_delta_real_loss: 1.015 | total_epoch_training_theta_real_loss: 1.028 | total_epoch_training_alpha_real_loss: 1.018 | total_epoch_training_beta_real_loss: 1.021 | total_epoch_training_gamma_real_loss: 1.011 |
+     total_epoch_validation_delta_real_loss: 0.930 | total_epoch_validation_theta_real_loss: 1.018 | total_epoch_validation_alpha_real_loss: 0.996 | total_epoch_validation_beta_real_loss: 1.008 | total_epoch_validation_gamma_real_loss: 1.003 |
+End of Epoch | total_epoch_training_delta_real_loss: 1.015 | total_epoch_training_theta_real_loss: 1.028 | total_epoch_training_alpha_real_loss: 1.019 | total_epoch_training_beta_real_loss: 1.021 | total_epoch_training_gamma_real_loss: 1.011 |
+     total_epoch_validation_delta_real_loss: 0.931 | total_epoch_validation_theta_real_loss: 1.018 | total_epoch_validation_alpha_real_loss: 1.005 | total_epoch_validation_beta_real_loss: 1.008 | total_epoch_validation_gamma_real_loss: 1.003 |
+End of Epoch | total_epoch_training_delta_real_loss: 0.915 | total_epoch_training_theta_real_loss: 1.010 | total_epoch_training_alpha_real_loss: 0.997 | total_epoch_training_beta_real_loss: 1.006 | total_epoch_training_gamma_real_loss: 1.002 |
+     total_epoch_validation_delta_real_loss: 0.849 | total_epoch_validation_theta_real_loss: 1.016 | total_epoch_validation_alpha_real_loss: 0.978 | total_epoch_validation_beta_real_loss: 1.006 | total_epoch_validation_gamma_real_loss: 1.002 |
+End of Epoch | total_epoch_training_delta_real_loss: 0.912 | total_epoch_training_theta_real_loss: 1.010 | total_epoch_training_alpha_real_loss: 0.973 | total_epoch_training_beta_real_loss: 1.007 | total_epoch_training_gamma_real_loss: 1.002 |
+     total_epoch_validation_delta_real_loss: 0.849 | total_epoch_validation_theta_real_loss: 1.016 | total_epoch_validation_alpha_real_loss: 0.935 | total_epoch_validation_beta_real_loss: 1.006 | total_epoch_validation_gamma_real_loss: 1.002 |
+End of Epoch | total_epoch_training_delta_real_loss: 0.914 | total_epoch_training_theta_real_loss: 1.008 | total_epoch_training_alpha_real_loss: 0.984 | total_epoch_training_beta_real_loss: 1.007 | total_epoch_training_gamma_real_loss: 1.002 |
+     total_epoch_validation_delta_real_loss: 0.848 | total_epoch_validation_theta_real_loss: 1.015 | total_epoch_validation_alpha_real_loss: 0.952 | total_epoch_validation_beta_real_loss: 1.006 | total_epoch_validation_gamma_real_loss: 1.002 |
+End of Epoch | total_epoch_training_delta_real_loss: 0.914 | total_epoch_training_theta_real_loss: 1.010 | total_epoch_training_alpha_real_loss: 0.997 | total_epoch_training_beta_real_loss: 1.007 | total_epoch_training_gamma_real_loss: 1.002 |
+     total_epoch_validation_delta_real_loss: 0.850 | total_epoch_validation_theta_real_loss: 1.016 | total_epoch_validation_alpha_real_loss: 0.975 | total_epoch_validation_beta_real_loss: 1.007 | total_epoch_validation_gamma_real_loss: 1.002 |
+**************************************************
+Cleaning up resources...
+**************************************************
+Cleaning up resources...
+**************************************************
+Cleaning up resources...
+**************************************************
+Cleaning up resources...
+Cleanup complete.
+Cleanup complete.
+Cleanup complete.
+Cleanup complete.
+---------------------------------------
+Begin Slurm Epilog: Jun-14-2025 16:11:42
+Job ID:        2634403
+User ID:       mchen439
+Account:       coc
+Job name:      pretrain_test
+Resources:     cpu=32,gres/gpu:h200=8,mem=128G,node=1
+Rsrc Used:     cput=01:14:40,vmem=0,walltime=00:02:20,mem=53764260K,energy_used=0
+Partition:     coe-gpu
+QOS:           coe-ice
+Nodes:         atl1-1-03-015-30-0
+---------------------------------------

@@ -1,0 +1,88 @@
+---------------------------------------
+Begin Slurm Prolog: Jun-11-2025 19:55:38
+Job ID:    2629672
+User ID:   mchen439
+Account:   coc
+Job name:  pretrain_test
+Partition: coe-gpu
+QOS:       coe-ice
+---------------------------------------
+Job Started. Parameters:
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: true
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: true
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  delta_encoded_h: 15
+  theta_encoded_h: 15
+  alpha_encoded_h: 30
+  beta_encoded_h: 60
+  gamma_encoded_h: 120
+  n_gnn_transformer_layers: 1
+  hidden_encoded_ratio: 2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.01
+  val_frac: 0.005
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.0005
+  batch_size: 128
+  epochs: 20
+  T_max: 20
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 32
+
+Loading 197 subjects
+**************************************************
+Dataset Loaded. Length of Dataset:  4071  given frac:  0.015
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+Trainables: ['autoencoder']
+delta Encoder Params: 4149
+delta Decoder Params: 6645
+theta Encoder Params: 4149
+theta Decoder Params: 6645
+alpha Encoder Params: 9911
+alpha Decoder Params: 35255
+beta Encoder Params: 26331
+beta Decoder Params: 245403
+gamma Encoder Params: 78755
+gamma Decoder Params: 2230307
+Total Encoder Params:  246590
+Total Decoder Params:  5048510
+Total number of parameters:  5295100
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+Train and Validation Dataset Length:  2714 1357
+Training on 21 sample batches.
+Validation on 11 sample batches.
+---------------------------------------
+Begin Slurm Epilog: Jun-11-2025 19:56:27
+Job ID:        2629672
+User ID:       mchen439
+Account:       coc
+Job name:      pretrain_test
+Resources:     cpu=8,gres/gpu:h200=1,mem=32G,node=1
+Rsrc Used:     cput=00:08:48,vmem=0,walltime=00:01:06,mem=10642932K,energy_used=0
+Partition:     coe-gpu
+QOS:           coe-ice
+Nodes:         atl1-1-03-017-9-0
+---------------------------------------

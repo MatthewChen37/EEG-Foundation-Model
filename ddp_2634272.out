@@ -1,0 +1,149 @@
+---------------------------------------
+Begin Slurm Prolog: Jun-14-2025 14:42:27
+Job ID:    2634272
+User ID:   mchen439
+Account:   coc
+Job name:  pretrain_test
+Partition: coe-gpu
+QOS:       coe-ice
+---------------------------------------
+Job Started. Parameters:
+Job Started. Parameters:
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 1
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+meta_params:
+  bands:
+  - delta
+  - theta
+  - alpha
+  - beta
+  - gamma
+  experiment_name: train_autoencoder
+  run_name: train_autoencoder_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}_layers_${patch_encoder_params.n_gnn_transformer_layers}_default
+  log_system_metrics: false
+  log_model_params_and_grads: false
+  save_model: false
+  save_final_model: false
+  num_recons: 4
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  n_gnn_transformer_layers: 3
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_heads: 8
+  channel_dropout_p: 0.2
+training_params:
+  input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
+  train_frac: 0.02
+  val_frac: 0.02
+  random_seed: 42
+  learning_rate: 0.001
+  l2_weight_decay: 0.005
+  batch_size: 256
+  epochs: 1
+  T_max: 2
+  eta_min: 1.0e-07
+  scheduler_after_batch: false
+  ckpt_dir: ./checkpoint
+  num_workers: 4
+
+Loading 527 subjects
+Loading 527 subjects
+**************************************************
+Dataset Loaded. Length of Dataset:  10461  given frac:  0.04
+**************************************************
+Dataset Loaded. Length of Dataset:  10461  given frac:  0.04
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+alpha Hidden Token Sequence Length: 16
+beta Hidden Token Sequence Length: 32
+delta Hidden Token Sequence Length: 8
+gamma Hidden Token Sequence Length: 64
+theta Hidden Token Sequence Length: 8
+Trainables: ['autoencoder']
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+beta Encoder Params: 50160
+beta Decoder Params: 18503
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+Train and Validation Dataset Length:  5230 5231
+Trainables: ['autoencoder']
+delta Encoder Params: 6672
+delta Decoder Params: 7007
+theta Encoder Params: 6672
+theta Decoder Params: 7007
+alpha Encoder Params: 16560
+alpha Decoder Params: 10711
+beta Encoder Params: 50160
+beta Decoder Params: 18503
+gamma Encoder Params: 172656
+gamma Decoder Params: 35623
+Total Encoder Params:  505440
+Total Decoder Params:  157702
+Total number of parameters:  663142
+Splitting Dataset into Train and Validation because Val Fraction > 0.
+Train and Validation Dataset Length:  5230 5231
+Training on 20 sample batches.
+Validation on 21 sample batches.
+Training on 20 sample batches.
+Validation on 21 sample batches.
+---------------------------------------
+Begin Slurm Epilog: Jun-14-2025 14:43:07
+Job ID:        2634272
+User ID:       mchen439
+Account:       coc
+Job name:      pretrain_test
+Resources:     cpu=16,gres/gpu:h200=2,mem=64G,node=1
+Rsrc Used:     cput=00:11:28,vmem=0,walltime=00:00:43,mem=18607604K,energy_used=0
+Partition:     coe-gpu
+QOS:           coe-ice
+Nodes:         atl1-1-03-017-2-0
+---------------------------------------

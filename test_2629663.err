@@ -1,0 +1,39 @@
+  0%|          | 0/197 [00:00<?, ?it/s]  1%|          | 1/197 [00:01<04:15,  1.30s/it]  2%|▏         | 4/197 [00:01<00:56,  3.44it/s]  3%|▎         | 6/197 [00:02<01:24,  2.26it/s]  5%|▌         | 10/197 [00:04<01:09,  2.67it/s] 22%|██▏       | 43/197 [00:05<00:11, 13.03it/s] 45%|████▌     | 89/197 [00:06<00:05, 19.60it/s] 53%|█████▎    | 104/197 [00:07<00:05, 17.96it/s] 63%|██████▎   | 125/197 [00:08<00:03, 23.91it/s] 69%|██████▊   | 135/197 [00:08<00:02, 24.57it/s] 85%|████████▌ | 168/197 [00:08<00:00, 41.09it/s]100%|██████████| 197/197 [00:08<00:00, 23.02it/s]
+/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/utils/data/dataloader.py:617: UserWarning: This DataLoader will create 32 worker processes in total. Our suggested max number of worker in current system is 8, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/21 [00:00<?, ?it/s]/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/utils/data/dataloader.py:617: UserWarning: This DataLoader will create 32 worker processes in total. Our suggested max number of worker in current system is 8, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/21 [00:03<?, ?it/s]
+Error executing job with overrides: ['meta_params.save_model=false', 'meta_params.save_final_model=false', 'meta_params.log_system_metrics=false', 'meta_params.log_model_params_and_grads=false']
+Traceback (most recent call last):
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 93, in main
+    trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 83, in fit
+    train_metrics = self.train_step(input_batch)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 41, in train_step
+    patchified_inputs, encodings, decodings = self.forward(inputs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 27, in forward
+    patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 255, in forward
+    encoding, decoding = self.encoder_decoders[band](graphs, band_decomposition, subjects)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 102, in forward
+    x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 25, in forward
+    x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 80, in forward
+    batch_patch_edge_dist = edge_dist.repeat(P)
+RuntimeError: Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

@@ -1,0 +1,98 @@
+  0%|          | 0/197 [00:00<?, ?it/s]  1%|          | 1/197 [00:01<06:08,  1.88s/it]  3%|▎         | 6/197 [00:03<01:36,  1.99it/s]  5%|▌         | 10/197 [00:04<01:18,  2.38it/s] 22%|██▏       | 43/197 [00:06<00:14, 10.35it/s] 45%|████▌     | 89/197 [00:08<00:07, 14.72it/s] 53%|█████▎    | 104/197 [00:09<00:05, 15.55it/s] 63%|██████▎   | 125/197 [00:09<00:03, 20.27it/s] 69%|██████▊   | 135/197 [00:10<00:03, 19.05it/s] 78%|███████▊  | 154/197 [00:11<00:02, 20.04it/s] 85%|████████▌ | 168/197 [00:11<00:01, 19.18it/s] 93%|█████████▎| 183/197 [00:12<00:00, 18.84it/s]100%|██████████| 197/197 [00:12<00:00, 15.38it/s]
+/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/utils/data/dataloader.py:617: UserWarning: This DataLoader will create 32 worker processes in total. Our suggested max number of worker in current system is 8, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+2025/06/11 19:56:22 WARNING mlflow.system_metrics.system_metrics_monitor: Skip logging GPU metrics because initialization failed with error: `pyrsmi` is not installed, to log GPU metrics please run `pip install pyrsmi` to install it..
+2025/06/11 19:56:22 INFO mlflow.system_metrics.system_metrics_monitor: Started monitoring system metrics.
+Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/21 [00:00<?, ?it/s]/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/utils/data/dataloader.py:617: UserWarning: This DataLoader will create 32 worker processes in total. Our suggested max number of worker in current system is 8, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Exception ignored in: <function ROCMMonitor.__del__ at 0x15520bd2b1c0>
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/mlflow/system_metrics/metrics/rocm_monitor.py", line 119, in __del__
+    rocml.smi_shutdown()
+NameError: name 'rocml' is not defined
+Epoch 0:   0%|                                                                                                                                                                                                                                                                                                                                                                           | 0/21 [00:03<?, ?it/s]
+Error executing job with overrides: []
+Traceback (most recent call last):
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 93, in main
+    trainer.fit(training_dataset=train_dataset, cfg=cfg, validation_dataset=val_dataset)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 83, in fit
+    train_metrics = self.train_step(input_batch)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 41, in train_step
+    patchified_inputs, encodings, decodings = self.forward(inputs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDRAutoencoderTrainer.py", line 27, in forward
+    patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 255, in forward
+    encoding, decoding = self.encoder_decoders[band](graphs, band_decomposition, subjects)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/MENDREncoder.py", line 102, in forward
+    x = self.gnn_spatial_harmonizer(x, edge_index, edge_dist, B, P, C)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 25, in forward
+    x = gnn_transformer(x, edge_index, edge_dist, B, P, C)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/Model/MENDR/Autoencoder/GNNSpatialHarmonizer.py", line 80, in forward
+    batch_patch_edge_dist = edge_dist.repeat(P)
+RuntimeError: Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+2025/06/11 19:56:26 INFO mlflow.system_metrics.system_metrics_monitor: Stopping system metrics monitoring...
+2025/06/11 19:56:26 INFO mlflow.system_metrics.system_metrics_monitor: Successfully terminated system metrics monitoring!

@@ -1,0 +1,49 @@
+W0614 15:16:23.526000 2706466 torch/distributed/run.py:793] 
+W0614 15:16:23.526000 2706466 torch/distributed/run.py:793] *****************************************
+W0614 15:16:23.526000 2706466 torch/distributed/run.py:793] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0614 15:16:23.526000 2706466 torch/distributed/run.py:793] *****************************************
+Error executing job with overrides: ['training_params.epochs=1', 'training_params.batch_size=256', 'training_params.train_frac=0.02', 'training_params.val_frac=0.02', 'meta_params.save_model=false', 'meta_params.save_final_model=false', 'meta_params.log_system_metrics=false', 'meta_params.log_model_params_and_grads=false']
+Error executing job with overrides: ['training_params.epochs=1', 'training_params.batch_size=256', 'training_params.train_frac=0.02', 'training_params.val_frac=0.02', 'meta_params.save_model=false', 'meta_params.save_final_model=false', 'meta_params.log_system_metrics=false', 'meta_params.log_model_params_and_grads=false']
+Traceback (most recent call last):
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 36, in main
+    torch.cuda.set_device(rank)
+NameError: name 'rank' is not defined
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Traceback (most recent call last):
+  File "/storage/ice1/1/9/mchen439/chungus-eeg/pretrain_autoencoder.py", line 36, in main
+    torch.cuda.set_device(rank)
+NameError: name 'rank' is not defined
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+W0614 15:16:30.642000 2706466 torch/distributed/elastic/multiprocessing/api.py:897] Sending process 2706488 closing signal SIGTERM
+E0614 15:16:30.706000 2706466 torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 1 (pid: 2706489) of binary: /home/hice1/mchen439/scratch/miniconda3/envs/chungus/bin/python
+Traceback (most recent call last):
+  File "/home/hice1/mchen439/scratch/miniconda3/envs/chungus/bin/torchrun", line 10, in <module>
+    sys.exit(main())
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 355, in wrapper
+    return f(*args, **kwargs)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/run.py", line 919, in main
+    run(args)
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/run.py", line 910, in run
+    elastic_launch(
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/hice1/mchen439/.local/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+pretrain_autoencoder.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-06-14_15:16:30
+  host      : atl1-1-03-017-2-0.pace.gatech.edu
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 2706489)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
