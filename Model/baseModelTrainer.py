@@ -213,7 +213,7 @@ class BaseModelTrainer(object):
         # Always save scheduler 
     '''
 
-    def _make_dataloader(self, dataset, cfg, training=False):
+    def _make_dataloader(self, dataset, cfg, training=False, sampler=None):
         if isinstance(dataset, DataLoader):
             return dataset
         loader_kwargs = dict()
@@ -221,22 +221,24 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
         loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
         loader_kwargs.setdefault('persistent_workers', True)
-        loader_kwargs.setdefault('shuffle', training)
+        loader_kwargs.setdefault('shuffle', training and (sampler is None))
+        # loader_kwargs.setdefault('shuffle', training)
         loader_kwargs.setdefault('drop_last', training)
+        loader_kwargs.setdefault('sampler', sampler)
         return DataLoader(dataset, **loader_kwargs)
 
-    def _setup_experiment(self, cfg):
+    def _setup_experiment(self, cfg, train_sampler=None, val_sampler=None):
         # We cannot log models to MlFlow due to our custom modules.
         assert self.train_dataset != None, "Train Dataset not specified."
         assert self.validation_dataset != None, "Validation Dataset not specified."
 
         mlflow.set_experiment(cfg.meta_params.experiment_name)
-        training_dataloader = self._make_dataloader(self.train_dataset, cfg, training=True)
+        training_dataloader = self._make_dataloader(self.train_dataset, cfg, training=True, sampler=train_sampler)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
         validation_dataloader = None
         if self.validation_dataset != None:
-            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg,training=False)
+            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg,training=False, sampler=val_sampler)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
         if "mlflow_run_id" in cfg.meta_params:

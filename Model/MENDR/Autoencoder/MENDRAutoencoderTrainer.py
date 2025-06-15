@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 import numpy as np
 from ...baseModelTrainer import BaseModelTrainer
 from ..WaveletLoss import WaveletReconstructionLoss
@@ -63,25 +65,34 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
             plt.close(fig)
         return {band: loss.item() for band, loss in loss_dict.items()}
 
-    def fit(self, training_dataset, cfg, validation_dataset=None):
+    def fit(self, training_dataset, cfg, validation_dataset=None, train_sampler=None, val_sampler=None):
+        distributed = isinstance(train_sampler, DistributedSampler)
+        rank  = dist.get_rank()  if distributed else 0
+        world = dist.get_world_size() if distributed else 1
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
-        training_dataloader, validation_dataloader = self._setup_experiment(cfg)
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg, train_sampler, val_sampler)
 
         for epoch in range(cfg.training_params.epochs):
+            if distributed:
+                train_sampler.set_epoch(epoch)
             epoch_metrics = {}
             self.epoch = epoch
             ### TRAINING ###
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+            train_pbar = tqdm.trange(len(training_dataloader), desc=f"Epoch {epoch}", ncols=400, position=0, leave=True, disable=(rank != 0))
+            # train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
             train_data_iterator = iter(training_dataloader)
             self.train(True)
 
             for iteration in train_pbar:
                 input_batch = self._get_batch(train_data_iterator)
                 train_metrics = self.train_step(input_batch)
-                train_pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+                if rank == 0:
+                    train_pbar.set_postfix(train_metrics)
+                    mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+                #train_pbar.set_postfix(train_metrics)
+                #mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
                 epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
                 if cfg.meta_params.log_model_params_and_grads:
                     self.logger.log_model_gradients(self.autoencoder, epoch=epoch*len(train_pbar) + iteration)
@@ -106,9 +117,12 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                     epoch_metrics[metric] = epoch_metrics[metric] / len(training_dataloader)
 
             ### SAVE ###
-            if cfg.meta_params.save_model:
+            if rank == 0 and cfg.meta_params.save_model:
                 self._retain_best(epoch, epoch_metrics)
-            self.standard_logging(epoch_metrics, "End of Epoch")
+            if rank == 0:
+                self.standard_logging(epoch_metrics, "End of Epoch")
+                mlflow.log_metrics(epoch_metrics, step=epoch)
+            # self.standard_logging(epoch_metrics, "End of Epoch")
             if cfg.meta_params.log_model_params_and_grads: 
                 self.logger.logEncoderParams(self.autoencoder, step=epoch)
             mlflow.log_metrics(epoch_metrics, step=epoch)
