@@ -48,12 +48,12 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         metrics['lr'] = self.optimizer.scheduler.get_last_lr()[0]
         return metrics
     
-    def evaluate_step(self, inputs, step_idx):
+    def evaluate_step(self, inputs, step_idx, rank):
         self.train(False)
         patchified_inputs, encodings, decodings = self.forward(inputs)
 
         loss_dict = WaveletReconstructionLoss(patchified_inputs, decodings)
-        if step_idx == 0:
+        if rank == 0 and step_idx == 0:
             recon_enc = dict()
             recon_dec = dict()
             for band in self.cfg.meta_params.bands: # Just look at patches from first sample/subject
@@ -72,7 +72,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
-        training_dataloader, validation_dataloader = self._setup_experiment(cfg, train_sampler, val_sampler)
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg, rank, train_sampler, val_sampler)
 
         for epoch in range(cfg.training_params.epochs):
             if distributed:
@@ -106,7 +106,7 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 val_data_iterator = iter(validation_dataloader)
                 for iteration in pbar:
                     input_batch = self._get_batch(val_data_iterator)
-                    val_metrics = self.evaluate_step(input_batch, iteration)
+                    val_metrics = self.evaluate_step(input_batch, iteration, rank)
                     pbar.set_postfix(val_metrics)
                     epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
 
@@ -123,16 +123,17 @@ class MENDRAutoencoderTrainer(BaseModelTrainer):
                 self.standard_logging(epoch_metrics, "End of Epoch")
                 mlflow.log_metrics(epoch_metrics, step=epoch)
             # self.standard_logging(epoch_metrics, "End of Epoch")
-            if cfg.meta_params.log_model_params_and_grads: 
+            if rank == 0 and cfg.meta_params.log_model_params_and_grads: 
                 self.logger.logEncoderParams(self.autoencoder, step=epoch)
-            mlflow.log_metrics(epoch_metrics, step=epoch)
-            if not self.scheduler_after_batch:
+            if rank == 0 and not self.scheduler_after_batch:
                 self.optimizer.scheduler_step_cosine_annealing()
-        if cfg.meta_params.save_final_model:
+        if rank == 0 and cfg.meta_params.save_final_model:
             self._retain_best(epoch, epoch_metrics)
-        mlflow.end_run()
+        
+        if rank == 0:
+            mlflow.end_run()
 
-        if cfg.meta_params.log_model_params_and_grads:
+        if rank == 0 and cfg.meta_params.log_model_params_and_grads:
             self.logger.closeWriter()
     
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):

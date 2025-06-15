@@ -1,4 +1,4 @@
-import os
+import os, sys
 import gc
 import random
 import numpy as np
@@ -25,6 +25,14 @@ def main(cfg:DictConfig) -> None:
     world_size = int(os.environ.get("WORLD_SIZE",1))
     rank = int(os.environ.get("RANK",0))
     local_rank = int(os.environ.get("LOCAL_RANK",0))
+    #os.environ['NCCL_DEBUG']='INFO'
+    #os.environ['NCCL_DEBUG_SUBSYS']='COLL'
+    #os.environ['TORCH_NCCL_DESYNC_DEBUG']='1'
+
+    f = open(os.devnull, "w")
+    if rank != 0:
+        sys.stdout = f
+        sys.stderr = f
 
     distributed = world_size > 1
     if distributed:

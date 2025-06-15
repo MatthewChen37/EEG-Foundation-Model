@@ -227,12 +227,12 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('sampler', sampler)
         return DataLoader(dataset, **loader_kwargs)
 
-    def _setup_experiment(self, cfg, train_sampler=None, val_sampler=None):
+    def _setup_experiment(self, cfg, rank, train_sampler=None, val_sampler=None):
         # We cannot log models to MlFlow due to our custom modules.
         assert self.train_dataset != None, "Train Dataset not specified."
         assert self.validation_dataset != None, "Validation Dataset not specified."
-
-        mlflow.set_experiment(cfg.meta_params.experiment_name)
+        if rank == 0:
+            mlflow.set_experiment(cfg.meta_params.experiment_name)
         training_dataloader = self._make_dataloader(self.train_dataset, cfg, training=True, sampler=train_sampler)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
@@ -241,16 +241,17 @@ class BaseModelTrainer(object):
             validation_dataloader = self._make_dataloader(self.validation_dataset, cfg,training=False, sampler=val_sampler)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
-        if "mlflow_run_id" in cfg.meta_params:
-            mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id,
-                            run_name=cfg.meta_params.run_name,
-                            experiment_name=cfg.meta_params.experiment_name,
-                            log_system_metrics=cfg.meta_params.log_system_metrics)
-        else:
-            mlflow.start_run(run_name=cfg.meta_params.run_name,
-            log_system_metrics=cfg.meta_params.log_system_metrics)
+        if rank == 0:
+            if "mlflow_run_id" in cfg.meta_params:
+                mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id,
+                                run_name=cfg.meta_params.run_name,
+                                experiment_name=cfg.meta_params.experiment_name,
+                                log_system_metrics=cfg.meta_params.log_system_metrics)
+            else:
+                mlflow.start_run(run_name=cfg.meta_params.run_name,
+                log_system_metrics=cfg.meta_params.log_system_metrics)
 
-        if "log_model_params_and_grads" in cfg.meta_params and cfg.meta_params.log_model_params_and_grads:
+        if rank == 0 and "log_model_params_and_grads" in cfg.meta_params and cfg.meta_params.log_model_params_and_grads:
             self.logger = MENDRLogger()
 
         return training_dataloader, validation_dataloader
