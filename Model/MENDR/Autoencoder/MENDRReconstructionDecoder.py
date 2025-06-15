@@ -152,10 +152,10 @@ class SEBasicBlock(nn.Module):
                  *, reduction=16):
         super().__init__()
         self.conv1 = nn.Conv1d(inplanes, planes, stride)
-        self.bn1 = nn.BatchNorm1d(planes)
+        self.bn1 = nn.GroupNorm(num_groups=4, num_channels=planes)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv1d(planes, planes, 1)
-        self.bn2 = nn.BatchNorm1d(planes)
+        self.bn2 = nn.GroupNorm(num_groups=4, num_channels=planes)
         self.se = SELayer(planes, reduction)
         self.downsample = downsample
         self.stride = stride
