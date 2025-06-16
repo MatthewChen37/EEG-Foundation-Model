@@ -20,7 +20,8 @@ class MENDRContextualizerTiny(nn.Module):
 		self.out_dim = out_dim
 		self.include_high = include_high
 		if patch_lens is None:
-			self.patch_lens = {
+			print("Note: Patch lengths are not specified, using default values. (2 second patches)")
+			self.patch_lens = { # 2 second patches
 				'delta': 8,
 				'theta': 8,
 				'alpha': 16,
@@ -51,7 +52,7 @@ class MENDRContextualizerTiny(nn.Module):
 		self.position_encoders = nn.ParameterDict(self.position_encoders)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
-		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels*out_dim=encoded_h, #time_step]
+		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels, #time_step* #out_dim]
 		# Each patch gets coagulated into the same time scale through the covariance matrix
 		# Thus different patches will have different number of samples for calculating the covariance matrix
 		cov_matrices = dict()

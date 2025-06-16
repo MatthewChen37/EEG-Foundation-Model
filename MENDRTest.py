@@ -14,6 +14,8 @@ from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer, D
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
+from Model.MENDR.Contextualizer.Tiny.MENDRTinyPreTrainer import MENDRTinyPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargePreTrainer import MENDRLargePreTrainer
 #from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
@@ -517,49 +519,62 @@ def testMENDRPreTrainerMAEReconLoss():
     
 def testMENDRPreTrainerTinyMAEReconLoss():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.5,
         mask_span = 5,
         temp = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,        
-        gamma_reconstructive_loss_pref = 1.0,
-        gradient_clip_value = 1e7,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
         negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
 
-    mendr = MENDR_model(device, contextualizer_size="TINY")
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg=args, cuda=device)
 
     with torch.autograd.detect_anomaly():
         example_input = {
-            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
+                'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+                'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+                'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+                'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+                'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
         }
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer._epochMaskedRecon(example_input, nn.MSELoss())
 
         assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
-        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
-        assert combined_manifold_output_masked.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
+        assert combined_manifold_output.shape == torch.Size([4, 10, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 10, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
 
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
         assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
@@ -568,42 +583,66 @@ def testMENDRPreTrainerTinyMAEReconLoss():
         for mask_idx in mask_idxes:
             assert torch.sum(mask_idx) == 5
 
-
 def testMENDRPreTrainerWithTiny():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,
-        gamma_reconstructive_loss_pref = 1.0,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
-        gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
-        negatives_loo=10,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None,
+            num_workers = 32,
+            batch_size = 16,
+            epochs=1,
+        ),
+        meta_params = SimpleNamespace(
+            experiment_name = "test",
+            run_name = "test",
+            log_model_params_and_grads = False,
+            save_model = False,
+            save_final_model = False,
+            log_system_metrics = False,
+        ),
+        negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
-
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
 
-    mendr = MENDR_model(device, temp=args.temp, contextualizer_size="TINY")
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
-    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=2,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg=args, cuda=device)
+    training_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    val_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
 
-    mendr.mendr_encoder.apply(check_sanity)
-    mendr.mendr_contextualizer.apply(check_sanity)
+    trainer.fit(training_dataset=training_dataset, cfg=args, validation_dataset=val_dataset)
+
+    autoencoder.apply(check_sanity)
+    contextualizer.apply(check_sanity)
 
 def testMENDRPreTrainerNoValidation():
     args = SimpleNamespace(
@@ -952,6 +991,7 @@ if __name__ == "__main__":
     print("Testing pretrainer MAE Recon loss...")
     testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
+    '''
 
     print("Testing pretrainer Tiny MAE Recon loss...")
     testMENDRPreTrainerTinyMAEReconLoss()
@@ -962,6 +1002,7 @@ if __name__ == "__main__":
     print("PreTrainer with tiny contextualizer test passed!")
 
 
+    '''
     print("Testing pretrainer fit without validation...")
     testMENDRPreTrainerNoValidation()
     print("PreTrainer fit without validation test passed!")

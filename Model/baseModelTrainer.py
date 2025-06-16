@@ -242,16 +242,10 @@ class BaseModelTrainer(object):
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
         if rank == 0:
-            if "mlflow_run_id" in cfg.meta_params:
-                mlflow.start_run(run_id=cfg.meta_params.mlflow_run_id,
-                                run_name=cfg.meta_params.run_name,
-                                experiment_name=cfg.meta_params.experiment_name,
-                                log_system_metrics=cfg.meta_params.log_system_metrics)
-            else:
-                mlflow.start_run(run_name=cfg.meta_params.run_name,
-                log_system_metrics=cfg.meta_params.log_system_metrics)
+            mlflow.start_run(run_name=cfg.meta_params.run_name,
+            log_system_metrics=cfg.meta_params.log_system_metrics)
 
-        if rank == 0 and "log_model_params_and_grads" in cfg.meta_params and cfg.meta_params.log_model_params_and_grads:
+        if rank == 0 and cfg.meta_params.log_model_params_and_grads:
             self.logger = MENDRLogger()
 
         return training_dataloader, validation_dataloader

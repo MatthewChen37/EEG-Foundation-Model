@@ -18,6 +18,13 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		self.svd = SVD.apply
 		self.contrastive_loss_fn = nn.MSELoss()
 
+		# Freeze the autoencoder and disable the decoder
+		for param in autoencoder.parameters():
+			param.requires_grad = False
+		autoencoder.eval()
+		for band, encoder_decoder in autoencoder.encoder_decoders.items():
+			encoder_decoder.disableDecoder()
+
 		assert isinstance(contextualizer, MENDRContextualizerTiny), f"Contextualizer must be of type MENDRContextualizerTiny, but got {type(contextualizer)}"
 
 		super(MENDRTinyPreTrainer, self).__init__(autoencoder=autoencoder, contextualizer=contextualizer,
@@ -80,12 +87,11 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				plt.close(combined_fig)
 		return eval_metrics
 
-	# TODO: This might be redundant	
 	def fit(self, training_dataset, cfg, validation_dataset=None):
 		self.epoch = 0
 		self.train_dataset = training_dataset
 		self.validation_dataset = validation_dataset
-		training_dataloader, validation_dataloader = self._setup_experiment(cfg)
+		training_dataloader, validation_dataloader = self._setup_experiment(cfg, rank=0)
 
 		for epoch in range(cfg.training_params.epochs):
 			epoch_metrics = {}

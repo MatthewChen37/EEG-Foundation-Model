@@ -25,7 +25,7 @@ class PositionalEncoding(nn.Module):
 	def forward(self, x):
 		"""
 		Arguments:
-			x: Tensor, shape [Batch Size, Patches, Channels * out_dim, Time Steps]
+			x: Tensor, shape [Batch Size, Patches, Channels, Time Steps* out_dim]
 		"""
 		B, P = x.shape[0], x.shape[1]
 		x = rearrange(x, 'B P C (O T) -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
