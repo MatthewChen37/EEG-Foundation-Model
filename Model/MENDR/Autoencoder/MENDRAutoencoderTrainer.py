@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import mlflow
 import tqdm
 
-BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 class MENDRAutoencoderTrainer(BaseModelTrainer):
     '''
 	Based on BENDRTrainer.py	

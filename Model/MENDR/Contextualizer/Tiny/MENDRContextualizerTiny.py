@@ -14,10 +14,11 @@ from einops import rearrange
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, num_channels, out_dim, patch_lens=None, contextualizer_layers=12):
+	def __init__(self, num_channels, out_dim, include_high=False, patch_lens=None, contextualizer_layers=12):
 		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
+		self.include_high = include_high
 		if patch_lens is None:
 			self.patch_lens = {
 				'delta': 8,
@@ -26,6 +27,8 @@ class MENDRContextualizerTiny(nn.Module):
 				'beta': 32,
 				'gamma': 64,
 			}
+			if include_high:
+				self.patch_lens['high'] = 128
 		else:
 			self.patch_lens = patch_lens
 
@@ -43,6 +46,8 @@ class MENDRContextualizerTiny(nn.Module):
 			'beta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['beta']),
 			'gamma': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['gamma']),
 		}
+		if self.include_high:
+			self.position_encoders['high'] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['high'])
 		self.position_encoders = nn.ParameterDict(self.position_encoders)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
