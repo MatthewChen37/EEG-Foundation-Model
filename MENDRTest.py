@@ -196,11 +196,11 @@ def testMENDRBatchWiseMatrixSimilarity():
 
 def testEncoder():
     example_input = {
-            'delta': torch.randn(4, 11, 19, 40).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 40).to(device).float(),
-            'alpha': torch.randn(4, 11, 19, 80).to(device).float(),
-            'beta': torch.randn(4, 11, 19, 160).to(device).float(),
-            'gamma': torch.randn(4, 11, 19, 320).to(device).float()
+            'delta': torch.randn(128, 19, 240).to(device).float(),
+            'theta': torch.randn(128, 19, 240).to(device).float(),
+            'alpha': torch.randn(128, 19, 480).to(device).float(),
+            'beta': torch.randn(128, 19, 960).to(device).float(),
+            'gamma': torch.randn(128, 19, 1920).to(device).float()
     }
 
     edge_indices = []
@@ -216,45 +216,37 @@ def testEncoder():
         edge_attributes.append(torch.randn(4, 1).clone())
     batch_edge_attributes = torch.cat(edge_attributes, dim=0)
 
-    example_graph = Data(edge_index=batch_edge_index, edge_attr=batch_edge_attributes)
+    example_graph = Data(edge_index=batch_edge_index, edge_attr=batch_edge_attributes).to(device)
 
-    encoder = MENDRPatchEncoder(
-        num_channels=19,
-        delta_sub_patch_size=4,
-        theta_sub_patch_size=4,
-        alpha_sub_patch_size=8,
-        beta_sub_patch_size=16,
-        gamma_sub_patch_size=32,
-        high_sub_patch_size=64,
-        delta_encoded_h=38,
-        theta_encoded_h=38,
-        alpha_encoded_h=38,
-        beta_encoded_h=38,
-        gamma_encoded_h=76,
-        high_encoded_h=76,
-        delta_super_patch_seq_len=40,
-        theta_super_patch_seq_len=40,
-        alpha_super_patch_seq_len=80,
-        beta_super_patch_seq_len=160,
-        gamma_super_patch_seq_len=320,
-        high_super_patch_seq_len=640,
-        device=device)
+    example_input['graph'] = example_graph
+    subjects = torch.randint(0, 128, (128,)).to(device)
+    example_input['subject_idx'] = subjects
 
-    encodings, decodings = encoder(example_graph, example_input)
+    encoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=2,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=128,
+                            n_gnn_heads=2,
+                            device=device,
+                            ).to(device)
+
+    _, encodings, decodings = encoder(example_input)
     assert encodings.keys() == BANDS
     assert decodings.keys() == BANDS
 
-    assert decodings['delta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['delta'].shape}" 
-    assert decodings['theta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['theta'].shape}" 
-    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decodings['alpha'].shape}" 
-    assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
-    assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
+    assert decodings['delta'].shape == torch.Size([3840, 19, 8]), f"Actual Shape: {decodings['delta'].shape}" 
+    assert decodings['theta'].shape == torch.Size([3840, 19, 8]), f"Actual Shape: {decodings['theta'].shape}" 
+    assert decodings['alpha'].shape == torch.Size([3840, 19, 16]), f"Actual Shape: {decodings['alpha'].shape}" 
+    assert decodings['beta'].shape == torch.Size([3840, 19, 32]), f"Actual Shape: {decodings['beta'].shape}" 
+    assert decodings['gamma'].shape == torch.Size([3840, 19, 64]), f"Actual Shape: {decodings['gamma'].shape}"
 
-    assert encodings['delta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['delta'].shape}" 
-    assert encodings['theta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['theta'].shape}"
-    assert encodings['alpha'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['alpha'].shape}" 
-    assert encodings['beta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['beta'].shape}" 
-    assert encodings['gamma'].shape == torch.Size([4, 11, 76, 37]), f"Actual Shape: {encodings['gamma'].shape}"
+    assert encodings['delta'].shape == torch.Size([128, 30, 19, 192]), f"Actual Shape: {encodings['delta'].shape}" 
+    assert encodings['theta'].shape == torch.Size([128, 30, 19, 192]), f"Actual Shape: {encodings['theta'].shape}"
+    assert encodings['alpha'].shape == torch.Size([128, 30, 19, 384]), f"Actual Shape: {encodings['alpha'].shape}" 
+    assert encodings['beta'].shape == torch.Size([128,  30, 19, 768]), f"Actual Shape: {encodings['beta'].shape}" 
+    assert encodings['gamma'].shape == torch.Size([128, 30, 19, 1536]), f"Actual Shape: {encodings['gamma'].shape}"
 
 def testLargeContextualizerBatchLEM():
     # Eigenvalues are 1, 3
@@ -955,11 +947,11 @@ if __name__ == "__main__":
     testMakeMaskIdxes()
     print("MENDR Make Mask Idxes Test Passed!")
 
-    '''
     print("Testing Encoder...")
     testEncoder()
     print("Encoder test passed!")
 
+    '''
     print("Testing Batchwise Matrix Similarity...")
     testMENDRBatchWiseMatrixSimilarity()
     print("Batchwise Matrix Similarity test passed!")
@@ -1000,7 +992,6 @@ if __name__ == "__main__":
     print("Testing pretrainer with tiny contextualizer...")
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
-
 
     '''
     print("Testing pretrainer fit without validation...")
