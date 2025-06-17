@@ -108,10 +108,7 @@ class MENDRWaveletContextualizer(nn.Module):
 
 		for band in x.keys():
 			input_x = x[band].clone()
-			if self.learnable_padding[band] is not None:
-				input_x = torch.cat([input_x, self.learnable_padding[band].repeat(batch_size, num_patches, 1, 1)], dim=2)
 			x_input[band] = input_x + self.position_encoder[band](input_x)
-
 		wavelet_manifold_output = dict()
 		for band, band_encodings in x_input.items():
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
@@ -119,11 +116,11 @@ class MENDRWaveletContextualizer(nn.Module):
 			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
-			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(batch_size, num_patches, self.encoded_out, self.encoded_out)
+			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(batch_size, num_patches, self.num_channels, self.num_channels)
 			for transformer in self.wavelet_manifold_transformers[band]:
 				wavelet_manifold_output[band] = transformer(wavelet_manifold_output[band], batch_size, num_patches)
 				# output shape is [B, P, N, N]
-		return wavelet_manifold_output, (batch_size, num_patches, self.encoded_out, self.encoded_out)
+		return wavelet_manifold_output, (batch_size, num_patches, self.num_channels, self.num_channels)
 
 	def _batch_LogEuclideanMean(self, x, band):
 		# X is list of [Batch_Size * epochs, C, C]

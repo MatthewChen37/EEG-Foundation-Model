@@ -337,47 +337,37 @@ def testContextualizerTiny():
         assert combined_manifold_output.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
         assert combined_manifold_output_masked.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output_masked.shape}"
 
-def testContextualizerLarge():
+def testContextualizerLargeWavelet():
     example_input = {
-            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
+            'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerLarge(device,
-            delta_encoded_h=19,
-            theta_encoded_h=19,
-            alpha_encoded_h=38,
-            beta_encoded_h=76,
-            gamma_encoded_h=114,
-            high_encoded_h=152,
-            temp=10.0,
-        )
+        contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+        '''
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
-            combined_manifold_output, wavelet_manifold_output, _ = contextualizer(example_input, batch_size=4, patch_num=11)
         df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
         df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
         df.to_csv("ProfileData/LargeContextualizer.csv", float_format='%.5f')
         print("Total number of Large parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-
+        '''
+        wavelet_manifold_output, epoched_shape = contextualizer(example_input)
         wavelet_manifold_output_delta = wavelet_manifold_output['delta']
         wavelet_manifold_output_theta = wavelet_manifold_output['theta']
         wavelet_manifold_output_alpha = wavelet_manifold_output['alpha']
         wavelet_manifold_output_beta = wavelet_manifold_output['beta']
         wavelet_manifold_output_gamma = wavelet_manifold_output['gamma']
 
-        assert wavelet_manifold_output_delta.shape == torch.Size([4, 11, 19, 19]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
-        assert wavelet_manifold_output_theta.shape == torch.Size([4, 11, 19, 19]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
-        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 11, 19, 19]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
-        assert wavelet_manifold_output_beta.shape == torch.Size([4, 11, 19, 19]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
-        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 11, 19, 19]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
-
-        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
-        assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
-
+        assert wavelet_manifold_output_delta.shape == torch.Size([4, 10, 19, 19]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
+        assert wavelet_manifold_output_theta.shape == torch.Size([4, 10, 19, 19]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
+        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 10, 19, 19]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
+        assert wavelet_manifold_output_beta.shape ==  torch.Size([4, 10, 19, 19]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
+        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 10, 19, 19]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
+        assert epoched_shape == (4, 10, 19, 19), f"Epoched Shape: {epoched_shape}"
 
 def testMENDRLargeCombinedContextualizerMasking():
     example_input = {
@@ -967,11 +957,11 @@ if __name__ == "__main__":
     testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
-    '''
-    print("Testing Large Contextualizer...")
-    testContextualizerLarge()
-    print("Large Contextualizer test passed!")
+    print("Testing Large Wavelet Contextualizer...")
+    testContextualizerLargeWavelet()
+    print("Large Wavelet Contextualizer test passed!")
 
+    '''
     print("Testing Large Contextualizer masking...")
     testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")

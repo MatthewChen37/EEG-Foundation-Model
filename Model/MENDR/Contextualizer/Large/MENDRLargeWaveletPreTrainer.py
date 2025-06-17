@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
-from Model.MENDR.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
+from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
 from Model.MENDR.safeSVD import SVD, svdv2
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer
 from Explainability.embeddingVisualization import plotSPDEmbedding
@@ -170,8 +170,6 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 				other_embeddings.append(embedding_tensor)
 
 			curr_target = embeddings[frequency_bands[i]].clone().view(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[negative_indices]
-
-
 			other_embeddings_mean = self.mendr_model.mendr_contextualizer.WaveletContextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
 
 			# Why does this fail for higher precisions?
