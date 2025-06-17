@@ -41,35 +41,101 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			p.register_hook(lambda grad: torch.clamp(grad, -cfg.training_params.gradient_clip_value, cfg.training_params.gradient_clip_value))
 
 	def forward(self, data):
-		if self.train_mode == "wavelet":
-			patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
-			wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
-			w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn_wavelet, negatives=self.negatives_loo)
-			return {
-					'patchified_inputs': patchified_inputs,
-					'encodings': encodings,
-					'decodings': decodings,
-					'combined_manifold_output': combined_manifold_output,
-					'wavelet_manifold_output': wavelet_manifold_output,
-					'wavelet_loss': w_loss,
-					'wavelet_acc': w_correct / w_pairs,
-					}
-		elif self.train_mode == "combined":
-			patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
-			wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
-			riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.epochMaskedRecon(wavelet_manifold_output,
-																															epoched_shape,
-																															self.contrastive_loss_fn_combined)
-			return {
-					'patchified_inputs': patchified_inputs,
-					'encodings': encodings,
-					'decodings': decodings,
-					'combined_manifold_output': combined_manifold_output,
-					'wavelet_manifold_output': wavelet_manifold_output,
-				}
-		else:
-			raise ValueError(f"Invalid training mode: {self.train_mode}. Must be 'wavelet' or 'combined'.")
-		
+		patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
+		wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
+		return {
+				'patchified_inputs': patchified_inputs,
+				'encodings': encodings,
+				'decodings': decodings,
+				'wavelet_manifold_output': wavelet_manifold_output,
+				'wavelet_loss': w_loss,
+				'wavelet_acc': w_correct / w_pairs,
+			}
+
+	def backward(self, loss):
+		self.optimizer.zero_grad()
+		loss.backward()
+
+	def train_step(self, inputs):
+		self.train(True)
+		outputs = self.forward(inputs)
+		self.backward(loss=outputs['wavelet_loss'])
+		self.optimizer.step()
+		train_metrics = self._calculate_metrics(outputs['wavelet_loss'].item())
+		return train_metrics
+
+	def evaluate_step(self, inputs, step_idx):
+		self.train(False)
+		with torch.no_grad():
+			outputs = self.forward(inputs)
+			eval_metrics = self._calculate_metrics(outputs['wavelet_loss'].item())
+
+			if step_idx == 0: # Log only the first batch in the validation set
+				fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output,
+													combined_manifold_output.reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
+													f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
+				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
+
+		return eval_metrics
+
+
+	def fit(self, training_dataset, cfg, validation_dataset=None):
+		self.epoch = 0
+		self.train_dataset = training_dataset
+		self.validation_dataset = validation_dataset
+		training_dataloader, validation_dataloader = self._setup_experiment(cfg, rank=0)
+
+		for epoch in range(cfg.training_params.epochs):
+			epoch_metrics = {}
+			self.epoch = epoch
+			### TRAINING ###
+			train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+			train_data_iterator = iter(training_dataloader)
+			self.train(True)
+
+			for iteration in train_pbar:
+				input_batch = self._get_batch(train_data_iterator)
+				train_metrics = self.train_step(input_batch)
+				train_pbar.set_postfix(train_metrics)
+				mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
+				epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
+				if cfg.meta_params.log_model_params_and_grads:
+					self.logger.log_model_gradients(self.wavelet_contextualizer, epoch=epoch*len(train_pbar) + iteration)
+				if self.scheduler_after_batch:
+					self.optimizer.scheduler_step_cosine_annealing()
+
+			### VALIDATION ###
+			if validation_dataset != None:
+				self.train(False)
+				pbar = tqdm.trange(len(validation_dataloader), desc="Validation", ncols=400, position=0, leave=True)
+				val_data_iterator = iter(validation_dataloader)
+				for iteration in pbar:
+					input_batch = self._get_batch(val_data_iterator)
+					val_metrics = self.evaluate_step(input_batch, step_idx=iteration)
+					pbar.set_postfix(val_metrics)
+					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
+					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+					if cfg.meta_params.log_model_params_and_grads:
+						self.logger.log_model_gradients(self.wavelet_contextualizer, epoch=epoch*len(pbar) + iteration)
+
+			### SAVE ###
+			if cfg.meta_params.save_model:
+				self._retain_best(epoch, epoch_metrics)
+				self.standard_logging(epoch_metrics, "End of Epoch")
+			if cfg.meta_params.log_model_params_and_grads: 
+				self.logger.logContextualizerParams(self.wavelet_contextualizer, step=epoch)
+				self.logger.logMENDRTrainerParams(None, self.wavelet_contextualizer.Contextualizer.mask, step=epoch)
+			mlflow.log_metrics(epoch_metrics, step=epoch)
+
+			if not self.scheduler_after_batch:
+				self.optimizer.scheduler_step_cosine_annealing()
+		if cfg.meta_params.save_final_model:
+			self._retain_best(epoch, epoch_metrics)
+		mlflow.end_run()
+			
+		if cfg.meta_params.log_model_params_and_grads:
+			self.logger.closeWriter()
+
 	def leave_one_out(self, embeddings, criterion, negatives=20):
 		"""
 		Compute leave-one-out loss for wavelet embeddings.
