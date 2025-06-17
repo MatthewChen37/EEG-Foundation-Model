@@ -13,7 +13,6 @@ class PositionalEncoding(nn.Module):
 		self.out_dim = out_dim
 		self.patch_len = patch_len
 
-
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
 		self.conv = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=self.out_dim*self.patch_len,
 					kernel_size=(19, 3), stride=(1, 1), padding=(9, (3 - 1) // 2), groups=self.out_dim*self.patch_len)

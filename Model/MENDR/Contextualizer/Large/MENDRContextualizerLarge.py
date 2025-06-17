@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from Model.MENDR.mAtt.mAtt import E2R, SPDRectified
+from Model.MENDR.mAtt.mAtt import E2R, SPDRectified, WaveletLogEuclideanMean, tensor_exp, tensor_log
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
 from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes
 from ..ManifoldTransformer import ManifoldTransformer
@@ -10,18 +10,13 @@ from ..ManifoldTransformer import ManifoldTransformer
 BENDR-style Contextualizer using MAtt module 
 '''
 class MENDRContextualizerLarge(nn.Module):
-	def __init__(self, device,
-				delta_encoded_h,
-                theta_encoded_h,
-                alpha_encoded_h,
-                beta_encoded_h,
-                gamma_encoded_h,
-                high_encoded_h,
+	def __init__(self, 
+				wavelet_contextualizer,
+				combined_contextualizer,
 				temp,
 				patch_len,
 				encoded_out = 19):
 		super().__init__()
-		self.device = device
 		self.encoded_h = {
 			'delta': delta_encoded_h,
 			'theta': theta_encoded_h,
@@ -33,80 +28,75 @@ class MENDRContextualizerLarge(nn.Module):
 
 		self.patch_len = patch_len
 		self.encoded_out = encoded_out
-		self.WaveletContextualizer = MENDRWaveletContextualizer(device=self.device, encoded_h=self.encoded_h, encoded_out=self.encoded_out, patch_len=self.patch_len)
-		self.CombinedContextualizer = MENDRCombinedContextualizer(device=self.device, encoded_out=self.encoded_out)
+		self.wavelet_contextualizer = wavelet_contextualizer	
+		self.combined_contextualizer = combined_contextualizer
+
+	def forward(self, x, batch_size, patch_num):
+		wavelet_manifold_output, epoched_shape = self.wavelet_contextualizer(x)
+		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
+		# Never mask when calling it from here
+		combined_manifold_output, mask_idxes = self.combined_contextualizer(combined_manifold_output,
+												epoched_shape, mask_ratio=0.0)
+		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
+
+class MENDRWaveletContextualizer(nn.Module):
+	def __init__(self, num_channels, out_dim,
+				include_high=False,
+				temp=10.0, patch_lens=None,
+				n_transformer_layers=2):
+		super().__init__()
+		self.num_channels = num_channels
+		self.out_dim = out_dim
+		self.include_high = include_high
+		if patch_lens is None:
+			print("Note: Patch lengths are not specified, using default values. (2 second patches)")
+			self.patch_lens = { # 2 second patches
+				'delta': 8,
+				'theta': 8,
+				'alpha': 16,
+				'beta': 32,
+				'gamma': 64,
+			}
+			if self.include_high:
+				self.patch_lens['high'] = 128
+		else:
+			self.patch_lens = patch_lens
 
 		# Initialize temperature as a trainable parameter
 		self.temp1 = torch.nn.Parameter(torch.tensor(temp, requires_grad=True), requires_grad=True)
 
-	def forward(self, x, batch_size, patch_num):
-		wavelet_manifold_output, epoched_shape = self.WaveletContextualizer(x)
-		combined_manifold_output = self.CombinedContextualizer._wavelet_LogEuclideanMean(wavelet_manifold_output)
-		combined_manifold_output, mask_idxes = self.CombinedContextualizer(combined_manifold_output, epoched_shape, mask_ratio=0.0)
-		# Never mask when calling it from here
-		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
-
-class MENDRWaveletContextualizer(nn.Module):
-	def __init__(self, device, encoded_h, encoded_out, patch_len=18, n_transformer_layers=2):
-		super().__init__()
-		self.device = device
-		self.encoded_h = encoded_h
-		self.encoded_out = encoded_out
-		self.patch_len = patch_len
-
-		self.learnable_padding = {
-			'delta': None,
-			'theta': None,
-			'alpha': None,
-			'beta': None,
-			'gamma': None
-		}
-
-		self.learnable_padding = nn.ParameterDict(self.learnable_padding)
-
-		for band in self.encoded_h:
-			if self.encoded_h[band] and self.encoded_h[band] % 2 == 0:
-				self.encoded_h[band] += 1
-				print(f"Encoded_H {band} {self.encoded_h[band] - 1} is even, adding 1 to make it odd")
-				self.learnable_padding[band] = torch.nn.Parameter(torch.zeros(1, 1, 1, self.patch_len), requires_grad=True).to(self.device)
-
 		self.ract = SPDRectified()
 		# Positional Encoding
 		self.position_encoder = dict()
-		for band in self.encoded_h:
-			if self.encoded_h[band]:
-				self.position_encoder[band] = PositionalEncoding(self.device, self.encoded_h[band], self.patch_len, dropout=0.1)
-		self.position_encoder = nn.ParameterDict(self.position_encoder).to(self.device)
+		for band in self.patch_lens:
+			self.position_encoder[band] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens[band])
+		self.position_encoder = nn.ParameterDict(self.position_encoder)
 
 		self.wavelet_e2r = dict()
-		for band in self.encoded_h:
-			if self.encoded_h[band]:
-				self.wavelet_e2r[band] = E2R(device=self.device)
-		self.wavelet_e2r = nn.ParameterDict(self.wavelet_e2r).to(self.device)
+		for band in self.patch_lens:
+			self.wavelet_e2r[band] = E2R()
+		self.wavelet_e2r = nn.ParameterDict(self.wavelet_e2r)
 
 		self.pre_attention_spd_transform = dict()
-		for band in self.encoded_h:
-			if self.encoded_h[band]:
-				self.pre_attention_spd_transform[band] = SPDTransform(self.encoded_h[band], self.encoded_out, self.device)
-		self.pre_attention_spd_transform = nn.ParameterDict(self.pre_attention_spd_transform).to(self.device)
+		for band in self.patch_lens:
+			self.pre_attention_spd_transform[band] = SPDTransform(self.num_channels, self.num_channels)
+		self.pre_attention_spd_transform = nn.ParameterDict(self.pre_attention_spd_transform)
 
 		self.wavelet_manifold_transformers = dict()
-		for band in self.encoded_h:
-			if self.encoded_h[band]:
-				self.wavelet_manifold_transformers[band] = []
-				for i in range(n_transformer_layers):
-					if i == n_transformer_layers - 1:
-						self.wavelet_manifold_transformers[band].append(ManifoldTransformer(device, self.encoded_out, norm_output=False, hidden_scale=1.5))
-					else:
-						self.wavelet_manifold_transformers[band].append(ManifoldTransformer(device, self.encoded_out, hidden_scale=1.5))
-				self.wavelet_manifold_transformers[band] = nn.ModuleList(self.wavelet_manifold_transformers[band])
-		self.wavelet_manifold_transformers = nn.ParameterDict(self.wavelet_manifold_transformers).to(self.device)
+		for band in self.patch_lens:
+			self.wavelet_manifold_transformers[band] = []
+			for i in range(n_transformer_layers):
+				if i == n_transformer_layers - 1:
+					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels, norm_output=False, hidden_scale=1.5))
+				else:
+					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels, hidden_scale=1.5))
+			self.wavelet_manifold_transformers[band] = nn.ModuleList(self.wavelet_manifold_transformers[band])
+		self.wavelet_manifold_transformers = nn.ParameterDict(self.wavelet_manifold_transformers)
 
 		self.wavelet_tangent_space = dict()
-		for band in self.encoded_h:
-			if self.encoded_h[band]:
-				self.wavelet_tangent_space[band] = SPDTangentSpace(self.encoded_out, self.device)
-		self.wavelet_tangent_space = nn.ParameterDict(self.wavelet_tangent_space).to(self.device)
+		for band in self.patch_lens:
+			self.wavelet_tangent_space[band] = SPDTangentSpace(self.num_channels)
+		self.wavelet_tangent_space = nn.ParameterDict(self.wavelet_tangent_space)
 
 	def forward(self, x):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
@@ -138,8 +128,8 @@ class MENDRWaveletContextualizer(nn.Module):
 	def _batch_LogEuclideanMean(self, x, band):
 		# X is list of [Batch_Size * epochs, C, C]
 		x_stacked = torch.stack(x, dim=1)
-		x_log = self.wavelet_manifold_transformers[band][0].manifold_self_attention.tensor_log(x_stacked)
-		x_mean = self.wavelet_manifold_transformers[band][0].manifold_self_attention.tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
+		x_log = tensor_log(x_stacked)
+		x_mean = tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
@@ -196,17 +186,3 @@ class MENDRCombinedContextualizer(nn.Module):
 		for transformer in self.manifold_transformer:
 			x = transformer(x, batch_size, num_patches)
 		return x, mask_idxes
-
-	def _wavelet_LogEuclideanMean(self, x):
-		x_input = dict()
-		if len(x['delta'].shape) == 4:
-			for band in x.keys():
-				x_input[band] = x[band].clone().view(x[band].shape[0]*x[band].shape[1], x[band].shape[2], x[band].shape[3])
-		else:
-			for band in x.keys():
-				x_input[band] = x[band].clone()
-		combined_manifold_output = torch.stack(list(x_input.values()), dim=1)
-		# Combined Manifold Output is something like [Batch_num * Patches, # of Wavelet Bands, C, C]
-		combined_manifold_output = self.manifold_transformer[0].manifold_self_attention.tensor_log(combined_manifold_output)
-		combined_manifold_output = self.manifold_transformer[0].manifold_self_attention.tensor_exp((combined_manifold_output.sum(dim=1, keepdim=True)) / combined_manifold_output.shape[1])
-		return combined_manifold_output

@@ -11,11 +11,13 @@ from torch_geometric.data import Data
 from Model.MENDR.MENDRCommon import _make_mask_idxes
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer, Dropout1dWithIndexTracking
-from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer, MENDRCombinedContextualizer
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.Contextualizer.Tiny.MENDRTinyPreTrainer import MENDRTinyPreTrainer
-from Model.MENDR.Contextualizer.Large.MENDRLargePreTrainer import MENDRLargePreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargeWaveletPreTrainer import MENDRLargeWaveletPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargeCombinedPreTrainer import MENDRLargeCombinedPreTrainer
+from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
 #from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset
@@ -149,31 +151,48 @@ def testMakeMaskIdxes():
 
 def testMENDRBatchWiseMatrixSimilarity():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,
-        gamma_reconstructive_loss_pref = 1.0,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
-        gradient_clip_value = 1e7,
-        negatives_loo = 10,
         mask_span = 5,
         temp = 0.01,
-        num_negatives=10,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
+        negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
-
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
-    mendr = MENDR_model(device, contextualizer_size="LARGE")
-    trainer = MENDRPreTrainer(mendr, args)
+
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(wavelet_contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRLargeWaveletPreTrainer(autoencoder, wavelet_contextualizer,
+                                    mix_optimizer, cfg=args, cuda=device)
 
     batch_size = 2
     num_patches = 3
@@ -265,23 +284,14 @@ def testLargeContextualizerBatchLEM():
         example_SPD_batch.clone().to(device)
     ]
 
-    contextualizer = MENDRContextualizerLarge(device,
-        delta_encoded_h=2,
-        theta_encoded_h=2,
-        alpha_encoded_h=2,
-        beta_encoded_h=2,
-        gamma_encoded_h=2,
-        high_encoded_h=2,
-        temp=10.0,
-        )
-
-    batch_output = contextualizer.WaveletContextualizer._batch_LogEuclideanMean(example_input, 'delta')
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    batch_output = wavelet_contextualizer._batch_LogEuclideanMean(example_input, 'delta')
 
     for batch_idx in range(batch_output.shape[0]):
         assert torch.allclose(batch_output[batch_idx], example_SPD), f"Batch LEM Not equal: \n Actual: {batch_output[batch_idx]} \n Expected: {example_SPD}"
 
 
-def testLargeContextualizerWaveletLEM():
+def testWaveletLEM():
     # Eigenvalues are 1, 3
     example_SPD = torch.tensor([
         [2, 1],
@@ -304,17 +314,7 @@ def testLargeContextualizerWaveletLEM():
             'gamma': example_SPD_batch.clone().to(device)
     }
 
-    contextualizer = MENDRContextualizerLarge(device,
-        delta_encoded_h=2,
-        theta_encoded_h=2,
-        alpha_encoded_h=2,
-        beta_encoded_h=2,
-        gamma_encoded_h=2,
-        high_encoded_h=2,
-        temp=10.0,
-    )
-
-    combined_output = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
+    combined_output = WaveletLogEuclideanMean(example_input)
     for batch_idx in range(combined_output.shape[0]):
         assert torch.allclose(combined_output[batch_idx, 0], example_SPD), f"Combined LEM Not equal: \n Actual: {combined_output[batch_idx, 0]} \n Expected: {example_SPD}"
 
@@ -951,19 +951,18 @@ if __name__ == "__main__":
     testEncoder()
     print("Encoder test passed!")
 
-    '''
     print("Testing Batchwise Matrix Similarity...")
     testMENDRBatchWiseMatrixSimilarity()
     print("Batchwise Matrix Similarity test passed!")
+
     print("Testing Large Contextualizer Batch LEM...")
     testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    testLargeContextualizerWaveletLEM()
+    testWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
-    '''
     print("Testing Tiny Contextualizer...")
     testContextualizerTiny()
     print("Tiny Contextualizer test passed!")

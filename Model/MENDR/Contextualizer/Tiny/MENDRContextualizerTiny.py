@@ -28,7 +28,7 @@ class MENDRContextualizerTiny(nn.Module):
 				'beta': 32,
 				'gamma': 64,
 			}
-			if include_high:
+			if self.include_high:
 				self.patch_lens['high'] = 128
 		else:
 			self.patch_lens = patch_lens

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
 from Model.MENDR.safeSVD import SVD, svdv2
-from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer
 from Explainability.embeddingVisualization import plotSPDEmbedding
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian
 import mlflow
@@ -11,26 +11,28 @@ import matplotlib.pyplot as plt
 import tqdm
 
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
-class MENDRLargePreTrainer(BaseModelTrainer):
+class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, autoencoder, contextualizer, cfg, **kwargs):
-		self.mask_ratio = cfg.training_params.mask_ratio
+	def __init__(self, autoencoder, wavelet_contextualizer, optimizer, cfg, **kwargs):
 		self.svd = SVD.apply
-		self.contrastive_loss_fn_wavelet = nn.CrossEntropyLoss()
-		self.contrastive_loss_fn_combined = nn.MSELoss()
-		self.train_mode = None
-	
-		assert isinstance(contextualizer, MENDRContextualizerLarge), f"Contextualizer must be of type MENDRContextualizerLarge, but got {type(contextualizer)}"
+		self.contrastive_loss_fn = nn.CrossEntropyLoss()
 
-		super(MENDRLargePreTrainer, self).__init__(autoencoder=autoencoder, contextualizer=contextualizer,
-			contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
-			contrastive_loss_fn_combined=self.contrastive_loss_fn,
-			lr=cfg.train_params.learning_rate,
-			l2_weight_decay=cfg.training_params.l2_weight_decay,
-			metrics=dict(),
-			ckpt_dir=cfg.training_params.ckpt_dir,
+		# Freeze the autoencoder and disable the decoder
+		for param in autoencoder.parameters():
+			param.requires_grad = False
+		autoencoder.eval()
+		for band, encoder_decoder in autoencoder.encoder_decoders.items():
+			encoder_decoder.disableDecoder()
+
+		assert isinstance(wavelet_contextualizer, MENDRWaveletContextualizer), f"Contextualizer must be of type MENDRWaveletContextualizer, but got {type(wavelet_contextualizer)}"
+
+		super(MENDRLargeWaveletPreTrainer, self).__init__(
+			autoencoder=autoencoder,
+		 	wavelet_contextualizer=wavelet_contextualizer,
+			optimizer=optimizer,
+			cfg=cfg,
 			**kwargs)
 
 		# Clamp gradients
@@ -135,21 +137,18 @@ class MENDRLargePreTrainer(BaseModelTrainer):
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
 		return loss, correct, pairs
-	
-	def epochMaskedRecon(self, wavelet_manifold_output, epoched_shape, criterion):
-		frequency_bands = list(wavelet_manifold_output.keys())
-		batch_size = epoched_shape[0]
-		num_epochs = epoched_shape[1]
-		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output = self.mendr_model.mendr_contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(wavelet_manifold_output)
-		combined_manifold_output_masked = combined_manifold_output.clone()
-		combined_manifold_output_masked, mask_idxes = self.mendr_model.mendr_contextualizer.CombinedContextualizer(combined_manifold_output_masked, epoched_shape, mask_ratio=self.mask_ratio)
-		combined_manifold_output = combined_manifold_output.view(epoched_shape[0], epoched_shape[1], combined_manifold_output.shape[2], combined_manifold_output.shape[3])
 
-		# Masked Reconstruction loss
-		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
-		return self.contrastive_combined_loss_coeff * riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, eps=1e-12):
+		# This can be sped up
+		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
+		# Based on the Log-Euclidean metric
+		a_u, a_s, a_v = self.svd(batch_A + eps)
+		b_u, b_s, b_v = self.svd(batch_B + eps)
+		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s + eps)) @ a_v.permute(0, 2, 1)
+		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s + eps)) @ b_v.permute(0, 2, 1)
+		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
+		output = torch.linalg.matrix_norm(inner_term, ord='fro')
 
-
-
+		output = 1 / (1 + torch.log(1 + output))
+		output = output * torch.exp(self.wavelet_contextualizer.temp1)
+		return output
