@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
+from Model.MENDR.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
 from Model.MENDR.safeSVD import SVD, svdv2
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer
 from Explainability.embeddingVisualization import plotSPDEmbedding
@@ -43,11 +44,13 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 	def forward(self, data):
 		patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
 		wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
+		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		return {
 				'patchified_inputs': patchified_inputs,
 				'encodings': encodings,
 				'decodings': decodings,
 				'wavelet_manifold_output': wavelet_manifold_output,
+				'combined_manifold_output': combined_manifold_output,
 				'wavelet_loss': w_loss,
 				'wavelet_acc': w_correct / w_pairs,
 			}
@@ -69,13 +72,11 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		with torch.no_grad():
 			outputs = self.forward(inputs)
 			eval_metrics = self._calculate_metrics(outputs['wavelet_loss'].item())
-
 			if step_idx == 0: # Log only the first batch in the validation set
 				fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output,
-													combined_manifold_output.reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
-													f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
+												combined_manifold_output.reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
+												f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
-
 		return eval_metrics
 
 
