@@ -130,26 +130,25 @@ class MENDRWaveletContextualizer(nn.Module):
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, device, encoded_out, n_transformer_layers=4):
+	def __init__(self, num_channels, n_transformer_layers=4):
 		super().__init__()
-		self.device = device
-		self.encoded_out = encoded_out
+		self.num_channels = num_channels
 
 		assert n_transformer_layers >= 1, "Must have at least one transformer layer"
 
 		manifold_transformers = []
 		for i in range(n_transformer_layers):
 			if i == n_transformer_layers - 1:
-				manifold_transformers.append(ManifoldTransformer(device, self.encoded_out, norm_output=False, hidden_scale=1.5))
+				manifold_transformers.append(ManifoldTransformer(self.num_channels, norm_output=False, hidden_scale=1.5))
 			else:
-				manifold_transformers.append(ManifoldTransformer(device, self.encoded_out, hidden_scale=1.5))
+				manifold_transformers.append(ManifoldTransformer(self.num_channels, hidden_scale=1.5))
 
 		self.manifold_transformer = nn.ModuleList(manifold_transformers)
 		
 		# Mask is a learnable SPD matrix
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
-		self.mask = torch.from_numpy(np.random.rand(self.encoded_out, self.encoded_out)).float().to(self.device)
+		self.mask = torch.from_numpy(np.random.rand(self.num_channels, self.num_channels)).float()
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, combined_manifold_output, og_output_shape, mask_ratio=0.0):

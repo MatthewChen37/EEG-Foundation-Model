@@ -371,33 +371,23 @@ def testContextualizerLargeWavelet():
 
 def testMENDRLargeCombinedContextualizerMasking():
     example_input = {
-            'delta': torch.randn(44, 19, 19).to(device).float(),
-            'theta': torch.randn(44, 19, 19).to(device).float(),
-            'alpha': torch.randn(44, 19, 19).to(device).float(),
-            'beta': torch.randn(44, 19, 19).to(device).float(),
-            'gamma': torch.randn(44, 19, 19).to(device).float()
+        'delta': torch.randn(4, 10, 19, 19).to(device).float(),
+        'theta': torch.randn(4, 10, 19, 19).to(device).float(),
+        'alpha': torch.randn(4, 10, 19, 19).to(device).float(),
+        'beta':  torch.randn(4, 10, 19, 19).to(device).float(),
+        'gamma': torch.randn(4, 10, 19, 19).to(device).float()
     }
+    true_LEM = WaveletLogEuclideanMean(example_input)
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerLarge(device,
-            delta_encoded_h=19,
-            theta_encoded_h=19,
-            alpha_encoded_h=38,
-            beta_encoded_h=76,
-            gamma_encoded_h=114,
-            high_encoded_h=152,
-            temp=10.0,
-        )
-        true_LEM = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
-        combined_manifold_output, mask_idxes = contextualizer.CombinedContextualizer(
-            example_input, [4, 11, -1], mask_ratio=0.5)
-
-        true_LEM = true_LEM.view(4, 11, 19, 19)
-        combined_manifold_output = combined_manifold_output.view(4, 11, 19, 19)
+        contextualizer = MENDRCombinedContextualizer(num_channels=19).to(device)
+        combined_manifold_output, mask_idxes = contextualizer(true_LEM, [4, 10, -1], mask_ratio=0.5)
+        true_LEM = true_LEM.view(4, 10, 19, 19)
+        combined_manifold_output = combined_manifold_output.view(4, 10, 19, 19)
 
         assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
         for batch_idx in range(4):
-            for batch_mask_idx in range(11):
+            for batch_mask_idx in range(10):
                 if mask_idxes[batch_idx, batch_mask_idx]:
                     assert not torch.allclose(true_LEM[batch_idx, batch_mask_idx], combined_manifold_output[batch_idx, batch_mask_idx])
 
@@ -961,10 +951,11 @@ if __name__ == "__main__":
     testContextualizerLargeWavelet()
     print("Large Wavelet Contextualizer test passed!")
 
-    '''
     print("Testing Large Contextualizer masking...")
     testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
+
+    '''
     print("Testing pretrainer LOO contrastive loss...")
     testMENDRPreTrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
@@ -991,11 +982,9 @@ if __name__ == "__main__":
     testMENDRParameters()
     print("Testing MENDR Parameters passed!")
 
-
     print("Testing pretrainer fit with validation...")
     testMENDRPreTrainerWithValidation()
     print("PreTrainer fit with validation test passed!")
-
 
     print("Testing pretrainer fit with tiny contextualizer with validation...")
     testMENDRPretrainerTinyContextualizerWithValidation()
