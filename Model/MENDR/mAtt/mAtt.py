@@ -107,7 +107,6 @@ def tensor_log(t):
         channel_num = t.shape[2]
         t = t.reshape(batch_size*patch_num, channel_num, channel_num)
     u, s, v = svd(t)
-    
     output = u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)
     if patch_num is not None:
         return output.reshape(batch_size, patch_num, channel_num, channel_num)
@@ -127,11 +126,18 @@ def tensor_log(t):
 # This also allows for more control over the computation 
 def tensor_exp(t):#4dim
     # condition: t is symmetric!
-    s, u = torch.linalg.eigh(t)
+    patch_num = None
     if len(t.shape) == 4:
-        return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 1, 3, 2)
+        batch_size = t.shape[0]
+        patch_num = t.shape[1]
+        channel_num = t.shape[2]
+        t = t.reshape(batch_size*patch_num, channel_num, channel_num)
+    u, s, v = svd(t)
+    output = u @ torch.diag_embed(torch.exp(s)) @ v.permute(0, 2, 1)
+    if patch_num is not None:
+        return output.reshape(batch_size, patch_num, channel_num, channel_num)
     else:
-        return u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 2, 1)
+        return output
     '''
     batch = t.shape[0]
     epochs = t.shape[1]

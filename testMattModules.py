@@ -138,6 +138,20 @@ def check_TensorLog():
 
     return tensor_log_assert
 
+def check_TensorExp():
+    # Eigenvalues are 1, 2, and 4
+    simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
+    simple_spd = simple_spd[None, None, ...]
+    assert simple_spd.shape == torch.Size([1, 1, 3, 3]), f'Shape: {simple_spd,shape}'
+    tensor_exp_assert1 = assertTensorEqual(tensor_exp(tensor_log(simple_spd)), simple_spd)
+
+    simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
+    simple_spd = simple_spd[None, ...]
+    assert simple_spd.shape == torch.Size([1, 3, 3]), f'Shape: {simple_spd,shape}'
+    tensor_exp_assert2 = assertTensorEqual(tensor_exp(tensor_log(simple_spd)), simple_spd)
+
+    return tensor_exp_assert1 and tensor_exp_assert2
+
 def check_LogEuclideanMean():
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
@@ -216,6 +230,7 @@ units = {
     'Untangent space layer': check_UnTangentSpace,
     #'Check eigh': check_eigh,
     'Tensor Log': check_TensorLog,
+    'Tensor Exp': check_TensorExp,
     'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,

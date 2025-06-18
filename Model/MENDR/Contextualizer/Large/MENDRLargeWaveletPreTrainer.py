@@ -43,7 +43,8 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 
 	def forward(self, data):
 		patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
-		wavelet_manifold_output, epoched_shape = self.mendr_model.mendr_contextualizer.WaveletContextualizer(encodings)
+		wavelet_manifold_output, epoched_shape = self.wavelet_contextualizer(encodings)
+		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn, negatives=self.cfg.training_params.negatives_loo)
 		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		return {
 				'patchified_inputs': patchified_inputs,
@@ -64,20 +65,26 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		outputs = self.forward(inputs)
 		self.backward(loss=outputs['wavelet_loss'])
 		self.optimizer.step()
-		train_metrics = self._calculate_metrics(outputs['wavelet_loss'].item())
-		return train_metrics
+		return {
+			'wavelet_loss': outputs['wavelet_loss'].item(),
+			'wavelet_acc': outputs['wavelet_acc'],
+			'lr': self.optimizer.scheduler.get_last_lr()[0],
+		}
 
 	def evaluate_step(self, inputs, step_idx):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
-			eval_metrics = self._calculate_metrics(outputs['wavelet_loss'].item())
 			if step_idx == 0: # Log only the first batch in the validation set
-				fig = plotWaveletEmbeddingsRiemannian(wavelet_manifold_output,
-												combined_manifold_output.reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
+				fig = plotWaveletEmbeddingsRiemannian(outputs['wavelet_manifold_output'],
+												outputs['combined_manifold_output'].reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
 												f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
-		return eval_metrics
+		return {
+			'wavelet_loss': outputs['wavelet_loss'].item(),
+			'wavelet_acc': outputs['wavelet_acc'],
+			'lr': self.optimizer.scheduler.get_last_lr()[0],
+		}
 
 
 	def fit(self, training_dataset, cfg, validation_dataset=None):
@@ -90,7 +97,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			epoch_metrics = {}
 			self.epoch = epoch
 			### TRAINING ###
-			train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
+			train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=300, position=0, leave=True)
 			train_data_iterator = iter(training_dataloader)
 			self.train(True)
 
@@ -108,7 +115,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			### VALIDATION ###
 			if validation_dataset != None:
 				self.train(False)
-				pbar = tqdm.trange(len(validation_dataloader), desc="Validation", ncols=400, position=0, leave=True)
+				pbar = tqdm.trange(len(validation_dataloader), desc="Validation", ncols=300, position=0, leave=True)
 				val_data_iterator = iter(validation_dataloader)
 				for iteration in pbar:
 					input_batch = self._get_batch(val_data_iterator)
@@ -170,7 +177,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 				other_embeddings.append(embedding_tensor)
 
 			curr_target = embeddings[frequency_bands[i]].clone().view(-1, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels)[negative_indices]
-			other_embeddings_mean = self.wavelet_contextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
+			other_embeddings_mean = self.wavelet_contextualizer._batch_LogEuclideanMean(other_embeddings)
 
 			# Why does this fail for higher precisions?
 			# Answer: AttenionManifold's forward and SPDTransforms Forward are numerically unstable for FloatingPoint Precision calculations
@@ -191,6 +198,8 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			# Forward loss
 			forward_logits = logits
 			l = criterion(forward_logits, labels)
+			assert not torch.isnan(l), f"Loss is NaN: {i}"
+
 			loss += l
 			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
 			pairs += forward_logits.size(0)

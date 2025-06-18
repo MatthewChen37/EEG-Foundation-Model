@@ -46,7 +46,7 @@ class WaveletEncoderDecoder(nn.Module):
             self.subject_embeddings = nn.Embedding(num_embeddings=num_subjects,
                                         embedding_dim=self.seq_len).to(self.device)
             # Decoders
-            self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=19, sub_patch_size=self.patch_size,
+            self.reconstruction_decoder = MENDRReconstructionDecoder(num_channels=self.num_channels, sub_patch_size=self.patch_size,
                                                                     encoded_h=self.out_dim, hidden_seq_length=self.seq_len,
                                                                     seq_len=self.seq_len, device=self.device)
 

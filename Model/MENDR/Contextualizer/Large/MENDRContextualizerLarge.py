@@ -122,11 +122,11 @@ class MENDRWaveletContextualizer(nn.Module):
 				# output shape is [B, P, N, N]
 		return wavelet_manifold_output, (batch_size, num_patches, self.num_channels, self.num_channels)
 
-	def _batch_LogEuclideanMean(self, x, band):
+	def _batch_LogEuclideanMean(self, x):
 		# X is list of [Batch_Size * epochs, C, C]
 		x_stacked = torch.stack(x, dim=1)
 		x_log = tensor_log(x_stacked)
-		x_mean = tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
+		x_mean = tensor_exp((x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1]).squeeze(1))
 		return x_mean
 
 class MENDRCombinedContextualizer(nn.Module):
