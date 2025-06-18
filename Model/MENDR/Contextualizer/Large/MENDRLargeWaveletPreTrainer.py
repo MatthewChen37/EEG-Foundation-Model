@@ -165,12 +165,12 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			negative_selection = torch.randperm(batch_size)
 			negative_indices = negative_selection[:negatives]
 			for j in list(range(i)) + list(range(i + 1, num_targets)):
-				embedding_tensor = embeddings[frequency_bands[j]].clone().view(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out) # [Batch * epochs, C, C]
+				embedding_tensor = embeddings[frequency_bands[j]].clone().view(-1, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels) # [Batch * epochs, C, C]
 				embedding_tensor = embedding_tensor[negative_indices]
 				other_embeddings.append(embedding_tensor)
 
-			curr_target = embeddings[frequency_bands[i]].clone().view(-1, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out)[negative_indices]
-			other_embeddings_mean = self.mendr_model.mendr_contextualizer.WaveletContextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
+			curr_target = embeddings[frequency_bands[i]].clone().view(-1, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels)[negative_indices]
+			other_embeddings_mean = self.wavelet_contextualizer._batch_LogEuclideanMean(other_embeddings, frequency_bands[i])
 
 			# Why does this fail for higher precisions?
 			# Answer: AttenionManifold's forward and SPDTransforms Forward are numerically unstable for FloatingPoint Precision calculations

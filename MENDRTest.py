@@ -391,42 +391,60 @@ def testMENDRLargeCombinedContextualizerMasking():
                 if mask_idxes[batch_idx, batch_mask_idx]:
                     assert not torch.allclose(true_LEM[batch_idx, batch_mask_idx], combined_manifold_output[batch_idx, batch_mask_idx])
 
-def testMENDRPreTrainerLOOLoss():
+def testMENDRLargeWaveletPretrainerLOOLoss():
     args = SimpleNamespace(
-    encoder_grad_frac = 0.5,
-    learning_rate = 0.001,
-    l2_weight_decay = 0.001,
-    save_model_directory = None,
-    mask_ratio = 0.5,
-    mask_span = 5,
-    temp = 0.01,
-    delta_reconstructive_loss_pref = 1.0,
-    theta_reconstructive_loss_pref = 1.0,
-    alpha_reconstructive_loss_pref = 1.0,
-    beta_reconstructive_loss_pref = 1.0,
-    gamma_reconstructive_loss_pref = 1.0,
-    contrastive_combined_loss_pref = 1e3,
-    contrastive_wavelet_loss_pref = 1e3,
-    gradient_clip_value = 1e7,
-    negatives_loo = 10,
-    enc_feat_l2 = 0.001,
-    multi_gpu = False,
-    ckpt_dir="./checkpoint",
-    random_state=42
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        mask_span = 5,
+        temp = 0.01,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
+        negatives_loo = 10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
+        patch_encoder_params = SimpleNamespace(
+            num_channels=19,
+        ),
     )
 
-    mendr = MENDR_model(device)
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(wavelet_contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRLargeWaveletPreTrainer(autoencoder, wavelet_contextualizer,
+                                    mix_optimizer, cfg=args, cuda=device)
     with torch.autograd.detect_anomaly():
         embeddings = {
-            'delta': random_spd_batch(8, 19).to(device),
-            'theta': random_spd_batch(8, 19).to(device),
-            'alpha': random_spd_batch(8, 19).to(device),
-            'beta': random_spd_batch(8, 19).to(device),
-            'gamma': random_spd_batch(8, 19).to(device),
+            'delta': torch.randn(4, 10, 19, 19).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 19).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 19).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 19).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 19).to(device).float()
         }
         loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
 
@@ -955,11 +973,11 @@ if __name__ == "__main__":
     testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
 
-    '''
     print("Testing pretrainer LOO contrastive loss...")
-    testMENDRPreTrainerLOOLoss()
+    testMENDRLargeWaveletPretrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
+    '''
     print("Testing pretrainer MAE Recon loss...")
     testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
