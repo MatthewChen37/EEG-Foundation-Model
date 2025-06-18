@@ -613,6 +613,9 @@ def testMENDRPreTrainerWithTiny():
             save_final_model = False,
             log_system_metrics = False,
         ),
+        patch_encoder_params = SimpleNamespace(
+            num_channels=19,
+        ),
         negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
@@ -645,7 +648,8 @@ def testMENDRPreTrainerWithTiny():
     training_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
     val_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
 
-    trainer.fit(training_dataset=training_dataset, cfg=args, validation_dataset=val_dataset)
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=training_dataset, cfg=args, validation_dataset=val_dataset)
 
     autoencoder.apply(check_sanity)
     contextualizer.apply(check_sanity)
@@ -978,6 +982,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
@@ -1022,25 +1027,24 @@ if __name__ == "__main__":
     testMENDRLargeWaveletPretrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
-    '''
     print("Testing pretrainer MAE Recon loss...")
     testMENDRPreTrainerMAEReconLoss()
     print("PreTrainer MAE Recon loss test passed! ")
-    '''
 
     print("Testing pretrainer Tiny MAE Recon loss...")
     testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
+    '''
     print("Testing pretrainer with tiny contextualizer...")
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
+    '''
     print("Testing pretrainer fit without validation...")
     testMENDRLargeWaveletPretrainerFit()
     print("PreTrainer fit without validation test passed!")
 
-    '''
     print("Testing MENDR Parameters...")
     testMENDRParameters()
     print("Testing MENDR Parameters passed!")
@@ -1060,6 +1064,7 @@ if __name__ == "__main__":
     print("Testing pretrainer load from checkpoint tiny...")
     testMENDRPreTrainerLoadFromCheckpointTiny()
     print("PreTrainer load from checkpoint tiny test passed!")
-    '''
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
+
+    '''

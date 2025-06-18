@@ -3,6 +3,8 @@ import torch.nn as nn
 import math
 import numpy as np
 from einops import rearrange
+from Model.MENDR.safeSVD import SVD
+svd = SVD.apply
 
 # Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
 # Positional as in "Temporal" w.r.t to Patches
@@ -74,7 +76,7 @@ class LogEuclidLayerNorm(nn.Module):
         # assume SPD
         # Eigendecompose
 		# D: [B,N], U: [B,N,N]
-        D, U = torch.linalg.eigh(C)         
+        U, D, _ = svd(C) 
 
         # Log‐map + clamp
         D = D.clamp(min=self.epsilon)

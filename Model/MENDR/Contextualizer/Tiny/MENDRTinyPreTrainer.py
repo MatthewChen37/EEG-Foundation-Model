@@ -9,6 +9,8 @@ import mlflow
 import matplotlib.pyplot as plt
 import tqdm
 
+ABS_PRECISION = 10
+REL_PRECISION = 10
 class MENDRTinyPreTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
@@ -39,6 +41,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				p.register_hook(lambda grad: torch.clamp(grad,
 				-cfg.training_params.gradient_clip_value,
 				cfg.training_params.gradient_clip_value))
+
 
 	def forward(self, data):
 		'''
@@ -170,7 +173,9 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		riemannian_loss = criterion(combined_manifold_output[mask_idxes], combined_manifold_output_masked[mask_idxes])
+		og_eigenvalues = torch.linalg.svdvals(combined_manifold_output[mask_idxes])
+		masked_eigenvalues = torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes])
+		riemannian_loss = criterion(og_eigenvalues, masked_eigenvalues)
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	# Debugging function, usually not used.	

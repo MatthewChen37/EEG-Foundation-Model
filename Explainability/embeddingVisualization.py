@@ -81,7 +81,7 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original', alpha=1)
     coefs = top_eigenvalues # eigenvals = (a0/c, a1/c, a2/c)
     #coefs = (1, 2, 2)  # Coefficients in a0/c x**2 + a1/c y**2 + a2/c z**2 = 1 
     # Radii corresponding to the coefficients:
-    rx, ry, rz = 1/np.sqrt(coefs)
+    rx, ry, rz = 1/np.sqrt(np.abs(coefs))
 
     # Set of all spherical angles:
     u = np.linspace(0, 2 * np.pi, 100) # We sample 100^2 points for plotting
@@ -105,6 +105,7 @@ def _plot_ellipsoid_3D_PCA(spd_matrix, ax, color='b', label='Original', alpha=1)
 
     # Adjustment of the axes, so that they all have the same span:
     max_radius = max(rx, ry, rz)
+    #print("Max Radius: ", max_radius, "COEFFS: ", coefs)
     for axis in 'xyz':
         getattr(ax, 'set_{}lim'.format(axis))((-max_radius, max_radius))
 

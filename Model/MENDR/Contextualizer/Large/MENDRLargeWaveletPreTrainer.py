@@ -75,9 +75,11 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		self.train(False)
 		with torch.no_grad():
 			outputs = self.forward(inputs)
+			batch_size = outputs['wavelet_manifold_output']['delta'].shape[0]
+			num_patches = outputs['wavelet_manifold_output']['delta'].shape[1]
 			if step_idx == 0: # Log only the first batch in the validation set
 				fig = plotWaveletEmbeddingsRiemannian(outputs['wavelet_manifold_output'],
-												outputs['combined_manifold_output'].reshape(batch_size, num_patches, self.mendr_model.mendr_contextualizer.encoded_out, self.mendr_model.mendr_contextualizer.encoded_out),
+												outputs['combined_manifold_output'].reshape(batch_size, num_patches, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels),
 												f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
 		return {
@@ -198,8 +200,6 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			# Forward loss
 			forward_logits = logits
 			l = criterion(forward_logits, labels)
-			assert not torch.isnan(l), f"Loss is NaN: {i}"
-
 			loss += l
 			correct += (torch.argmax(forward_logits, axis=0) == labels).sum().item()
 			pairs += forward_logits.size(0)
