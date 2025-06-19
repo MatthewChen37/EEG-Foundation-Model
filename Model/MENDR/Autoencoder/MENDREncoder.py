@@ -20,7 +20,7 @@ intepretation.
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
                 hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads,
-                channel_dropout_p, device, num_subjects=None, out_dim=24):
+                channel_dropout_p, device, num_subjects=None, out_dim=8):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = Dropout1dWithIndexTracking(p=channel_dropout_p)
