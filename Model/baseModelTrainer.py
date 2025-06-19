@@ -168,10 +168,15 @@ class BaseModelTrainer(object):
         """
         Create a snapshot of what is being currently trained for re-loading with the load_best() method.
         """
+        world_size = int(os.environ.get("WORLD_SIZE",1))
+        distributed = world_size > 1
         assert epoch_ckpt_dir != None, "Checkpoint Directory is none."
         Path(epoch_ckpt_dir).mkdir(parents=True, exist_ok=True)
         for trainable_member in self._trainables:
-            torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
+            if distributed:
+                torch.save(self.__dict__[trainable_member].module.state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
+            else:
+                torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
 
     def load_best(self, epoch_ckpt_dir):
         """
