@@ -3,7 +3,7 @@ meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
   run_name: finetune_TUAB_downstream
   model_name: MENDR
-  pretrained_autoencoder_path: null
+  pretrained_autoencoder_path: "./checkpoint/3948b23c9aa04f6ca83b5bcb3bd2d34d_19/autoencoder_weights.pth"
   pretrained_contextualizer_path: null
   contextualizer_size: TINY
   log_system_metrics: True
@@ -20,14 +20,15 @@ dataset_params:
   task: binary
 training_params:
   task_loss: BCEWithLogitsLoss
-  learning_rate: 0.001
-  l2_weight_decay: 0.0005
+  learning_rate: 0.0001
+  l2_weight_decay: 0.005
   ckpt_dir: ./checkpoints
   random_seed: 42
   epochs: 3
   batch_size: 512
   scheduler_after_batch: True
   num_workers: 32
+  eta_min: 1.0e-7
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
@@ -35,4 +36,4 @@ patch_encoder_params:
   hidden_gnn_mlp_ratio: 2
   n_gnn_transformer_layers: 3
   n_gnn_heads: 8
-  num_subjects: null
+  num_subjects: 13190

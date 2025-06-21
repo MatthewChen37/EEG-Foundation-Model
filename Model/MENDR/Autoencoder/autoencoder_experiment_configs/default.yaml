@@ -17,14 +17,14 @@ patch_encoder_params:
   channel_dropout_p: 0.2
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz 
-  train_frac: 0.2
+  train_frac: 0.9
   val_frac: 0.1
   random_seed: 42
-  learning_rate: 5.0e-4
-  l2_weight_decay: 0.5
+  learning_rate: 1.0e-4
+  l2_weight_decay: 1.0
   batch_size: 256
-  epochs: 10
-  T_max: 10
+  epochs: 20
+  T_max: 20
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint

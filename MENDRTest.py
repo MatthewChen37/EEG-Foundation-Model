@@ -636,8 +636,8 @@ def testMENDRPreTrainerWithTiny():
                             device=device,
                             )
 
-    autoencoder.load_state_dict(torch.load("./checkpoint/34c1da36dd924c14979c148269222439_0/autoencoder_weights.pth", weights_only=True))
-    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+    autoencoder.load_state_dict(torch.load("./checkpoint/3948b23c9aa04f6ca83b5bcb3bd2d34d_19/autoencoder_weights.pth", weights_only=True))
+    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=8).to(device)
     optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
     optimizer = torch.optim.AdamW(optim_params,
                 betas=(0.9, 0.99),
@@ -1037,8 +1037,8 @@ if __name__ == "__main__":
     print("Testing pretrainer Tiny MAE Recon loss...")
     testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
-
     '''
+
     print("Testing pretrainer with tiny contextualizer...")
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")

@@ -79,25 +79,30 @@ def main(cfg:DictConfig) -> None:
         raise Exception("Contextualizer size not found")
 
     if cfg.meta_params.pretrained_autoencoder_path is not None:
-        mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True), strict=False)
+        print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
+        mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
+        mendr_autoencoder.eval()
+        for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
+            encoder_decoder.disableDecoder()
     if cfg.meta_params.pretrained_contextualizer_path is not None:
-        contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True), strict=False)
+        contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
     model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
 
     optim_params = []
     optim_params += model.parameters()
     optim_params += list(model_decoder.parameters())
-    optimizer = torch.optim.AdamW(optim_params, lr=1e-3)
+    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                             T_max=cfg.training_params.epochs*ceil(len(finetune_train_dataset) / cfg.training_params.batch_size),
-                                                            eta_min=1e-7)
+                                                            eta_min=cfg.training_params.eta_min)
     optimizer = MixOptimizer(optimizer, scheduler)
 
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
-    model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+    with torch.autograd.detect_anomaly():
+        model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
 if __name__ == '__main__':
     main()

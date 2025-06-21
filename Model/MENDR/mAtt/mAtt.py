@@ -43,33 +43,38 @@ class E2R(nn.Module):
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size):
+    def __init__(self, in_embed_size, out_embed_size, heads=4):
         super().__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
+        self.heads = heads
 
-        self.q_trans = SPDTransform(self.d_in, self.d_out)
-        self.k_trans = SPDTransform(self.d_in, self.d_out)
-        self.v_trans = SPDTransform(self.d_in, self.d_out)
+        self.q_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+        self.k_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+        self.v_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+        self.project_out = SPDTransform(self.heads*self.d_out, self.d_out)
 
     def forward(self, x, shape=None):
         if len(x.shape)==3 and shape is not None:
             x = x.view(shape[0], shape[1], self.d_in, self.d_in)
+
         x = x.to(torch.float)# patch:[b, #patch, c, c]
         # calculate Q K V
         bs = x.shape[0]
         m = x.shape[1]
         x = x.reshape(bs*m, self.d_in, self.d_in)
+        x = block_diag(x, self.heads)
 
         # repeat 
-        Q = self.q_trans(x).view(bs, m, self.d_out, self.d_out)
-        K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
-        V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
-
+        Q = self.q_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
+        K = self.k_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
+        V = self.v_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
+        
         # Don't need to be symmetric
         #assert torch.allclose(Q, Q.mT, atol=(10 ** -10)), f"Q: {Q}"
         #assert torch.allclose(K, K.mT, atol=(10 ** -10)), "K"
         #assert torch.allclose(V, V.mT, atol=(10 ** -10)), "V"
+    
         # calculate the attention score
         Q_expand = Q.repeat(1, V.shape[1], 1, 1)
     
@@ -81,13 +86,11 @@ class AttentionManifold(nn.Module):
 
         # calculate outputs(v_i') of attention module
         output = LogEuclideanMean(atten_prob, V)
-
-        output = output.view(V.shape[0], V.shape[1], self.d_out, self.d_out)
-
+        output = output.view(V.shape[0], V.shape[1], self.heads*self.d_out, self.heads*self.d_out)
         shape = list(output.shape[:2])
         shape.append(-1)
-
-        output = output.contiguous().view(-1, self.d_out, self.d_out)
+        output = output.contiguous().view(-1, self.heads*self.d_out, self.heads*self.d_out)
+        output = self.project_out(output) # Removes head dimensions
         return output, shape
 
 def tensor_log(t):
@@ -172,7 +175,7 @@ def LogEuclideanMean(weight, cov):
     return tensor_exp(output)
 
 def WaveletLogEuclideanMean(x):
-    # x is dict where each entry is [Batch_Size * epochs, C, C]
+    # x is dict where each entry is [Batch_Size * #patches, C, C]
     x_input = dict()
     if len(x['delta'].shape) == 4:
         for band in x.keys():
@@ -189,3 +192,35 @@ def WaveletLogEuclideanMean(x):
         combined_manifold_output = combined_manifold_output.reshape(x['delta'].shape[0], x['delta'].shape[1],
                                                                     x['delta'].shape[2], x['delta'].shape[3])
     return combined_manifold_output
+
+
+def block_diag(x, heads):
+    # x is a tensor of shape [Batch * #patches, C, C]
+    batch_size, c, _ = x.shape
+    
+    # Create a block diagonal tensor
+    block_size = c * heads
+    result = torch.zeros(batch_size, block_size, block_size, device=x.device, dtype=x.dtype)
+    
+    # Place each block on the diagonal
+    for i in range(heads):
+        start_idx = i * c
+        end_idx = (i + 1) * c
+        result[:, start_idx:end_idx, start_idx:end_idx] = x
+    
+    return result
+
+def unblock_diag(x, heads):
+    # x is a tensor of shape [Batch * #patches, heads*C, heads*C]
+    batch_size, c, _ = x.shape
+    result = []
+    for idx in range(batch_size):
+        sample_att = []
+        for i in range(heads):
+            start_idx = i * (c // heads)
+            end_idx = (i + 1) * (c // heads)
+            sample_att.append(x[idx, start_idx:end_idx, start_idx:end_idx])
+        sample_att = torch.stack(sample_att, dim=0)
+        result.append(sample_att)
+    result = torch.stack(result, dim=0)
+    return result

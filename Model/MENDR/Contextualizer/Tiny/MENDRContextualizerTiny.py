@@ -7,14 +7,14 @@ from Model.MENDR.MENDRCommon import (PositionalEncoding,
 							_make_mask_idxes,
 							BatchTraceNormalization,
 							LogEuclidLayerNorm)
-from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer
+from Model.MENDR.Contextualizer.ManifoldTransformer import ManifoldTransformer, _RiemannianResidual
 from einops import rearrange
 
 '''
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, num_channels, out_dim, include_high=False, patch_lens=None, contextualizer_layers=12):
+	def __init__(self, num_channels, out_dim, include_high=False, patch_lens=None, contextualizer_layers=3):
 		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
@@ -35,10 +35,10 @@ class MENDRContextualizerTiny(nn.Module):
 
 		self.e2r = E2R()
 		self.ract = SPDRectified()
-		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
 		self.Contextualizer = MENDRContextualizer(
 											encoded_out=self.num_channels,
 											n_transformer_layers=contextualizer_layers)
+		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
 
 		self.position_encoders = {
 			'delta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['delta']),
@@ -47,9 +47,20 @@ class MENDRContextualizerTiny(nn.Module):
 			'beta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['beta']),
 			'gamma': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['gamma']),
 		}
+
+		self.pre_mean_transforms = {
+			'delta': SPDTransform(self.num_channels, self.num_channels),
+			'theta': SPDTransform(self.num_channels, self.num_channels),
+			'alpha': SPDTransform(self.num_channels, self.num_channels),
+			'beta': SPDTransform(self.num_channels, self.num_channels),			
+			'gamma': SPDTransform(self.num_channels, self.num_channels),
+		}
+
 		if self.include_high:
 			self.position_encoders['high'] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['high'])
+			self.pre_mean_transforms['high'] = SPDTransform(self.num_channels, self.num_channels)
 		self.position_encoders = nn.ParameterDict(self.position_encoders)
+		self.pre_mean_transforms = nn.ParameterDict(self.pre_mean_transforms)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels, #time_step* #out_dim]
@@ -59,6 +70,9 @@ class MENDRContextualizerTiny(nn.Module):
 		for band in x.keys():
 			x[band] = x[band] + self.position_encoders[band](x[band])
 			cov_matrices[band] = self.e2r(x[band])
+			cov_matrices[band] = rearrange(cov_matrices[band], 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
+			cov_matrices[band] = self.pre_mean_transforms[band](cov_matrices[band])
+			cov_matrices[band] = rearrange(cov_matrices[band], '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
 		# this is an issue: https://github.com/arogozhnikov/einops/issues/204
 		combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
@@ -69,7 +83,7 @@ class MENDRContextualizerTiny(nn.Module):
 		return combined_manifold_output, combined_manifold_output_masked, mask_idxes 
 	
 class MENDRContextualizer(nn.Module):
-	def __init__(self, encoded_out, n_transformer_layers=3):
+	def __init__(self, encoded_out, n_transformer_layers):
 		super().__init__()
 		self.encoded_out = encoded_out
 
@@ -106,5 +120,4 @@ class MENDRContextualizer(nn.Module):
 		x_input = x_input.reshape(batch_size, num_patches, self.encoded_out, self.encoded_out).clone()
 		for transformer in self.manifold_transformer:
 			x_input = transformer(x_input, batch_size, num_patches)
-
 		return x_input, mask_idxes

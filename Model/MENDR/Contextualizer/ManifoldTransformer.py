@@ -35,7 +35,7 @@ class ManifoldTransformer(nn.Module):
             x = self.layer_normalization(x)
         x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.encoded_h, C2=self.encoded_h)
         # Symmetrize/Regularize Due to Numeric Instability
-        x = 0.5 * (x + x.transpose(2, 3))
+        x = 0.5 * self.riemannian_residual(x, x.transpose(2, 3))
         return x
 
 # https://proceedings.neurips.cc/paper_files/paper/2023/file/c868aa7437dc9b29e674cd2e25689021-Paper-Conference.pdf

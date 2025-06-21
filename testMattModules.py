@@ -215,6 +215,28 @@ def check_safeSVD():
     assert safesvd_gradcheck
     return safesvd_gradcheck
 
+def check_blog_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    output = block_diag(input, 2)
+    check_blog_diag_check = output.shape == torch.Size([B, N*2, N*2])
+    return check_blog_diag_check
+
+def check_unblock_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    input = block_diag(input, 2)
+    #print(input)
+    output = unblock_diag(input, 2)
+    check_unblock_diag_check = output.shape == torch.Size([B, 2, N, N])
+    print(output)
+    return check_unblock_diag_check
+
+
 def check_safeEigh():
     B, N = 2, 2
     torch.manual_seed(42)
@@ -235,6 +257,8 @@ units = {
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
+    'Blog Diag': check_blog_diag,
+    'Unblock Diag': check_unblock_diag
     #'Safe Eigh': check_safeEigh,
 }
 

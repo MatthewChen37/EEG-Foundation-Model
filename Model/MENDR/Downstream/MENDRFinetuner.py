@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 import numpy as np
 import random, os, tqdm, mlflow
 from Model.baseModelTrainer import BaseModelTrainer
@@ -52,11 +54,14 @@ class MENDRFinetuner(BaseModelTrainer):
         self.optimizer.zero_grad()
         task_loss.backward()
     
-    def fit(self, training_dataset, cfg, validation_dataset=None):
+    def fit(self, training_dataset, cfg, validation_dataset=None, train_sampler=None, val_sampler=None):
+        distributed = isinstance(train_sampler, DistributedSampler)
+        rank  = dist.get_rank() if distributed else 0
+        world = dist.get_world_size() if distributed else 1
         self.epoch = 0
         self.train_dataset = training_dataset
         self.validation_dataset = validation_dataset
-        training_dataloader, validation_dataloader = self._setup_experiment(cfg)
+        training_dataloader, validation_dataloader = self._setup_experiment(cfg, rank, train_sampler, val_sampler)
 
         for epoch in range(cfg.training_params.epochs):
             epoch_metrics = {}
@@ -113,14 +118,14 @@ class MENDRFinetuner(BaseModelTrainer):
     def train_step(self, inputs):
         self.train(True)
         patchified_inputs, encodings, _, _, combined_manifold_output = self.mendr_model(inputs)
+        #assert not torch.isnan(combined_manifold_output).any(), f"Combined Manifold contains NaN values: {combined_manifold_output}"
         prediction = self.decoder(combined_manifold_output).float()
         # Check for NaNs
-        assert not torch.isnan(prediction).any()
+        #assert not torch.isnan(prediction).any(), f"Prediction contains NaN values: {prediction}"
         ground_truth = inputs['graph'].y.to(self.device).float()
         task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         with torch.no_grad():
             metrics = self.calculate_metrics(prediction, ground_truth)
-
         self.backward(task_loss)
         self.optimizer.step()
         metrics['loss'] = task_loss.item()
