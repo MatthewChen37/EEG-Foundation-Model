@@ -233,9 +233,16 @@ def check_unblock_diag():
     #print(input)
     output = unblock_diag(input, 2)
     check_unblock_diag_check = output.shape == torch.Size([B, 2, N, N])
-    print(output)
     return check_unblock_diag_check
 
+def check_reblock_diag():
+    B, P, H, N, N = 2, 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, H, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 2, 4, 3)
+    output = reblock_diag(input, 2)
+    check_reblock_diag_check = output.shape == torch.Size([B, P, H*N, H*N])
+    return check_reblock_diag_check
 
 def check_safeEigh():
     B, N = 2, 2
@@ -245,6 +252,17 @@ def check_safeEigh():
     function = SVD.Eigh.apply
     safeEigh_gradcheck = torch.autograd.gradcheck(function, A, eps=1e-6, atol=1e-4, rtol=1e-3)
     return not safeEigh_gradcheck # this test actually fails, but doesn't matter, we don't use eigh anyway
+
+def check_AttentionManifold():
+    B, P, N, N = 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 3, 2)
+    attention_manifold = AttentionManifold(2, 2, heads=2)
+    output, shape = attention_manifold(input)
+    check_attention_manifold_check = output.shape == torch.Size([B*P, N, N])
+    check_attention_manifold_check = check_attention_manifold_check and shape == torch.Size([B, P, -1])
+    return check_attention_manifold_check
 
 units = {
     'Tangent space layer': check_TangentSpace,
@@ -258,8 +276,10 @@ units = {
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
     'Blog Diag': check_blog_diag,
-    'Unblock Diag': check_unblock_diag
+    'Unblock Diag': check_unblock_diag,
+    'Reblock Diag': check_reblock_diag,
     #'Safe Eigh': check_safeEigh,
+    'Attention Manifold': check_AttentionManifold
 }
 
 result = True

@@ -638,6 +638,8 @@ def testMENDRPreTrainerWithTiny():
 
     autoencoder.load_state_dict(torch.load("./checkpoint/3948b23c9aa04f6ca83b5bcb3bd2d34d_19/autoencoder_weights.pth", weights_only=True))
     contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=8).to(device)
+
+    print("Contextualizer Parameters: {0}".format(sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)))
     optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
     optimizer = torch.optim.AdamW(optim_params,
                 betas=(0.9, 0.99),

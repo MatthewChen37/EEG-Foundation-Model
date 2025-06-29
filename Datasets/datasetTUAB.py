@@ -71,12 +71,23 @@ class WaveletTUABDataset(Dataset):
                     epoch_files_dict.get('alpha'), epoch_files_dict.get('beta'),
                     epoch_files_dict.get('gamma'))
                 self.epochs.append(epoch_tuple)
-
+        """
+        for epoch_idx, epoch_files_dict in folder_epochs.items():
+            if self.include_high:
+                epoch_tuple = (epoch_files_dict['graph_name'], wavelet_folder, epoch_idx,
+                    epoch_files_dict['delta'], epoch_files_dict['theta'], epoch_files_dict['alpha'], epoch_files_dict['beta'],
+                    epoch_files_dict['gamma'], epoch_files_dict['high'])
+            else:
+                epoch_tuple = (epoch_files_dict['graph_name'], wavelet_folder, epoch_idx,
+                    epoch_files_dict['delta'], epoch_files_dict['theta'], epoch_files_dict['alpha'], epoch_files_dict['beta'],
+                    epoch_files_dict['gamma'])
+            self.epochs.append(epoch_tuple)
+        """
     def _load_and_split_band(self, file_path, band, split_idx):
         """Load wavelet data and return the appropriate split"""
         if file_path is None:
             return None
-        
+
         data = torch.load(file_path, weights_only=False)
         
         # Apply truncation based on band
@@ -103,6 +114,26 @@ class WaveletTUABDataset(Dataset):
         
         # Return the appropriate split
         return data[:, split_length * split_idx: split_length * (split_idx + 1)]
+    
+    def _load_band(self, file_path, band):
+        if file_path is None:
+            return None
+        data = torch.load(file_path, weights_only=False)
+        if band == 'delta':
+            data = data[:, :240]
+        elif band == 'theta':
+            data = data[:, :240]
+        elif band == 'alpha':
+            data = data[:, :480]
+        elif band == 'beta':
+            data = data[:, :960]
+        elif band == 'gamma':
+            data = data[:, :1920]
+        elif band == 'high':
+            data = data[:, :3840]
+        else:
+            raise Exception("Band not found")
+        return data
 
     def _load_graph(self, graph_name):
         """Load graph with class label"""
@@ -121,10 +152,11 @@ class WaveletTUABDataset(Dataset):
         epoch_tuple = self.epochs[idx]
         graph_name = epoch_tuple[0]
         epoch_idx, split_idx = epoch_tuple[2]
+        #epoch_idx = epoch_tuple[2]
         
         # Load graph lazily
         graph = self._load_graph(graph_name)
-        
+
         # Load and split wavelet data lazily
         if self.include_high:
             data = {
@@ -147,9 +179,34 @@ class WaveletTUABDataset(Dataset):
                 "beta": self._load_and_split_band(epoch_tuple[6], 'beta', split_idx),
                 "gamma": self._load_and_split_band(epoch_tuple[7], 'gamma', split_idx),
             }
+
+        '''
+        if self.include_high:
+            data = {
+                "graph": graph, # Labels should be stored in the graph.y 
+                "wavelet_folder": epoch_tuple[1],
+                "delta": self._load_band(epoch_tuple[3], 'delta'),
+                "theta": self._load_band(epoch_tuple[4], 'theta'),
+                "alpha": self._load_band(epoch_tuple[5], 'alpha'),
+                "beta": self._load_band(epoch_tuple[6], 'beta'),
+                "gamma": self._load_band(epoch_tuple[7], 'gamma'),
+                "high": self._load_band(epoch_tuple[8], 'high'),
+            }
+        else:
+            data = {
+                "graph": graph, # Labels should be stored in the graph.y 
+                "wavelet_folder": epoch_tuple[1],
+                "delta": self._load_band(epoch_tuple[3], 'delta'),
+                "theta": self._load_band(epoch_tuple[4], 'theta'),
+                "alpha": self._load_band(epoch_tuple[5], 'alpha'),
+                "beta": self._load_band(epoch_tuple[6], 'beta'),
+                "gamma": self._load_band(epoch_tuple[7], 'gamma'),
+            }
+        '''
         return data
 
 '''
+
 class WaveletTUABDataset(Dataset):
 	def __init__(self, root, include_high=False, frac=1.0, transform=None):
 		super(WaveletTUABDataset, self).__init__(root, transform)

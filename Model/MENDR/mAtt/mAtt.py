@@ -43,7 +43,7 @@ class E2R(nn.Module):
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size, heads=4):
+    def __init__(self, in_embed_size, out_embed_size, heads=1):
         super().__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
@@ -52,13 +52,14 @@ class AttentionManifold(nn.Module):
         self.q_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
         self.k_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
         self.v_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
-        self.project_out = SPDTransform(self.heads*self.d_out, self.d_out)
+        #self.project_out = SPDTransform(self.heads*self.d_out, self.d_out)
 
+    '''
     def forward(self, x, shape=None):
         if len(x.shape)==3 and shape is not None:
             x = x.view(shape[0], shape[1], self.d_in, self.d_in)
 
-        x = x.to(torch.float)# patch:[b, #patch, c, c]
+        x = x.to(torch.float) # patch:[b, #patch, c, c]
         # calculate Q K V
         bs = x.shape[0]
         m = x.shape[1]
@@ -66,10 +67,14 @@ class AttentionManifold(nn.Module):
         x = block_diag(x, self.heads)
 
         # repeat 
-        Q = self.q_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
-        K = self.k_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
-        V = self.v_trans(x).view(bs, m, self.heads*self.d_out, self.heads*self.d_out)
-        
+        Q = self.q_trans(x)
+        K = self.k_trans(x)
+        V = self.v_trans(x)
+
+        Q = unblock_diag(Q, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
+        K = unblock_diag(K, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
+        V = unblock_diag(V, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
+
         # Don't need to be symmetric
         #assert torch.allclose(Q, Q.mT, atol=(10 ** -10)), f"Q: {Q}"
         #assert torch.allclose(K, K.mT, atol=(10 ** -10)), "K"
@@ -77,20 +82,50 @@ class AttentionManifold(nn.Module):
     
         # calculate the attention score
         Q_expand = Q.repeat(1, V.shape[1], 1, 1)
+        K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1)
+        K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
+
+        atten_energy = log_euclidean_distance(Q_expand, K_expand).view(bs*self.heads, m, m)
+        atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)
+
+        # calculate outputs(v_i') of attention module
+        output = LogEuclideanMean(atten_prob, V).view(bs, self.heads, m, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous()
+        output = reblock_diag(output, self.heads)
+        output = output.contiguous().view(-1, self.heads*self.d_out, self.heads*self.d_out)
+        output = self.project_out(output) # Removes head dimensions
+        return output, (bs, m, -1)
+    '''
+
+    def forward(self, x, shape=None):
+        if len(x.shape)==3 and shape is not None:
+            x = x.view(shape[0], shape[1], self.d_in, self.d_in)
+        x = x.to(torch.float)# patch:[b, #patch, c, c]
+        # calculate Q K V
+        bs = x.shape[0]
+        m = x.shape[1]
+        x = x.reshape(bs*m, self.d_in, self.d_in)
+        Q = self.q_trans(x).view(bs, m, self.d_out, self.d_out)
+        K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
+        V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
+
+        # calculate the attention score
+        Q_expand = Q.repeat(1, V.shape[1], 1, 1)
     
         K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1 )
         K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
-
+        
         atten_energy = log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
         atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
-
+        
         # calculate outputs(v_i') of attention module
         output = LogEuclideanMean(atten_prob, V)
-        output = output.view(V.shape[0], V.shape[1], self.heads*self.d_out, self.heads*self.d_out)
+
+        output = output.view(V.shape[0], V.shape[1], self.d_out, self.d_out)
+
         shape = list(output.shape[:2])
         shape.append(-1)
-        output = output.contiguous().view(-1, self.heads*self.d_out, self.heads*self.d_out)
-        output = self.project_out(output) # Removes head dimensions
+
+        output = output.contiguous().view(-1, self.d_out, self.d_out)
         return output, shape
 
 def tensor_log(t):
@@ -212,15 +247,28 @@ def block_diag(x, heads):
 
 def unblock_diag(x, heads):
     # x is a tensor of shape [Batch * #patches, heads*C, heads*C]
-    batch_size, c, _ = x.shape
-    result = []
-    for idx in range(batch_size):
-        sample_att = []
-        for i in range(heads):
-            start_idx = i * (c // heads)
-            end_idx = (i + 1) * (c // heads)
-            sample_att.append(x[idx, start_idx:end_idx, start_idx:end_idx])
-        sample_att = torch.stack(sample_att, dim=0)
-        result.append(sample_att)
-    result = torch.stack(result, dim=0)
+    batch_size, total_c, _ = x.shape
+    c = total_c // heads
+    
+    # Extract diagonal blocks one by one
+    result = torch.zeros(batch_size, heads, c, c, device=x.device, dtype=x.dtype)
+    
+    for i in range(heads):
+        start_idx = i * c
+        end_idx = (i + 1) * c
+        result[:, i, :, :] = x[:, start_idx:end_idx, start_idx:end_idx]
     return result
+
+def reblock_diag(x, heads):
+    # x is a tensor of shape [Batch, #patches, heads, C, C]
+    batch_size, patches, heads, c, _ = x.shape
+    result = torch.zeros(batch_size, patches, heads*c, heads*c, device=x.device, dtype=x.dtype)
+
+    for i in range(batch_size):
+        for j in range(patches):
+            for k in range(heads):
+                start_idx = k * c
+                end_idx = (k + 1) * c
+                result[:, :, start_idx:end_idx, start_idx:end_idx] = x[i, j, k, :, :]
+    return result
+

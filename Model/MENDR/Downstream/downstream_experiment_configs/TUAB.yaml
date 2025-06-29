@@ -20,7 +20,7 @@ dataset_params:
   task: binary
 training_params:
   task_loss: BCEWithLogitsLoss
-  learning_rate: 0.0001
+  learning_rate: 0.001
   l2_weight_decay: 0.005
   ckpt_dir: ./checkpoints
   random_seed: 42
@@ -32,8 +32,10 @@ training_params:
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
-  super_patch_seconds: 2 
+  super_patch_seconds: 2
   hidden_gnn_mlp_ratio: 2
   n_gnn_transformer_layers: 3
-  n_gnn_heads: 8
+  n_gnn_heads: 1
   num_subjects: 13190
+  include_high: False
+  channel_dropout_p: 0.1

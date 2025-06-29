@@ -270,7 +270,7 @@ class MENDRPatchEncoder(nn.Module):
                                     embedding_dim=1)
 
 class PatchEmbedder(nn.Module):
-    def __init__(self, patch_size, seq_len, in_dim=1, out_dim=8):
+    def __init__(self, patch_size, seq_len, out_dim, in_dim=1):
         super().__init__()
         self.seq_len = seq_len
         self.patch_size = (patch_size // 2) + 1
@@ -288,19 +288,19 @@ class PatchEmbedder(nn.Module):
         # Maintain sequence length
         self.proj1 = nn.Sequential(
             nn.Conv2d(in_channels=self.in_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 
         self.proj2 = nn.Sequential(
             nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 
         self.proj3 = nn.Sequential(
             nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 

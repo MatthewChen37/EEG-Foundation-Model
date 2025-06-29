@@ -226,7 +226,7 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
         loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
         loader_kwargs.setdefault('persistent_workers', True)
-        loader_kwargs.setdefault('shuffle', training and (sampler is None))
+        loader_kwargs.setdefault('shuffle', True)
         # loader_kwargs.setdefault('shuffle', training)
         loader_kwargs.setdefault('drop_last', training)
         loader_kwargs.setdefault('sampler', sampler)

@@ -54,8 +54,8 @@ def main(cfg:DictConfig) -> None:
     # Load Dataset
     print("*" * 50)
     if cfg.dataset_params.name == "TUAB":
-        finetune_train_dataset = WaveletTUABDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac)
-        finetune_eval_dataset = WaveletTUABDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac)
+        finetune_train_dataset = WaveletTUABDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
+        finetune_eval_dataset = WaveletTUABDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
 
         model_decoder = TUABFinetuneDecoder().to(device)
     else:
@@ -74,16 +74,19 @@ def main(cfg:DictConfig) -> None:
         contextualizer = MENDRContextualizerTiny(
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
+            include_high=cfg.patch_encoder_params.include_high,
         ).to(device)
     else:
         raise Exception("Contextualizer size not found")
 
     if cfg.meta_params.pretrained_autoencoder_path is not None:
+        '''
         print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
         mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
         mendr_autoencoder.eval()
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
+        '''
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
@@ -101,8 +104,7 @@ def main(cfg:DictConfig) -> None:
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
-    with torch.autograd.detect_anomaly():
-        model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+    model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
 if __name__ == '__main__':
     main()

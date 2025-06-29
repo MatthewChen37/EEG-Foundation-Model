@@ -93,15 +93,17 @@ class MENDRFinetuner(BaseModelTrainer):
                     prediction, ground_truth, loss = self.evaluate_step(input_batch)
                     preds += prediction.clone().detach().cpu().squeeze().numpy().tolist()
                     truths += ground_truth.clone().detach().cpu().squeeze().numpy().tolist()
-                    pbar.set_postfix(loss=loss.item())
+                    with torch.no_grad():
+                        batch_metrics = self.calculate_metrics(prediction, ground_truth)
+                    pbar.set_postfix(loss=loss.item(), **batch_metrics)
                 truths = torch.from_numpy(np.array(truths))
                 preds = torch.from_numpy(np.array(preds))
                 with torch.no_grad():
                     val_metrics = self.calculate_metrics(preds, truths)
                 epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+                mlflow.log_metrics(epoch_metrics, step=epoch)
                 for metric in val_metrics:
                     print(f'Epoch: {epoch} Mean {metric}: {val_metrics[metric]}')
-
                 print(f'Epoch: {epoch} Mean Acc: {val_metrics["accuracy"]} Mean auc_pr: {val_metrics["auc_pr"]} Mean auroc: {val_metrics["auroc"]}')
 
 
@@ -118,11 +120,16 @@ class MENDRFinetuner(BaseModelTrainer):
     def train_step(self, inputs):
         self.train(True)
         patchified_inputs, encodings, _, _, combined_manifold_output = self.mendr_model(inputs)
+        #print("SHAPE:", patchified_inputs['delta'].shape, combined_manifold_output.shape)
         #assert not torch.isnan(combined_manifold_output).any(), f"Combined Manifold contains NaN values: {combined_manifold_output}"
         prediction = self.decoder(combined_manifold_output).float()
         # Check for NaNs
         #assert not torch.isnan(prediction).any(), f"Prediction contains NaN values: {prediction}"
         ground_truth = inputs['graph'].y.to(self.device).float()
+        '''
+        if self.cfg.dataset_params.name == "TUAB":
+            ground_truth = torch.repeat_interleave(ground_truth, patchified_inputs['delta'].shape[1])
+        '''
         task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         with torch.no_grad():
             metrics = self.calculate_metrics(prediction, ground_truth)
@@ -158,8 +165,14 @@ class MENDRFinetuner(BaseModelTrainer):
             elif metric == 'balanced_accuracy':
                 metrics['balanced_accuracy'] = balanced_accuracy_score(ground_truth.cpu().numpy(), pred_y)
             elif metric == 'auc_pr':
-                precision, recall, thresholds = precision_recall_curve(ground_truth.cpu().numpy(), score_y, pos_label=1)
-                metrics['auc_pr'] = auc(recall, precision)
+                if len(np.unique(ground_truth.cpu().numpy())) > 1:
+                    precision, recall, thresholds = precision_recall_curve(ground_truth.cpu().numpy(), score_y, pos_label=1)
+                    metrics['auc_pr'] = auc(recall, precision)
+                else:
+                    metrics['auc_pr'] = 0.0
             elif metric == 'auroc':
-                metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
+                if len(np.unique(ground_truth.cpu().numpy())) > 1:
+                    metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
+                else:
+                    metrics['auroc'] = 0.0
         return metrics
