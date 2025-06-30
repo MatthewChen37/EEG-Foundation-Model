@@ -7,7 +7,7 @@ class TUABFinetuneDecoder(nn.Module):
         super().__init__()
         self.tangent = SPDTangentSpace(19)
         self.flatten = nn.Flatten()
-        self.seq = nn.Sequential(nn.Linear(5*19*10, 1*19*10), nn.LayerNorm(1*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*10, 1*19*10))
+        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.LayerNorm(5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 1*19*10))
         self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(1*19*10, 1))
 
         '''

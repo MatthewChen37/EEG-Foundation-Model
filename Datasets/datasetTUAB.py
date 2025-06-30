@@ -92,29 +92,30 @@ class WaveletTUABDataset(Dataset):
         
         # Apply truncation based on band
         if band == 'delta':
-            data = data[:, :240]
+            data = data[:, 3:243]
             split_length = data.shape[1] // 6
         elif band == 'theta':
-            data = data[:, :240]
+            data = data[:, 3:243]
             split_length = data.shape[1] // 6
         elif band == 'alpha':
-            data = data[:, :480]
+            data = data[:, 3:483]
             split_length = data.shape[1] // 6
         elif band == 'beta':
-            data = data[:, :960]
+            data = data[:, 3:963]
             split_length = data.shape[1] // 6
         elif band == 'gamma':
-            data = data[:, :1920]
+            data = data[:, 3:1923]
             split_length = data.shape[1] // 6
         elif band == 'high':
-            data = data[:, :3840]
+            data = data[:, 3:3843]
             split_length = data.shape[1] // 6
         else:
             split_length = data.shape[1] // 6
         
         # Return the appropriate split
         return data[:, split_length * split_idx: split_length * (split_idx + 1)]
-    
+
+    ''' 
     def _load_band(self, file_path, band):
         if file_path is None:
             return None
@@ -134,6 +135,7 @@ class WaveletTUABDataset(Dataset):
         else:
             raise Exception("Band not found")
         return data
+    '''
 
     def _load_graph(self, graph_name):
         """Load graph with class label"""

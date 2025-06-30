@@ -14,7 +14,7 @@ from einops import rearrange
 BENDR-style Contextualizer using mATT module 
 '''
 class MENDRContextualizerTiny(nn.Module):
-	def __init__(self, num_channels, out_dim, include_high=False, patch_lens=None, contextualizer_layers=2):
+	def __init__(self, num_channels, out_dim, include_high=False, patch_lens=None, contextualizer_layers=6):
 		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
@@ -61,11 +61,11 @@ class MENDRContextualizerTiny(nn.Module):
 		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
 
 		self.wavelet_mlp = {
-			'delta': nn.Sequential(nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim)),
-			'theta': nn.Sequential(nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim)),
-			'alpha': nn.Sequential(nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim)),
-			'beta': nn.Sequential(nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim)),
-			'gamma': nn.Sequential(nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim)),
+			'delta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim)),
+			'theta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim)),
+			'alpha': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim)),
+			'beta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim)),
+			'gamma': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim)),
 		}
 
 		self.position_encoders = {

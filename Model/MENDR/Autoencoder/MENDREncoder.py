@@ -20,7 +20,7 @@ intepretation.
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
                 hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads,
-                channel_dropout_p, device, num_subjects=None, out_dim=8):
+                channel_dropout_p, device, num_subjects=None, out_dim=12):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = Dropout1dWithIndexTracking(p=channel_dropout_p)
@@ -261,7 +261,6 @@ class MENDRPatchEncoder(nn.Module):
                 patched_wavelet_data = rearrange(wavelet_data, 'b c (pn pl) -> b pn c pl', pl=wavelet_super_patch_length)
                 patchified_data[band] = self.patch_normalizer(patched_wavelet_data)
                 #patchified_data[band] = patched_wavelet_data
-        # Truncate patches to the minimum number of patches
         return patchified_data
 
     # For downstream tasks
