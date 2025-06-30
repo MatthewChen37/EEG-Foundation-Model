@@ -104,10 +104,10 @@ class WaveletTUABDataset(Dataset):
             data = data[:, 3:963]
             split_length = data.shape[1] // 6
         elif band == 'gamma':
-            data = data[:, 3:1923]
+            data = data[:, 2:1922]
             split_length = data.shape[1] // 6
         elif band == 'high':
-            data = data[:, 3:3843]
+            data = data[:, 2:3842]
             split_length = data.shape[1] // 6
         else:
             split_length = data.shape[1] // 6
