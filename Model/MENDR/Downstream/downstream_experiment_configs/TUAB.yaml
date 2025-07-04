@@ -1,0 +1,38 @@
+meta_params:
+  experiment_name: TUAB_Downstream
+  bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
+  run_name: finetune_TUAB_downstream
+  model_name: MENDR
+  pretrained_autoencoder_path: null
+  pretrained_contextualizer_path: null
+  contextualizer_size: TINY
+  log_system_metrics: True
+  log_model_params_and_grads: False
+  save_model: False
+  save_final_model: True
+dataset_params:
+  name: TUAB
+  train_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train"
+  eval_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval"
+  train_frac: 1.0
+  eval_frac: 1.0
+  metrics: ['accuracy', 'balanced_accuracy', 'auc_pr', 'auroc']
+  task: binary
+training_params:
+  task_loss: BCEWithLogitsLoss
+  learning_rate: 0.001
+  l2_weight_decay: 0.0005
+  ckpt_dir: ./checkpoints
+  random_seed: 42
+  epochs: 3
+  batch_size: 512
+  scheduler_after_batch: True
+  num_workers: 32
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2 
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_transformer_layers: 3
+  n_gnn_heads: 8
+  num_subjects: null

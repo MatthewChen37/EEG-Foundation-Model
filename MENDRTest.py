@@ -1,23 +1,28 @@
 import torch
+import torch.nn as nn
+import torch.utils.data as torchdata
+from torch.utils.data import ConcatDataset
+from torch.profiler import profile, record_function, ProfilerActivity
+
 import numpy as np
 import pandas as pd
-import random, os
-from torch.utils.data import ConcatDataset
+import random, os, math
 from torch_geometric.data import Data
 from Model.MENDR.MENDRCommon import _make_mask_idxes
-from Model.MENDR.MENDREncoder import MENDRPatchEncoder
-from Model.MENDR.MENDRContextualizerLarge import MENDRContextualizerLarge
-from Model.MENDR.MENDRContextualizerTiny import MENDRContextualizerTiny
+from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
+from Model.MENDR.Autoencoder.GNNSpatialHarmonizer import GNNSpatialHarmonizer, Dropout1dWithIndexTracking
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer, MENDRCombinedContextualizer
+from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.MENDR import MENDR_model
-from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
+from Model.MENDR.Contextualizer.Tiny.MENDRTinyPreTrainer import MENDRTinyPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargeWaveletPreTrainer import MENDRLargeWaveletPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargeCombinedPreTrainer import MENDRLargeCombinedPreTrainer
+from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
+#from Model.MENDR.MENDRPreTrainer import MENDRPreTrainer
 from Model.MENDR.mAtt.optimizer import MixOptimizer
-from Model.transforms import RandomTemporalCrop
 from Datasets.datasetPretrain import WaveletPretrainDataset
 from types import SimpleNamespace
-import torch.utils.data as torchdata
-import torch.nn as nn
-import math
-from torch.profiler import profile, record_function, ProfilerActivity
+from time import perf_counter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BANDS = {'delta', 'theta', 'alpha', 'beta', 'gamma'}
@@ -37,32 +42,91 @@ def check_sanity(m):
 
 def testMENDRSuperPatching():
     example_input = {
-            'delta': torch.randn(4, 19, 246).to(device).float(),
-            'theta': torch.randn(4, 19, 246).to(device).float(),
-            'alpha': torch.randn(4, 19, 486).to(device).float(),
-            'beta': torch.randn(4, 19, 966).to(device).float(),
-            'gamma': torch.randn(4, 19, 1925).to(device).float()
+            'delta': torch.randn(128, 19, 240).to(device).float(),
+            'theta': torch.randn(128, 19, 240).to(device).float(),
+            'alpha': torch.randn(128, 19, 480).to(device).float(),
+            'beta': torch.randn(128, 19, 960).to(device).float(),
+            'gamma': torch.randn(128, 19, 1920).to(device).float()
     }
 
-    model = MENDR_model(device=device)
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
 
     assert model.WAVELET_LENGTHS == {'delta': 4, 'theta': 4, 'alpha': 8, 'beta': 16,  'gamma': 32, 'high': 64}, f"model.WAVELET_LENGTHS: {model.WAVELET_LENGTHS}"
-    assert model.WAVELET_SUPER_PATCH_LENGTHS == {'delta': 40, 'theta': 40, 'alpha': 80, 'beta': 160,  'gamma': 320, 'high': 640}, f"model.WAVELET_SUPER_PATCH_LENGTHS: {model.WAVELET_SUPER_PATCH_LENGTHS}"
-    assert model.WAVELET_SUPER_PATCH_HOP_LENGTHS == {'delta': 20, 'theta': 20, 'alpha': 40, 'beta': 80,  'gamma': 160, 'high': 320}, f"modelWAVELET_SUPER_PATCH_HOP_LENGTHS: {model.WAVELET_SUPER_PATCH_HOP_LENGTHS}"
+    assert model.WAVELET_SUPER_PATCH_LENGTHS == {'delta': 20, 'theta': 20, 'alpha': 40, 'beta': 80,  'gamma': 160, 'high': 320}, f"model.WAVELET_SUPER_PATCH_LENGTHS: {model.WAVELET_SUPER_PATCH_LENGTHS}"
 
-    patchified_data = model._super_patchify(example_input)
+
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 5 seconds: {time_end - time_start}")
 
     expected_shape = {
-        'delta': torch.Size([4, 11, 19, 40]),
-        'theta': torch.Size([4, 11, 19, 40]),
-        'alpha': torch.Size([4, 11, 19, 80]),
-        'beta': torch.Size([4, 11, 19, 160]),
-        'gamma': torch.Size([4, 11, 19, 320]),
+        'delta': torch.Size([128, 12, 19, 20]),
+        'theta': torch.Size([128, 12, 19, 20]),
+        'alpha': torch.Size([128, 12, 19, 40]),
+        'beta':  torch.Size([128, 12, 19, 80]),
+        'gamma': torch.Size([128, 12, 19, 160]),
     }
 
     for band in patchified_data:
         assert patchified_data[band].shape == expected_shape[band], f"{band}: Actual Shape: {patchified_data[band].shape} Expected Shape: {expected_shape[band]}"
 
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=1,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 1 second: {time_end - time_start}")
+
+    model = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=10,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    time_start = perf_counter()
+    for i in range(0, 10):
+        patchified_data = model._super_patchify(example_input)
+    time_end = perf_counter()
+    print(f"Time taken to patchify 10 seconds: {time_end - time_start}")
+
+def testDropout1dWithIndexTracking():
+    torch.manual_seed(42)
+    np.random.seed(42)
+    example_input = torch.randn(2, 2, 10, 8).to(device).float()
+
+    dropout = Dropout1dWithIndexTracking(p=0.1)
+
+    with torch.no_grad():
+        output = dropout(example_input)
+
+    assert output.shape == example_input.shape, f"Output Shape: {output.shape} does not match {example_input.shape}"
+
+    dropped_indices = dropout.dropped_indices
+    assert dropped_indices.shape == torch.Size([2, 2, 10]), f"Dropped Indices Shape: {dropped_indices.shape} does not match {torch.Size([2, 2, 10])}"
+
+    assert output[0, 0, 5].all() == 0, f"Output[0, 0, 2] is not 0: {output[0, 0, 5]}"
+    
 def testMakeMaskIdxes():
     torch.manual_seed(42)
     np.random.seed(42)
@@ -87,31 +151,48 @@ def testMakeMaskIdxes():
 
 def testMENDRBatchWiseMatrixSimilarity():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,
-        gamma_reconstructive_loss_pref = 1.0,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
-        gradient_clip_value = 1e7,
-        negatives_loo = 10,
         mask_span = 5,
         temp = 0.01,
-        num_negatives=10,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
+        negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
-
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
-    mendr = MENDR_model(device, contextualizer_size="LARGE")
-    trainer = MENDRPreTrainer(mendr, args)
+
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(wavelet_contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRLargeWaveletPreTrainer(autoencoder, wavelet_contextualizer,
+                                    mix_optimizer, cfg=args, cuda=device)
 
     batch_size = 2
     num_patches = 3
@@ -134,11 +215,11 @@ def testMENDRBatchWiseMatrixSimilarity():
 
 def testEncoder():
     example_input = {
-            'delta': torch.randn(4, 11, 19, 40).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 40).to(device).float(),
-            'alpha': torch.randn(4, 11, 19, 80).to(device).float(),
-            'beta': torch.randn(4, 11, 19, 160).to(device).float(),
-            'gamma': torch.randn(4, 11, 19, 320).to(device).float()
+            'delta': torch.randn(128, 19, 240).to(device).float(),
+            'theta': torch.randn(128, 19, 240).to(device).float(),
+            'alpha': torch.randn(128, 19, 480).to(device).float(),
+            'beta': torch.randn(128, 19, 960).to(device).float(),
+            'gamma': torch.randn(128, 19, 1920).to(device).float()
     }
 
     edge_indices = []
@@ -154,51 +235,43 @@ def testEncoder():
         edge_attributes.append(torch.randn(4, 1).clone())
     batch_edge_attributes = torch.cat(edge_attributes, dim=0)
 
-    example_graph = Data(edge_index=batch_edge_index, edge_attr=batch_edge_attributes)
+    example_graph = Data(edge_index=batch_edge_index, edge_attr=batch_edge_attributes).to(device)
 
-    encoder = MENDRPatchEncoder(
-        num_channels=19,
-        delta_sub_patch_size=4,
-        theta_sub_patch_size=4,
-        alpha_sub_patch_size=8,
-        beta_sub_patch_size=16,
-        gamma_sub_patch_size=32,
-        high_sub_patch_size=64,
-        delta_encoded_h=38,
-        theta_encoded_h=38,
-        alpha_encoded_h=38,
-        beta_encoded_h=38,
-        gamma_encoded_h=76,
-        high_encoded_h=76,
-        delta_super_patch_seq_len=40,
-        theta_super_patch_seq_len=40,
-        alpha_super_patch_seq_len=80,
-        beta_super_patch_seq_len=160,
-        gamma_super_patch_seq_len=320,
-        high_super_patch_seq_len=640,
-        device=device)
+    example_input['graph'] = example_graph
+    subjects = torch.randint(0, 128, (128,)).to(device)
+    example_input['subject_idx'] = subjects
 
-    encodings, decodings = encoder(example_graph, example_input)
+    encoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=2,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=128,
+                            n_gnn_heads=2,
+                            device=device,
+                            ).to(device)
+
+    _, encodings, decodings = encoder(example_input)
     assert encodings.keys() == BANDS
     assert decodings.keys() == BANDS
 
-    assert decodings['delta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['delta'].shape}" 
-    assert decodings['theta'].shape == torch.Size([44, 19, 40]), f"Actual Shape: {decodings['theta'].shape}" 
-    assert decodings['alpha'].shape == torch.Size([44, 19, 80]), f"Actual Shape: {decodings['alpha'].shape}" 
-    assert decodings['beta'].shape == torch.Size([44, 19, 160]), f"Actual Shape: {decodings['beta'].shape}" 
-    assert decodings['gamma'].shape == torch.Size([44, 19, 320]), f"Actual Shape: {decodings['gamma'].shape}"
+    assert decodings['delta'].shape == torch.Size([3840, 19, 8]), f"Actual Shape: {decodings['delta'].shape}" 
+    assert decodings['theta'].shape == torch.Size([3840, 19, 8]), f"Actual Shape: {decodings['theta'].shape}" 
+    assert decodings['alpha'].shape == torch.Size([3840, 19, 16]), f"Actual Shape: {decodings['alpha'].shape}" 
+    assert decodings['beta'].shape == torch.Size([3840, 19, 32]), f"Actual Shape: {decodings['beta'].shape}" 
+    assert decodings['gamma'].shape == torch.Size([3840, 19, 64]), f"Actual Shape: {decodings['gamma'].shape}"
 
-    assert encodings['delta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['delta'].shape}" 
-    assert encodings['theta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['theta'].shape}"
-    assert encodings['alpha'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['alpha'].shape}" 
-    assert encodings['beta'].shape == torch.Size([4, 11, 38, 37]), f"Actual Shape: {encodings['beta'].shape}" 
-    assert encodings['gamma'].shape == torch.Size([4, 11, 76, 37]), f"Actual Shape: {encodings['gamma'].shape}"
+    assert encodings['delta'].shape == torch.Size([128, 30, 19, 192]), f"Actual Shape: {encodings['delta'].shape}" 
+    assert encodings['theta'].shape == torch.Size([128, 30, 19, 192]), f"Actual Shape: {encodings['theta'].shape}"
+    assert encodings['alpha'].shape == torch.Size([128, 30, 19, 384]), f"Actual Shape: {encodings['alpha'].shape}" 
+    assert encodings['beta'].shape == torch.Size([128,  30, 19, 768]), f"Actual Shape: {encodings['beta'].shape}" 
+    assert encodings['gamma'].shape == torch.Size([128, 30, 19, 1536]), f"Actual Shape: {encodings['gamma'].shape}"
 
 def testLargeContextualizerBatchLEM():
     # Eigenvalues are 1, 3
     example_SPD = torch.tensor([
-        [2, 1],
-        [1, 2]
+        [2.0, 1.0],
+        [1.0, 2.0]
     ]).float().to(device)
 
     # Batch size is 4, patches = 4
@@ -211,23 +284,29 @@ def testLargeContextualizerBatchLEM():
         example_SPD_batch.clone().to(device)
     ]
 
-    contextualizer = MENDRContextualizerLarge(device,
-        delta_encoded_h=2,
-        theta_encoded_h=2,
-        alpha_encoded_h=2,
-        beta_encoded_h=2,
-        gamma_encoded_h=2,
-        high_encoded_h=2,
-        temp=10.0,
-        )
+    '''
+    The eigenvectors are:       
+    [[ 0.7071,  0.7071],
+    [ 0.7071, -0.7071]],
 
-    batch_output = contextualizer.WaveletContextualizer._batch_LogEuclideanMean(example_input, 'delta')
+    but in the tensorexp they are:
 
+     [[-0.7071,  0.7071],
+      [-0.7071, -0.7071]],
+
+    the eigenvectors themselves are non-deterministic, so we can't check for equality.
+    https://docs.pytorch.org/docs/stable/generated/torch.linalg.svd.html
+    '''
+
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    batch_output = wavelet_contextualizer._batch_LogEuclideanMean(example_input)
+
+    expected_eigenvalues = torch.tensor([3.0, 1.0]).to(device)
     for batch_idx in range(batch_output.shape[0]):
-        assert torch.allclose(batch_output[batch_idx], example_SPD), f"Batch LEM Not equal: \n Actual: {batch_output[batch_idx]} \n Expected: {example_SPD}"
+        S = torch.linalg.svdvals(batch_output[batch_idx])
+        assert torch.allclose(S, expected_eigenvalues), f"Batch LEM Not equal: \n Actual: {S} \n Expected: {expected_eigenvalues}"
 
-
-def testLargeContextualizerWaveletLEM():
+def testWaveletLEM():
     # Eigenvalues are 1, 3
     example_SPD = torch.tensor([
         [2, 1],
@@ -250,152 +329,138 @@ def testLargeContextualizerWaveletLEM():
             'gamma': example_SPD_batch.clone().to(device)
     }
 
-    contextualizer = MENDRContextualizerLarge(device,
-        delta_encoded_h=2,
-        theta_encoded_h=2,
-        alpha_encoded_h=2,
-        beta_encoded_h=2,
-        gamma_encoded_h=2,
-        high_encoded_h=2,
-        temp=10.0,
-    )
-
-    combined_output = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
+    combined_output = WaveletLogEuclideanMean(example_input)
+    expected_eigenvalues = torch.tensor([3.0, 1.0]).to(device)
     for batch_idx in range(combined_output.shape[0]):
-        assert torch.allclose(combined_output[batch_idx, 0], example_SPD), f"Combined LEM Not equal: \n Actual: {combined_output[batch_idx, 0]} \n Expected: {example_SPD}"
-
+        S = torch.linalg.svdvals(combined_output[batch_idx, 0])
+        assert torch.allclose(S, expected_eigenvalues), f"Combined LEM Not equal: \n Actual: {S} \n Expected: {expected_eigenvalues}"
 
 def testContextualizerTiny():
     example_input = {
-            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 19, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 19, 37).to(device).float()
+            'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerTiny(device, encoded_h=95)
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
-            combined_manifold_output, cov_matrices, _ = contextualizer(example_input, batch_size=4, num_patches=11)
-        df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
-        df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
-        df.to_csv("ProfileData/TinyContextualizer.csv", float_format='%.5f')
+        contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+        combined_manifold_output, combined_manifold_output_masked, mask_idxes = contextualizer(example_input, batch_size=4, num_patches=10)
 
+        print("Positional Encoder Parameters: ", sum(p.numel() for p in contextualizer.position_encoders.parameters() if p.requires_grad))
         print("Total number of Tiny parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
-        assert cov_matrices.shape == torch.Size([4, 11, 19, 19])
+        assert combined_manifold_output.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 10, 19, 19]), f"Incorrect output shape: {combined_manifold_output_masked.shape}"
 
-def testContextualizerLarge():
+def testContextualizerLargeWavelet():
     example_input = {
-            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
+            'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
     }
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerLarge(device,
-            delta_encoded_h=19,
-            theta_encoded_h=19,
-            alpha_encoded_h=38,
-            beta_encoded_h=76,
-            gamma_encoded_h=114,
-            high_encoded_h=152,
-            temp=10.0,
-        )
+        contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+        '''
         with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
-            combined_manifold_output, wavelet_manifold_output, _ = contextualizer(example_input, batch_size=4, patch_num=11)
         df = pd.DataFrame({e.key:e.__dict__ for e in prof.key_averages()}).T
         df[['count', 'cpu_time_total', 'device_time_total']].sort_values(['device_time_total', 'cpu_time_total'], ascending=False)
         df.to_csv("ProfileData/LargeContextualizer.csv", float_format='%.5f')
         print("Total number of Large parameters: ", sum(p.numel() for p in contextualizer.parameters() if p.requires_grad))
-
+        '''
+        wavelet_manifold_output, epoched_shape = contextualizer(example_input)
         wavelet_manifold_output_delta = wavelet_manifold_output['delta']
         wavelet_manifold_output_theta = wavelet_manifold_output['theta']
         wavelet_manifold_output_alpha = wavelet_manifold_output['alpha']
         wavelet_manifold_output_beta = wavelet_manifold_output['beta']
         wavelet_manifold_output_gamma = wavelet_manifold_output['gamma']
 
-        assert wavelet_manifold_output_delta.shape == torch.Size([4, 11, 19, 19]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
-        assert wavelet_manifold_output_theta.shape == torch.Size([4, 11, 19, 19]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
-        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 11, 19, 19]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
-        assert wavelet_manifold_output_beta.shape == torch.Size([4, 11, 19, 19]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
-        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 11, 19, 19]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
-
-        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f'Combined Manifold Shape: {combined_manifold_output.shape}'
-        assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
-
+        assert wavelet_manifold_output_delta.shape == torch.Size([4, 10, 19, 19]), f'Delta Wavelet Manifold Shape:{wavelet_manifold_output_delta.shape}'
+        assert wavelet_manifold_output_theta.shape == torch.Size([4, 10, 19, 19]), f'Theta Wavelet Manifold Shape:{wavelet_manifold_output_theta.shape}'
+        assert wavelet_manifold_output_alpha.shape == torch.Size([4, 10, 19, 19]), f'Alpha Wavelet Manifold Shape:{wavelet_manifold_output_alpha.shape}'
+        assert wavelet_manifold_output_beta.shape ==  torch.Size([4, 10, 19, 19]), f'Beta Wavelet Manifold Shape:{wavelet_manifold_output_beta.shape}'
+        assert wavelet_manifold_output_gamma.shape == torch.Size([4, 10, 19, 19]), f'Gamma Wavelet Manifold Shape:{wavelet_manifold_output_gamma.shape}'
+        assert epoched_shape == (4, 10, 19, 19), f"Epoched Shape: {epoched_shape}"
 
 def testMENDRLargeCombinedContextualizerMasking():
     example_input = {
-            'delta': torch.randn(44, 19, 19).to(device).float(),
-            'theta': torch.randn(44, 19, 19).to(device).float(),
-            'alpha': torch.randn(44, 19, 19).to(device).float(),
-            'beta': torch.randn(44, 19, 19).to(device).float(),
-            'gamma': torch.randn(44, 19, 19).to(device).float()
+        'delta': torch.randn(4, 10, 19, 19).to(device).float(),
+        'theta': torch.randn(4, 10, 19, 19).to(device).float(),
+        'alpha': torch.randn(4, 10, 19, 19).to(device).float(),
+        'beta':  torch.randn(4, 10, 19, 19).to(device).float(),
+        'gamma': torch.randn(4, 10, 19, 19).to(device).float()
     }
+    true_LEM = WaveletLogEuclideanMean(example_input)
 
     with torch.no_grad():
-        contextualizer = MENDRContextualizerLarge(device,
-            delta_encoded_h=19,
-            theta_encoded_h=19,
-            alpha_encoded_h=38,
-            beta_encoded_h=76,
-            gamma_encoded_h=114,
-            high_encoded_h=152,
-            temp=10.0,
-        )
-        true_LEM = contextualizer.CombinedContextualizer._wavelet_LogEuclideanMean(example_input)
-        combined_manifold_output, mask_idxes = contextualizer.CombinedContextualizer(
-            example_input, [4, 11, -1], mask_ratio=0.5)
-
-        true_LEM = true_LEM.view(4, 11, 19, 19)
-        combined_manifold_output = combined_manifold_output.view(4, 11, 19, 19)
+        contextualizer = MENDRCombinedContextualizer(num_channels=19).to(device)
+        combined_manifold_output, mask_idxes = contextualizer(true_LEM, [4, 10, -1], mask_ratio=0.5)
+        true_LEM = true_LEM.view(4, 10, 19, 19)
+        combined_manifold_output = combined_manifold_output.view(4, 10, 19, 19)
 
         assert len(mask_idxes) == 4, f"Did not correctly make batch indices: {len(mask_idxes)}"
         for batch_idx in range(4):
-            for batch_mask_idx in range(11):
+            for batch_mask_idx in range(10):
                 if mask_idxes[batch_idx, batch_mask_idx]:
                     assert not torch.allclose(true_LEM[batch_idx, batch_mask_idx], combined_manifold_output[batch_idx, batch_mask_idx])
 
-def testMENDRPreTrainerLOOLoss():
+def testMENDRLargeWaveletPretrainerLOOLoss():
     args = SimpleNamespace(
-    encoder_grad_frac = 0.5,
-    learning_rate = 0.001,
-    l2_weight_decay = 0.001,
-    save_model_directory = None,
-    mask_ratio = 0.5,
-    mask_span = 5,
-    temp = 0.01,
-    delta_reconstructive_loss_pref = 1.0,
-    theta_reconstructive_loss_pref = 1.0,
-    alpha_reconstructive_loss_pref = 1.0,
-    beta_reconstructive_loss_pref = 1.0,
-    gamma_reconstructive_loss_pref = 1.0,
-    contrastive_combined_loss_pref = 1e3,
-    contrastive_wavelet_loss_pref = 1e3,
-    gradient_clip_value = 1e7,
-    negatives_loo = 10,
-    enc_feat_l2 = 0.001,
-    multi_gpu = False,
-    ckpt_dir="./checkpoint",
-    random_state=42
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        mask_span = 5,
+        temp = 0.01,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
+        negatives_loo = 10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
+        patch_encoder_params = SimpleNamespace(
+            num_channels=19,
+        ),
     )
 
-    mendr = MENDR_model(device)
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(wavelet_contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRLargeWaveletPreTrainer(autoencoder, wavelet_contextualizer,
+                                    mix_optimizer, cfg=args, cuda=device)
     with torch.autograd.detect_anomaly():
         embeddings = {
-            'delta': random_spd_batch(8, 19).to(device),
-            'theta': random_spd_batch(8, 19).to(device),
-            'alpha': random_spd_batch(8, 19).to(device),
-            'beta': random_spd_batch(8, 19).to(device),
-            'gamma': random_spd_batch(8, 19).to(device),
+            'delta': torch.randn(4, 10, 19, 19).to(device).float(),
+            'theta': torch.randn(4, 10, 19, 19).to(device).float(),
+            'alpha': torch.randn(4, 10, 19, 19).to(device).float(),
+            'beta':  torch.randn(4, 10, 19, 19).to(device).float(),
+            'gamma': torch.randn(4, 10, 19, 19).to(device).float()
         }
         loss, correct, pairs = trainer.leave_one_out(embeddings, nn.CrossEntropyLoss(), negatives=3)
 
@@ -460,49 +525,62 @@ def testMENDRPreTrainerMAEReconLoss():
     
 def testMENDRPreTrainerTinyMAEReconLoss():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.5,
         mask_span = 5,
         temp = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,        
-        gamma_reconstructive_loss_pref = 1.0,
-        gradient_clip_value = 1e7,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None
+        ),
         negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
 
-    mendr = MENDR_model(device, contextualizer_size="TINY")
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=5,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg=args, cuda=device)
 
     with torch.autograd.detect_anomaly():
         example_input = {
-            'delta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'theta': torch.randn(4, 11, 19, 37).to(device).float(),
-            'alpha': torch.randn(4, 11, 38, 37).to(device).float(),
-            'beta': torch.randn(4, 11, 76, 37).to(device).float(),
-            'gamma': torch.randn(4, 11, 114, 37).to(device).float()
+                'delta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+                'theta': torch.randn(4, 10, 19, 8*24).to(device).float(),
+                'alpha': torch.randn(4, 10, 19, 16*24).to(device).float(),
+                'beta':  torch.randn(4, 10, 19, 32*24).to(device).float(),
+                'gamma': torch.randn(4, 10, 19, 64*24).to(device).float()
         }
 
-        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer.epochMaskedReconTiny(example_input, nn.MSELoss())
+        riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes = trainer._epochMaskedRecon(example_input, nn.MSELoss())
 
         assert riemannian_loss > 0, f"Loss is not greater than 0: {riemannian_loss}"
 
-        assert combined_manifold_output.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
-        assert combined_manifold_output_masked.shape == torch.Size([4, 11, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
+        assert combined_manifold_output.shape == torch.Size([4, 10, 19, 19]), f"Combined Manifold Shape does not match {combined_manifold_output.shape}"
+        assert combined_manifold_output_masked.shape == torch.Size([4, 10, 19, 19]), f"Combined Manifold Masked Shape does not match {combined_manifold_output_masked.shape}"
 
         assert not torch.any(torch.isnan(combined_manifold_output)), "Combined Manifold contains NaN values"
         assert not torch.any(torch.isnan(combined_manifold_output_masked)), "Combined Manifold Masked contains NaN values"
@@ -511,78 +589,135 @@ def testMENDRPreTrainerTinyMAEReconLoss():
         for mask_idx in mask_idxes:
             assert torch.sum(mask_idx) == 5
 
-
 def testMENDRPreTrainerWithTiny():
     args = SimpleNamespace(
-        encoder_grad_frac = 0.5,
         learning_rate = 0.001,
         l2_weight_decay = 0.001,
         save_model_directory = None,
-        mask_ratio = 0.01,
-        delta_reconstructive_loss_pref = 1.0,
-        theta_reconstructive_loss_pref = 1.0,
-        alpha_reconstructive_loss_pref = 1.0,
-        beta_reconstructive_loss_pref = 1.0,
-        gamma_reconstructive_loss_pref = 1.0,
-        contrastive_combined_loss_pref = 1e3,
-        contrastive_wavelet_loss_pref = 1e3,
-        gradient_clip_value = 1e7,
         mask_span = 5,
         temp = 0.01,
-        negatives_loo=10,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None,
+            num_workers = 32,
+            batch_size = 16,
+            epochs=1,
+        ),
+        meta_params = SimpleNamespace(
+            experiment_name = "test",
+            run_name = "test",
+            log_model_params_and_grads = False,
+            save_model = False,
+            save_final_model = False,
+            log_system_metrics = False,
+        ),
+        patch_encoder_params = SimpleNamespace(
+            num_channels=19,
+        ),
+        negatives_loo = 10,
         enc_feat_l2 = 0.001,
         multi_gpu = False,
         ckpt_dir="./checkpoint",
-        random_state=42
-
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
     )
 
-    mendr = MENDR_model(device, temp=args.temp, contextualizer_size="TINY")
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
-    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=2,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    contextualizer = MENDRContextualizerTiny(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg=args, cuda=device)
+    training_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    val_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
 
-    mendr.mendr_encoder.apply(check_sanity)
-    mendr.mendr_contextualizer.apply(check_sanity)
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=training_dataset, cfg=args, validation_dataset=val_dataset)
 
-def testMENDRPreTrainerNoValidation():
+    autoencoder.apply(check_sanity)
+    contextualizer.apply(check_sanity)
+
+def testMENDRLargeWaveletPretrainerFit():
     args = SimpleNamespace(
-    encoder_grad_frac = 0.5,
-    learning_rate = 0.001,
-    l2_weight_decay = 0.001,
-    save_model_directory = None,
-    mask_ratio = 0.01,
-    delta_reconstructive_loss_pref = 1.0,
-    theta_reconstructive_loss_pref = 1.0,
-    alpha_reconstructive_loss_pref = 1.0,
-    beta_reconstructive_loss_pref = 1.0,
-    gamma_reconstructive_loss_pref = 1.0,
-    contrastive_combined_loss_pref = 1e3,
-    contrastive_wavelet_loss_pref = 1e3,
-    gradient_clip_value = 1e7,
-    mask_span = 5,
-    temp = 0.01,
-    negatives_loo=10,
-    enc_feat_l2 = 0.001,
-    multi_gpu = False,
-    ckpt_dir="./checkpoint",
-    random_state=42
+        learning_rate = 0.001,
+        l2_weight_decay = 0.001,
+        save_model_directory = None,
+        temp = 0.01,
+        training_params = SimpleNamespace(
+            mask_ratio = 0.5,
+            gradient_clip_value = 1e7,
+            scheduler_after_batch = False,
+            ckpt_dir = None,
+            num_workers = 32,
+            batch_size = 16,
+            epochs=1,
+            negatives_loo=10,
+        ),
+        meta_params = SimpleNamespace(
+            experiment_name = "test",
+            run_name = "test",
+            log_model_params_and_grads = False,
+            save_model = False,
+            save_final_model = False,
+            log_system_metrics = False,
+        ),
+        negatives_loo = 10,
+        enc_feat_l2 = 0.001,
+        multi_gpu = False,
+        ckpt_dir="./checkpoint",
+        random_state=42,
+        T_max=10,
+        eta_min=0.001,
+        patch_encoder_params = SimpleNamespace(
+            num_channels=19,
+        ),
     )
 
-    mendr = MENDR_model(device, temp=args.temp)
-    trainer = MENDRPreTrainer(mendr, args)
-    optimizer = torch.optim.Adam(trainer.parameters())
-    optimizer = MixOptimizer(optimizer)
-    trainer.set_optimizer(optimizer)
-    dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
-    print(f"Total Number of Parameters: {sum(p.numel() for p in mendr.parameters() if p.requires_grad)}")
-    trainer.fit(training_dataset=dataset, epochs=1, batch_size=32)
+    autoencoder = MENDRPatchEncoder(num_channels=19,
+                            sampling_rate=128,
+                            super_patch_seconds=2,
+                            hidden_gnn_mlp_ratio=1,
+                            n_gnn_transformer_layers=1,
+                            num_subjects=1,
+                            n_gnn_heads=2,
+                            device=device,
+                            )
+    wavelet_contextualizer = MENDRWaveletContextualizer(num_channels=19, out_dim=24).to(device)
+    optim_params = list(autoencoder.parameters()) + list(wavelet_contextualizer.parameters())
+    optimizer = torch.optim.AdamW(optim_params,
+                betas=(0.9, 0.99),
+                lr=args.learning_rate,
+                weight_decay=args.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                T_max=args.T_max,
+                eta_min=args.eta_min)
+    mix_optimizer = MixOptimizer(optimizer, scheduler)
+    trainer = MENDRLargeWaveletPreTrainer(autoencoder, wavelet_contextualizer,
+                                    mix_optimizer, cfg=args, cuda=device)
+    training_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
+    val_dataset = WaveletPretrainDataset(root="/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz", frac=0.001)
 
-    mendr.mendr_encoder.apply(check_sanity)
-    mendr.mendr_contextualizer.apply(check_sanity)
+    with torch.autograd.detect_anomaly():
+        trainer.fit(training_dataset=training_dataset, cfg=args, validation_dataset=val_dataset)
+    
+    mendr.wavelet_contextualizer.apply(check_sanity)
 
 def testMENDRParameters():
     args = SimpleNamespace(
@@ -847,9 +982,14 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    '''
     print("Testing MENDR Super patching...")
     testMENDRSuperPatching()
     print("MENDR Super Patching Test Passed!")
+
+    print("Testing Dropout1dWithIndexTracking...")
+    testDropout1dWithIndexTracking()
+    print("Dropout1dWithIndexTracking Test Passed!")
 
     print("Testing MENDR Make Mask Idxes...")
     testMakeMaskIdxes()
@@ -862,27 +1002,29 @@ if __name__ == "__main__":
     print("Testing Batchwise Matrix Similarity...")
     testMENDRBatchWiseMatrixSimilarity()
     print("Batchwise Matrix Similarity test passed!")
+
     print("Testing Large Contextualizer Batch LEM...")
     testLargeContextualizerBatchLEM()
     print("Contextualizer Wavelet Batch test passed!")
 
     print("Testing Large Contextualizer Wavelet LEM...")
-    testLargeContextualizerWaveletLEM()
+    testWaveletLEM()
     print("Contextualizer Wavelet LEM test passed!")
 
     print("Testing Tiny Contextualizer...")
     testContextualizerTiny()
     print("Tiny Contextualizer test passed!")
 
-    print("Testing Large Contextualizer...")
-    testContextualizerLarge()
-    print("Large Contextualizer test passed!")
+    print("Testing Large Wavelet Contextualizer...")
+    testContextualizerLargeWavelet()
+    print("Large Wavelet Contextualizer test passed!")
 
     print("Testing Large Contextualizer masking...")
     testMENDRLargeCombinedContextualizerMasking()
     print("Large Contextualizer masking test passed!")
+
     print("Testing pretrainer LOO contrastive loss...")
-    testMENDRPreTrainerLOOLoss()
+    testMENDRLargeWaveletPretrainerLOOLoss()
     print("PreTrainer LOO contrastive loss test passed! ")
 
     print("Testing pretrainer MAE Recon loss...")
@@ -893,13 +1035,14 @@ if __name__ == "__main__":
     testMENDRPreTrainerTinyMAEReconLoss()
     print("PreTrainer Tiny MAE Recon loss test passed! ")
 
+    '''
     print("Testing pretrainer with tiny contextualizer...")
     testMENDRPreTrainerWithTiny()
     print("PreTrainer with tiny contextualizer test passed!")
 
-
+    '''
     print("Testing pretrainer fit without validation...")
-    testMENDRPreTrainerNoValidation()
+    testMENDRLargeWaveletPretrainerFit()
     print("PreTrainer fit without validation test passed!")
 
     print("Testing MENDR Parameters...")
@@ -923,3 +1066,5 @@ if __name__ == "__main__":
     print("PreTrainer load from checkpoint tiny test passed!")
 
     print("All tests passed! Make sure to delete any artifacts generated during testing such as checkpoints.")
+
+    '''

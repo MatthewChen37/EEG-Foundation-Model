@@ -2,16 +2,21 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 def plotReconstruction(inputs, decodings, title):
+    if 'high' in inputs:
+        bands = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
+    else:
+        bands = ['delta', 'theta', 'alpha', 'beta', 'gamma']
+
     assert len(inputs) == len(decodings), f"Input and Decoding Lengths do not match: {len(inputs)} {len(decodings)}"
-    fig, axs = plt.subplots(inputs['delta'].shape[0], 5, figsize=(30, 15))
+    fig, axs = plt.subplots(inputs['delta'].shape[0], len(bands), figsize=(6 * len(bands), 3 * len(bands)))
     for batch_idx in range(inputs['delta'].shape[0]):
-        for idx, band in enumerate(['delta', 'theta', 'alpha', 'beta', 'gamma']):
+        for idx, band in enumerate(bands):
             for channel in range(19):
                 axs[batch_idx, idx].plot(inputs[band][batch_idx, channel, :], label=f"Input {band} Channel {channel}", c="g")
                 axs[batch_idx, idx].plot(decodings[band][batch_idx, channel, :], label=f"Output {band} Channel {channel}", c="r")
             axs[batch_idx, idx].axis('off')
             
-    for ax, col in zip(axs[0], ['delta', 'theta', 'alpha', 'beta', 'gamma']):
+    for ax, col in zip(axs[0], bands):
         ax.set_title(f"{title} Band: {col}")
         ax.set_xlabel("Time")
     
