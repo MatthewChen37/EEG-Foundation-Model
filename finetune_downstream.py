@@ -17,10 +17,11 @@ from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
-from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder
+from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
+from Datasets.datasetTUEV import WaveletTUEVDataset
 
 METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc'}
 
@@ -56,8 +57,11 @@ def main(cfg:DictConfig) -> None:
     if cfg.dataset_params.name == "TUAB":
         finetune_train_dataset = WaveletTUABDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
         finetune_eval_dataset = WaveletTUABDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
-
         model_decoder = TUABFinetuneDecoder().to(device)
+    elif cfg.dataset_params.name == "TUEV":
+        finetune_train_dataset = WaveletTUEVDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
+        finetune_eval_dataset = WaveletTUEVDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
+        model_decoder = TUEVFinetuneDecoder().to(device)
     else:
         raise Exception("Dataset not found")
     print("Dataset Loaded. Length of Train Dataset: ", len(finetune_train_dataset))

@@ -17,7 +17,7 @@ dataset_params:
   train_frac: 1.0
   eval_frac: 1.0
   metrics: ['accuracy', 'balanced_accuracy', 'f1', 'cohens_kappa']
-  task: multi-class
+  task: multiclass
 training_params:
   task_loss: CrossEntropyLoss
   task_loss_params:

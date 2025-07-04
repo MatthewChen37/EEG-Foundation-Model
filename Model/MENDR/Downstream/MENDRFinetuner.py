@@ -106,7 +106,6 @@ class MENDRFinetuner(BaseModelTrainer):
                     print(f'Epoch: {epoch} Mean {metric}: {val_metrics[metric]}')
                 print(f'Epoch: {epoch} Mean Acc: {val_metrics["accuracy"]} Mean auc_pr: {val_metrics["auc_pr"]} Mean auroc: {val_metrics["auroc"]}')
 
-
             ### SAVE ###
             if not self.scheduler_after_batch:
                 self.optimizer.scheduler_step_cosine_annealing()
@@ -151,6 +150,10 @@ class MENDRFinetuner(BaseModelTrainer):
     def calculate_metrics(self, prediction, ground_truth):
         if self.cfg.dataset_params.task == 'binary':
             metrics = self._calculate_metrics_binary(prediction, ground_truth)
+        elif self.cfg.dataset_params.task == 'multiclass':
+            metrics = self._calculate_metrics_multiclass(prediction, ground_truth)
+        else:
+            raise Exception("Task not found")
         return metrics
 
     def _calculate_metrics_binary(self, prediction, ground_truth):
@@ -176,3 +179,9 @@ class MENDRFinetuner(BaseModelTrainer):
                 else:
                     metrics['auroc'] = 0.0
         return metrics
+
+    def _calculate_metrics_multiclass(self, prediction, ground_truth):
+        metrics = {}
+        score_y = torch.softmax(prediction, dim=1)
+        pred_y = torch.argmax(score_y, dim=1).cpu().detach().numpy()
+        score_y = score_y.cpu().detach().numpy()
