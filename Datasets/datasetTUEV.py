@@ -29,7 +29,7 @@ class WaveletTUEVDataset(Dataset):
                 future.result()
         self.length = len(self.epochs)
 
-    def _process_folder(self, curr_folder, wavelet_folder, graph_folder):
+    def _process_folder(self, wavelet_folder, graph_folder):
         folder_bands = dict()
         folder_graph_path = os.listdir(graph_folder)[0]
         split_path = folder_graph_path.split("_")
