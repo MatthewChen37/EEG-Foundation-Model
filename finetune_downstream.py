@@ -80,13 +80,13 @@ def main(cfg:DictConfig) -> None:
         raise Exception("Contextualizer size not found")
 
     if cfg.meta_params.pretrained_autoencoder_path is not None:
-        '''
         print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
         mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
         mendr_autoencoder.eval()
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
-        '''
+        for param in mendr_autoencoder.parameters():
+            param.requires_grad = False
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
@@ -101,10 +101,16 @@ def main(cfg:DictConfig) -> None:
                                                             eta_min=cfg.training_params.eta_min)
     optimizer = MixOptimizer(optimizer, scheduler)
 
+    foundation_model_params = sum(p.numel() for p in model.parameters() if p.requires_grad) 
+    decoder_params = sum(p.numel() for p in model_decoder.parameters() if p.requires_grad)
+    print(f"Total Foundation Model Parameters: {foundation_model_params}")
+    print(f"Total Decoder Parameters: {decoder_params}")
+    print(f"Total Parameters: {foundation_model_params + decoder_params}")
+
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
-    model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+    #model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
 if __name__ == '__main__':
     main()
