@@ -24,6 +24,8 @@ class MENDRFinetuner(BaseModelTrainer):
     def __init__(self, MENDR, Decoder, optimizer, cfg, **kwargs):
         if cfg.training_params.task_loss == 'BCEWithLogitsLoss':
             self.loss_fn = nn.BCEWithLogitsLoss()
+        elif cfg.training_params.task_loss == 'CrossEntropyLoss':
+            self.loss_fn = nn.CrossEntropyLoss(label_smoothing=cfg.training_params.task_loss_params.label_smoothing)
         else:
             raise ValueError(f"Unsupported task loss function: {cfg.training_params.task_loss}")
 
@@ -178,6 +180,10 @@ class MENDRFinetuner(BaseModelTrainer):
                     metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
                 else:
                     metrics['auroc'] = 0.0
+            elif metric == 'f1':
+                metrics['f1'] = f1_score(ground_truth.cpu().numpy(), pred_y, average='weighted')
+            elif metric == 'cohens_kappa':
+                metrics['cohens_kappa'] = cohen_kappa_score(ground_truth.cpu().numpy(), pred_y)
         return metrics
 
     def _calculate_metrics_multiclass(self, prediction, ground_truth):

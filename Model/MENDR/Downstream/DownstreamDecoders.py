@@ -40,3 +40,167 @@ class TUABFinetuneDecoder(nn.Module):
         x = self.flatten(x)
         x = self.seq(x)
         return self.final_decoder(x)
+
+class TUEVFinetuneDecoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.tangent = SPDTangentSpace(19)
+        self.flatten = nn.Flatten()
+        self.flattened = (19 * 20) // 2
+        
+        #self.combined_seq = nn.Sequential(nn.LayerNorm(5 * 100), nn.GELU(), nn.Linear(5*100, 100), nn.LayerNorm(100), nn.GELU())
+        #self.final_lin = nn.Linear(100, 6)
+
+        self.band_tangent_spaces = nn.ParameterDict({
+            'delta': SPDTangentSpace(19),
+            'theta': SPDTangentSpace(19),
+            'alpha': SPDTangentSpace(19),
+            'beta':  SPDTangentSpace(19),
+            'gamma': SPDTangentSpace(19),
+        })
+
+        self.band_flatten = nn.ParameterDict({
+            'delta': nn.Flatten(),
+            'theta': nn.Flatten(),
+            'alpha': nn.Flatten(),
+            'beta':  nn.Flatten(),
+            'gamma': nn.Flatten(),
+        })
+
+        self.band_dim = {
+            'delta': 19,
+            'theta': 19,
+            'alpha': 19,
+            'beta':  19,
+            'gamma': 19,
+        }
+
+        self.band_decoders = nn.ParameterDict({
+            'delta': nn.Sequential(nn.Linear(self.flattened, 30), nn.LayerNorm(30), nn.Dropout(p=0.2)),
+            'theta': nn.Sequential(nn.Linear(self.flattened, 30), nn.LayerNorm(30), nn.Dropout(p=0.2)),
+            'alpha': nn.Sequential(nn.Linear(self.flattened, 30), nn.LayerNorm(30), nn.Dropout(p=0.2)),
+            'beta':  nn.Sequential(nn.Linear(self.flattened, 30), nn.LayerNorm(30), nn.Dropout(p=0.2)),
+            'gamma': nn.Sequential(nn.Linear(self.flattened, 30), nn.LayerNorm(30), nn.Dropout(p=0.2)),
+        })
+
+        self.band_encoding_decoding_dim = {
+            'delta': 1*19*37,
+            'theta': 1*19*37,
+            'alpha': 1*38*37,
+            'beta':  1*76*37,
+            'gamma': 1*114*37,
+        }
+
+        '''
+        self.raw_wavelet_decoding = nn.ParameterDict({
+            'delta': nn.Sequential(nn.Linear(19*11, 20), nn.Dropout(p=0.1)),
+            'theta': nn.Sequential(nn.Linear(19*11, 20), nn.Dropout(p=0.1)),
+            'alpha': nn.Sequential(nn.Linear(19*21, 20), nn.Dropout(p=0.1)),
+            'beta':  nn.Sequential(nn.Linear(19*41, 20), nn.LayerNorm(20), nn.Dropout(p=0.1)),
+            'gamma': nn.Sequential(nn.Linear(19*80, 20), nn.Dropout(p=0.1)),
+        })
+        '''
+
+        self.band_encoding_decoders = nn.ParameterDict({
+            'delta': nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['delta'], 50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
+            'theta': nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['theta'], 50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
+            'alpha': nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['alpha'], 50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
+            'beta':  nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['beta'],  50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
+            'gamma': nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['gamma'], 50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
+        })
+         
+        self.combined_seq = nn.Sequential(nn.Linear(1 * 19 * 10, 100), nn.LayerNorm(100), nn.Dropout(p=0.1))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(150 + 250 + 100, 100), nn.LayerNorm(100))
+        self.final_lin = nn.Sequential(nn.GELU(), nn.Linear(100, 6))
+
+    '''
+    def forward(self, encodings):
+        batch_size = encodings['delta'].shape[0]
+        num_patches = encodings['delta'].shape[1]
+        embedding_dim = encodings['delta'].shape[2]
+        
+        band_encodings_decodings = []
+        for band, band_encodings in encodings.items():
+            band_encodings = band_encodings.reshape(band_encodings.shape[0], self.band_encoding_decoding_dim[band])
+            band_encoding_decoding = self.band_encoding_decoders[band](band_encodings)
+            band_encodings_decodings.append(band_encoding_decoding)
+        band_encodings_decodings = torch.cat(band_encodings_decodings, dim=1)
+        x = self.combined_seq(band_encodings_decodings)
+        x = self.final_lin(x)
+        return x
+    '''
+
+    '''
+    def forward(self, encodings, combined_manifold_output):
+        batch_size = combined_manifold_output.shape[0]
+        num_patches = combined_manifold_output.shape[1]
+        embedding_dim = combined_manifold_output.shape[2]
+
+        band_encodings_decodings = []
+        for band, band_encodings in encodings.items():
+            band_encodings = band_encodings.reshape(band_encodings.shape[0], self.band_encoding_decoding_dim[band])
+            band_encoding_decoding = self.band_encoding_decoders[band](band_encodings)
+            band_encodings_decodings.append(band_encoding_decoding)
+        band_encodings_decodings = torch.cat(band_encodings_decodings, dim=1)
+
+        x = self.tangent(combined_manifold_output.view(batch_size*num_patches, embedding_dim, embedding_dim))
+        x = x.reshape(batch_size, num_patches, self.flattened)
+        x = self.flatten(x)
+        #x = self.combined_seq(x)
+        #x = self.final_decoder(torch.cat([x, band_encodings_decodings], dim=1))
+        #x = self.final_lin(x)
+        x = torch.cat([band_encodings_decodings, x], dim=1)
+        x = self.final_lin(x)
+        return x
+    '''
+
+    '''
+    def forward(self, combined_manifold_output):
+        batch_size = combined_manifold_output.shape[0]
+        num_patches = combined_manifold_output.shape[1]
+        embedding_dim = combined_manifold_output.shape[2]
+        x = self.tangent(combined_manifold_output.view(batch_size*num_patches, embedding_dim, embedding_dim))
+        x = x.reshape(batch_size, num_patches, self.flattened)
+        x = self.flatten(x)
+        x = self.combined_seq(x)
+        x = self.final_lin(x)
+        return x
+    '''
+
+    def forward(self, encodings, wavelet_manifold_output, combined_manifold_output):
+        batch_size = combined_manifold_output.shape[0]
+        num_patches = combined_manifold_output.shape[1]
+        embedding_dim = combined_manifold_output.shape[2]
+
+        band_encodings_decodings = []
+        for band, band_encodings in encodings.items():
+            band_encodings = band_encodings.reshape(band_encodings.shape[0], self.band_encoding_decoding_dim[band])
+            band_encoding_decoding = self.band_encoding_decoders[band](band_encodings)
+            band_encodings_decodings.append(band_encoding_decoding)
+        band_encodings_decodings = torch.cat(band_encodings_decodings, dim=1)
+
+        band_decodings = []
+        for band, encodings in wavelet_manifold_output.items():
+            band_tangent = self.band_tangent_spaces[band](encodings.view(batch_size*num_patches, self.band_dim[band], self.band_dim[band]))
+            band_tangent = self.band_flatten[band](band_tangent)
+            band_decoding = self.band_decoders[band](band_tangent)
+            band_decodings.append(band_decoding)
+        band_decodings = torch.cat(band_decodings, dim=1)
+
+
+        '''
+        wavelet_features = []
+        for band, raw_data in raw_data.items():
+            raw_data = raw_data[:, :, raw_data.shape[2] * 7 // 16:raw_data.shape[2] * 9 // 16]
+            raw_data = torch.flatten(raw_data, start_dim=1, end_dim=2)
+            wavelet_feature = self.raw_wavelet_decoding[band](raw_data)
+            wavelet_features.append(wavelet_feature)
+        wavelet_features = torch.cat(wavelet_features, dim=1)
+        '''
+
+        x = self.tangent(combined_manifold_output.view(batch_size*num_patches, embedding_dim, embedding_dim))
+        x = self.flatten(x)
+        x = self.combined_seq(x)
+        x = self.final_decoder(torch.cat([x, band_encodings_decodings, band_decodings], dim=1))
+        x = self.final_lin(x)
+        return x

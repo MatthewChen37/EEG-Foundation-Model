@@ -8,10 +8,11 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 class WaveletTUEVDataset(Dataset):
-    def __init__(self, root, frac=1.0, transform=None, split="train"):
+    def __init__(self, root, include_high=False, frac=1.0, transform=None, split="train"):
         super(WaveletTUEVDataset, self).__init__(root, transform)
         self.frac = frac
         self.split = split
+        self.include_high = include_high
         # Prevents the FutureWarning: from loading without setting weights_only to True
         warnings.filterwarnings("ignore", category=FutureWarning)
         self._index_data()
@@ -44,17 +45,32 @@ class WaveletTUEVDataset(Dataset):
         for file_name in wavelet_files:
             attributes = file_name.split("_")
             band = attributes[-3]
-            if band != "high":
+            if band != "freq":
                 folder_bands[band] = torch.load(os.path.join(wavelet_folder, file_name))
-        epoch_tuple = (
-            graph_name,
-            wavelet_folder,
-            folder_bands['delta'],
-            folder_bands['theta'],
-            folder_bands['alpha'],
-            folder_bands['beta'],
-            folder_bands['gamma'],
-        )
+            elif band == "freq" and self.include_high:
+                folder_bands["high"] = torch.load(os.path.join(wavelet_folder, file_name))
+
+        if self.include_high:
+            epoch_tuple = (
+                graph_name,
+                wavelet_folder,
+                folder_bands['delta'],
+                folder_bands['theta'],
+                folder_bands['alpha'],
+                folder_bands['beta'],
+                folder_bands['gamma'],
+                folder_bands['high'],
+            )
+        else:
+            epoch_tuple = (
+                graph_name,
+                wavelet_folder,
+                folder_bands['delta'],
+                folder_bands['theta'],
+                folder_bands['alpha'],
+                folder_bands['beta'],
+                folder_bands['gamma'],
+            )
         self.epochs.append(epoch_tuple)
 
     def len(self):
@@ -62,22 +78,38 @@ class WaveletTUEVDataset(Dataset):
 
     def get(self, idx):
         epoch_tuple = self.epochs[idx]
-        graph_name, wavelet_folder, delta, theta, alpha, beta, gamma = epoch_tuple
+        if self.include_high:
+            graph_name, wavelet_folder, delta, theta, alpha, beta, gamma, high = epoch_tuple
+        else:
+            graph_name, wavelet_folder, delta, theta, alpha, beta, gamma = epoch_tuple
         graph = self.graphs[graph_name].clone()
-        data = {
-            "graph": graph,
-            "wavelet_folder": wavelet_folder,
-            "delta": delta,
-            "theta": theta,
-            "alpha": alpha,
-            "beta": beta,
-            "gamma": gamma,
-        }
+
+        if self.include_high:
+            data = {
+                "graph": graph,
+                "wavelet_folder": wavelet_folder,
+                "delta": delta,
+                "theta": theta,
+                "alpha": alpha,
+                "beta": beta,
+                "gamma": gamma,
+                "high": high,
+            }
+        else:
+            data = {
+                "graph": graph,
+                "wavelet_folder": wavelet_folder,
+                "delta": delta,
+                "theta": theta,
+                "alpha": alpha,
+                "beta": beta,
+                "gamma": gamma,
+            }
         return data
 
 if __name__ == "__main__":
-    train_dataset = WaveletTUEVDataset(root="/home/hice1/mchen439/scratch/TUEV/train", frac=1.0, split="train")
-    eval_dataset = WaveletTUEVDataset(root="/home/hice1/mchen439/scratch/TUEV/eval", frac=1.0, split="eval")
+    train_dataset = WaveletTUEVDataset(root="/home/hice1/mchen439/scratch/TUEV_small/train", include_high=True, frac=1.0, split="train")
+    eval_dataset = WaveletTUEVDataset(root="/home/hice1/mchen439/scratch/TUEV_small/eval", include_high=True, frac=1.0, split="eval")
 
     print("Length of train dataset: ", len(train_dataset))
     print("Length of val dataset: ", len(eval_dataset))
@@ -88,6 +120,7 @@ if __name__ == "__main__":
                     data['alpha'].shape,
                     data['beta'].shape,
                     data['gamma'].shape,
+                    data['high'].shape,
                     "Data Label:", data['graph'].y,
                     data['graph'].edge_index.shape,
                     data['graph'].edge_attr.shape)

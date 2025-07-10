@@ -23,11 +23,11 @@ from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
 from Datasets.datasetTUEV import WaveletTUEVDataset
 
-METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc'}
+METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa'}
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUAB")
+            config_name="TUEV")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
@@ -114,7 +114,7 @@ def main(cfg:DictConfig) -> None:
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
-    #model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+    # model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
 if __name__ == '__main__':
     main()
