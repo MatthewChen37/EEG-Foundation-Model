@@ -106,7 +106,11 @@ class MENDRFinetuner(BaseModelTrainer):
                 mlflow.log_metrics(epoch_metrics, step=epoch)
                 for metric in val_metrics:
                     print(f'Epoch: {epoch} Mean {metric}: {val_metrics[metric]}')
-                print(f'Epoch: {epoch} Mean Acc: {val_metrics["accuracy"]} Mean auc_pr: {val_metrics["auc_pr"]} Mean auroc: {val_metrics["auroc"]}')
+
+                if cfg.dataset_params.name == "TUAB":
+                    print(f'Epoch: {epoch} Mean Acc: {val_metrics["accuracy"]} Mean auc_pr: {val_metrics["auc_pr"]} Mean auroc: {val_metrics["auroc"]}')
+                elif cfg.dataset_params.name == "TUEV":
+                    print(f'Epoch: {epoch} Mean Acc: {val_metrics["accuracy"]} Mean f1: {val_metrics["f1"]} Mean cohens_kappa: {val_metrics["cohens_kappa"]}')
 
             ### SAVE ###
             if not self.scheduler_after_batch:
@@ -126,7 +130,12 @@ class MENDRFinetuner(BaseModelTrainer):
         prediction = self.decoder(combined_manifold_output).float()
         # Check for NaNs
         #assert not torch.isnan(prediction).any(), f"Prediction contains NaN values: {prediction}"
-        ground_truth = inputs['graph'].y.to(self.device).float()
+        if self.cfg.training_params.task_loss == 'BCEWithLogitsLoss':
+            ground_truth = inputs['graph'].y.to(self.device).float()
+        elif self.cfg.training_params.task_loss == 'CrossEntropyLoss':
+            ground_truth = inputs['graph'].y.to(self.device).long()
+        else:
+            raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
         '''
         if self.cfg.dataset_params.name == "TUAB":
             ground_truth = torch.repeat_interleave(ground_truth, patchified_inputs['delta'].shape[1])
@@ -145,7 +154,12 @@ class MENDRFinetuner(BaseModelTrainer):
         with torch.no_grad():
             patchified_inputs, encodings, _, _, combined_manifold_output = self.mendr_model(inputs)
             prediction = self.decoder(combined_manifold_output).float()
-            ground_truth = inputs['graph'].y.to(self.device).float()
+            if self.cfg.training_params.task_loss == 'BCEWithLogitsLoss':
+                ground_truth = inputs['graph'].y.to(self.device).float()
+            elif self.cfg.training_params.task_loss == 'CrossEntropyLoss':
+                ground_truth = inputs['graph'].y.to(self.device).long()
+            else:
+                raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
             task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         return prediction, ground_truth, task_loss
 
@@ -180,14 +194,20 @@ class MENDRFinetuner(BaseModelTrainer):
                     metrics['auroc'] = roc_auc_score(ground_truth.cpu().numpy(), score_y)
                 else:
                     metrics['auroc'] = 0.0
-            elif metric == 'f1':
-                metrics['f1'] = f1_score(ground_truth.cpu().numpy(), pred_y, average='weighted')
-            elif metric == 'cohens_kappa':
-                metrics['cohens_kappa'] = cohen_kappa_score(ground_truth.cpu().numpy(), pred_y)
         return metrics
 
     def _calculate_metrics_multiclass(self, prediction, ground_truth):
         metrics = {}
-        score_y = torch.softmax(prediction, dim=1)
-        pred_y = torch.argmax(score_y, dim=1).cpu().detach().numpy()
-        score_y = score_y.cpu().detach().numpy()
+        pred_y = torch.max(prediction, dim=-1)[1].cpu().detach().numpy()
+
+        for metric in self.cfg.dataset_params.metrics:
+            if metric == 'accuracy':
+                metrics['accuracy'] = accuracy_score(ground_truth.cpu().detach().numpy(), pred_y)
+            elif metric == 'balanced_accuracy':
+                metrics['balanced_accuracy'] = balanced_accuracy_score(ground_truth.cpu().detach().numpy(), pred_y)
+            elif metric == 'f1':
+                metrics['f1'] = f1_score(ground_truth.cpu().detach().numpy(), pred_y, average='weighted')
+            elif metric == 'cohens_kappa':
+                metrics['cohens_kappa'] = cohen_kappa_score(ground_truth.cpu().detach().numpy(), pred_y)
+        return metrics
+

@@ -95,9 +95,9 @@ class WaveletTUEVDataset(Dataset):
         elif band == 'beta':
             return data[:, 3:99]
         elif band == 'gamma':
-            return data[:, 3:195]
+            return data[:, 2:194]
         elif band == 'high':
-            return data[:, 3:387]
+            return data[:, 2:386]
         else:
             return data
 
