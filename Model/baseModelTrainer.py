@@ -3,7 +3,9 @@ import tqdm
 import re
 import os
 import mlflow
+import numpy as np
 from torch_geometric.loader import DataLoader
+from torch.utils.data import WeightedRandomSampler
 from sys import gettrace
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
@@ -230,6 +232,49 @@ class BaseModelTrainer(object):
         # loader_kwargs.setdefault('shuffle', training)
         loader_kwargs.setdefault('drop_last', training)
         loader_kwargs.setdefault('sampler', sampler)
+        if cfg.training_params.weighted_random_sampler and training: # only use weighted sampler for training datasets
+            print("Using Weighted Random Sampler")
+            print("Loading dataset class counts")
+            if cfg.dataset_params.name == "TUAB":
+                label_count = {
+                    0: 0,
+                    1: 0,
+                }
+                y = []
+                for i in tqdm.tqdm(range(len(dataset))):
+                    graph = dataset[i]['graph']
+                    train_label = graph.y.item()
+                    assert train_label >= 0 and train_label <= 1, f"Label {train_label} is not in range [0, 1]"
+                    label_count[train_label] += 1
+                    y.append(train_label)
+                print("Label Counts", label_count)
+                label_counts_arr = np.array(list(label_count.values()))
+                sampler_class_weight = 1. / torch.from_numpy(label_counts_arr)
+                samples_weight = np.array([sampler_class_weight[t] for t in y])
+                sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight))
+                loader_kwargs['sampler'] = sampler
+            elif cfg.dataset_params.name == "TUEV":
+                label_count = {
+                    0: 0,
+                    1: 0,
+                    2: 0,
+                    3: 0,
+                    4: 0,
+                    5: 0,
+                }
+                y = []
+                for i in tqdm.tqdm(range(len(dataset))):
+                    graph = dataset[i]['graph']
+                    train_label = graph.y.item()
+                    assert train_label >= 0 and train_label <= 5, f"Label {train_label} is not in range [0, 5]"
+                    label_count[train_label] += 1
+                    y.append(train_label)
+                print("Label Counts", label_count)
+                label_counts_arr = np.array(list(label_count.values()))
+                sampler_class_weight = 1. / torch.from_numpy(label_counts_arr)
+                samples_weight = np.array([sampler_class_weight[t] for t in y])
+                sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight))
+                loader_kwargs['sampler'] = sampler
         return DataLoader(dataset, **loader_kwargs)
 
     def _setup_experiment(self, cfg, rank, train_sampler=None, val_sampler=None):

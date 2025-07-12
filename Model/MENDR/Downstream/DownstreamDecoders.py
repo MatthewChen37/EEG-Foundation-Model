@@ -114,7 +114,7 @@ class TUEVFinetuneDecoder(nn.Module):
         '''
          
         #self.combined_seq = nn.Sequential(nn.Linear(1 * 19 * 10, 100), nn.LayerNorm(100), nn.Dropout(p=0.1))
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(3*19*10, 3*19*10), nn.LayerNorm(3*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(3*19*10, 3*19*10), nn.LayerNorm(3*19*10))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(3*19*10, 3*19*10), nn.LayerNorm(3*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(3*19*10, 3*19*10))
         self.final_lin = nn.Sequential(nn.GELU(), nn.Linear(3*19*10, 6))
 
     '''

@@ -29,6 +29,7 @@ training_params:
   scheduler_after_batch: True
   num_workers: 32
   eta_min: 1.0e-7
+  weighted_random_sampler: False
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128
