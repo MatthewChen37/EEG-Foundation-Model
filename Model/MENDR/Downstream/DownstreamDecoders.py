@@ -7,7 +7,7 @@ class TUABFinetuneDecoder(nn.Module):
         super().__init__()
         self.tangent = SPDTangentSpace(19)
         self.flatten = nn.Flatten()
-        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.LayerNorm(5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 1*19*10))
+        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 1*19*10))
         self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(1*19*10, 1))
 
         '''
@@ -112,11 +112,13 @@ class TUEVFinetuneDecoder(nn.Module):
             'gamma': nn.Sequential(nn.Linear(self.band_encoding_decoding_dim['gamma'], 50), nn.LayerNorm(50), nn.Dropout(p=0.1)),
         })
         '''
+
+
          
         #self.combined_seq = nn.Sequential(nn.Linear(1 * 19 * 10, 100), nn.LayerNorm(100), nn.Dropout(p=0.1))
         self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(3*19*10, 3*19*10), nn.LayerNorm(3*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(3*19*10, 3*19*10))
         self.final_lin = nn.Sequential(nn.GELU(), nn.Linear(3*19*10, 6))
-
+        self._init_weights()
     '''
     def forward(self, encodings):
         batch_size = encodings['delta'].shape[0]
@@ -196,3 +198,10 @@ class TUEVFinetuneDecoder(nn.Module):
     x = self.final_lin(x)
     return x
     '''
+
+    def _init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=0.1)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
