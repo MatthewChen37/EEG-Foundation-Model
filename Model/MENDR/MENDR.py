@@ -23,7 +23,7 @@ class MENDR_model(nn.Module):
         self.combined_contextualizer = combined_contextualizer
         if wavelet_contextualizer is not None:
             self.wavelet_contextualizer = wavelet_contextualizer
-            self.mendr_contextualizer = MENDRContextualizerLarge(self.wavelet_contextualizer, self.combined_contextualizer, temp=10.0).to(device)
+            self.mendr_contextualizer = MENDRContextualizerLarge(self.wavelet_contextualizer, self.combined_contextualizer).to(device)
 
 
         self.trainable_state = {
