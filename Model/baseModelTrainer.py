@@ -11,6 +11,7 @@ from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
 from Model.loggingUtil import MENDRLogger
 import multiprocessing
+import concurrent.futures
 
 '''
 Based on:
@@ -221,6 +222,7 @@ class BaseModelTrainer(object):
     '''
 
     def _make_dataloader(self, dataset, cfg, training=False, sampler=None):
+        '''
         if isinstance(dataset, DataLoader):
             return dataset
         loader_kwargs = dict()
@@ -228,8 +230,6 @@ class BaseModelTrainer(object):
         loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
         loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
         loader_kwargs.setdefault('persistent_workers', True)
-        loader_kwargs.setdefault('shuffle', True)
-        # loader_kwargs.setdefault('shuffle', training)
         loader_kwargs.setdefault('drop_last', training)
         loader_kwargs.setdefault('sampler', sampler)
         if cfg.training_params.weighted_random_sampler and training: # only use weighted sampler for training datasets
@@ -255,19 +255,19 @@ class BaseModelTrainer(object):
                 loader_kwargs['sampler'] = sampler
             elif cfg.dataset_params.name == "TUEV":
                 label_count = {
-                    0: 0,
-                    1: 0,
-                    2: 0,
-                    3: 0,
-                    4: 0,
-                    5: 0,
+                    0: 645,
+                    1: 11254,
+                    2: 6184,
+                    3: 1070,
+                    4: 11053,
+                    5: 53726
                 }
                 y = []
                 for i in tqdm.tqdm(range(len(dataset))):
                     graph = dataset[i]['graph']
                     train_label = graph.y.item()
-                    assert train_label >= 0 and train_label <= 5, f"Label {train_label} is not in range [0, 5]"
-                    label_count[train_label] += 1
+                    #assert train_label >= 0 and train_label <= 5, f"Label {train_label} is not in range [0, 5]"
+                    #label_count[train_label] += 1
                     y.append(train_label)
                 print("Label Counts", label_count)
                 label_counts_arr = np.array(list(label_count.values()))
@@ -275,7 +275,76 @@ class BaseModelTrainer(object):
                 samples_weight = np.array([sampler_class_weight[t] for t in y])
                 sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight))
                 loader_kwargs['sampler'] = sampler
+        else:
+            loader_kwargs.setdefault('shuffle', True)
         return DataLoader(dataset, **loader_kwargs)
+        '''
+        if isinstance(dataset, DataLoader):
+            return dataset
+        loader_kwargs = {
+            'pin_memory': self.cuda == 'cuda',
+            'num_workers': cfg.training_params.num_workers,
+            'batch_size': cfg.training_params.batch_size,
+            'persistent_workers': True,
+            'drop_last': training,
+        }
+        
+        if cfg.training_params.weighted_random_sampler and training:
+            print("Using Weighted Random Sampler")
+            sampler = self._create_weighted_sampler_optimized(dataset, cfg)
+            loader_kwargs['sampler'] = sampler
+        else:
+            loader_kwargs['shuffle'] = training
+        
+        return DataLoader(dataset, **loader_kwargs)
+
+
+    def _extract_labels_parallel(self, dataset, num_workers=None):
+        """Extract labels using threading (avoids pickling issues)"""
+        if num_workers is None:
+            num_workers = min(8, multiprocessing.cpu_count())
+        
+        def extract_label(idx):
+            return dataset[idx]['graph'].y.item()
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            y = list(tqdm.tqdm(
+                executor.map(extract_label, range(len(dataset))), 
+                total=len(dataset),
+                desc="Extracting labels"
+            ))
+        return y
+
+    def _create_weighted_sampler_optimized(self, dataset, cfg):
+        """Optimized weighted sampler creation"""
+        if cfg.dataset_params.name == "TUEV":
+            # Use pre-computed counts to avoid dataset iteration
+            # {0: 567, 1: 4677, 2: 1998, 3: 329, 4: 2204, 5: 19646}
+            label_count = {0: 645, 1: 11254, 2: 6184, 3: 1070, 4: 11053, 5: 53726}
+            print(f"Using pre-computed label counts: {label_count}")
+            
+            # Only extract labels, don't recompute counts
+            y = self._extract_labels_parallel(dataset, num_workers=cfg.training_params.num_workers)
+                
+        elif cfg.dataset_params.name == "TUAB":
+            label_count = {0: 0, 1: 0}
+            y = []
+            for i in tqdm.tqdm(range(len(dataset)), desc="Computing label counts"):
+                label = dataset[i]['graph'].y.item()
+                label_count[label] += 1
+                y.append(label)
+            print(f"Computed label counts: {label_count}")
+        
+        # Vectorized weight computation
+        label_counts_arr = np.array(list(label_count.values()))
+        class_weights = 1.0 / label_counts_arr
+        sample_weights = class_weights[y]
+        
+        return WeightedRandomSampler(
+            weights=sample_weights, 
+            num_samples=len(sample_weights),
+            replacement=True
+        )
 
     def _setup_experiment(self, cfg, rank, train_sampler=None, val_sampler=None):
         # We cannot log models to MlFlow due to our custom modules.
