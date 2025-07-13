@@ -85,11 +85,11 @@ def main(cfg:DictConfig) -> None:
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
             include_high=cfg.patch_encoder_params.include_high,
-            n_transformer_layers=2,
+            n_transformer_layers=4,
         )
         combined_contextualizer = MENDRCombinedContextualizer(
             num_channels=19,
-            n_transformer_layers=3,
+            n_transformer_layers=4,
         )
     else:
         raise Exception("Contextualizer size not found")
