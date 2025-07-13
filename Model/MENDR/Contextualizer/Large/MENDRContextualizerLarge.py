@@ -14,9 +14,10 @@ class MENDRContextualizerLarge(nn.Module):
 				wavelet_contextualizer,
 				combined_contextualizer,
 				temp,
-				patch_len,
 				encoded_out = 19):
 		super().__init__()
+
+		'''
 		self.encoded_h = {
 			'delta': delta_encoded_h,
 			'theta': theta_encoded_h,
@@ -25,8 +26,8 @@ class MENDRContextualizerLarge(nn.Module):
 			'gamma': gamma_encoded_h,
 			#'high': high_encoded_h
 		}
+		'''
 
-		self.patch_len = patch_len
 		self.encoded_out = encoded_out
 		self.wavelet_contextualizer = wavelet_contextualizer	
 		self.combined_contextualizer = combined_contextualizer
@@ -113,7 +114,6 @@ class MENDRWaveletContextualizer(nn.Module):
 		for band, band_encodings in x_input.items():
 			wavelet_manifold_output[band] = self.wavelet_e2r[band](band_encodings)
 			cov_dim = wavelet_manifold_output[band].shape[2]
-			#assert torch.allclose(wavelet_manifold_output[band], wavelet_manifold_output[band].mT, atol=(10 ** -10))
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].reshape(batch_size*num_patches, cov_dim, cov_dim)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
 			wavelet_manifold_output[band] = wavelet_manifold_output[band].view(batch_size, num_patches, self.num_channels, self.num_channels)

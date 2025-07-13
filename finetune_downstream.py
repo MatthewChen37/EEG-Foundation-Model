@@ -15,7 +15,7 @@ from omegaconf import DictConfig, OmegaConf
 from math import ceil
 from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
-from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder
 from Model.MENDR.mAtt.optimizer import MixOptimizer
@@ -80,6 +80,17 @@ def main(cfg:DictConfig) -> None:
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
             include_high=cfg.patch_encoder_params.include_high,
         ).to(device)
+    elif cfg.meta_params.contextualizer_size == "LARGE":
+        wavelet_contextualizer = MENDRWaveletContextualizer(
+            num_channels=19,
+            out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
+            include_high=cfg.patch_encoder_params.include_high,
+            n_transformer_layers=2,
+        )
+        combined_contextualizer = MENDRCombinedContextualizer(
+            num_channels=19,
+            n_transformer_layers=3,
+        )
     else:
         raise Exception("Contextualizer size not found")
 
@@ -94,7 +105,12 @@ def main(cfg:DictConfig) -> None:
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
-    model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
+    if cfg.meta_params.contextualizer_size == "TINY":
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
+    elif cfg.meta_params.contextualizer_size == "LARGE":
+        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
+    else:
+        raise Exception("Contextualizer size not found")
 
     optim_params = []
     optim_params += model.parameters()

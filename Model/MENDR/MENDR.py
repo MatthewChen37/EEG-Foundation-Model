@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
-#from Model.MENDR.Contextualizer.MENDRContextualizerLarge import MENDRContextualizerLarge
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.mAtt.spd import SPDTangentSpace
 
@@ -14,7 +14,7 @@ class MENDR_model(nn.Module):
         assert isinstance(autoencoder, MENDRPatchEncoder), f"Autoencoder must be of type MENDRPatchEncoder, but got {type(autoencoder)}"
         assert contextualizer_size in ["LARGE", "TINY"], f"Contextualizer size must be either 'LARGE' or 'TINY', but got {contextualizer_size}"
         if wavelet_contextualizer is not None:
-            assert contextualizer_size == "TINY", "Wavelet contextualizer is only supported for TINY size"
+            assert contextualizer_size == "LARGE", "Wavelet contextualizer is only supported for LARGE size"
 
         super().__init__()
         self.device = device
@@ -23,6 +23,8 @@ class MENDR_model(nn.Module):
         self.combined_contextualizer = combined_contextualizer
         if wavelet_contextualizer is not None:
             self.wavelet_contextualizer = wavelet_contextualizer
+            self.mendr_contextualizer = MENDRContextualizerLarge(self.wavelet_contextualizer, self.combined_contextualizer, temp=10.0).to(device)
+
 
         self.trainable_state = {
             'encoder': True,
@@ -49,16 +51,15 @@ class MENDR_model(nn.Module):
         for band, inp in decodings.items():
             assert not torch.isnan(inp).any(), f"Band: {band}"
         '''
-
+        batch_size = patchified_inputs['delta'].shape[0]
+        patch_num = patchified_inputs['delta'].shape[1]
         if self.contextualizer_size == "TINY":
-            batch_size = patchified_inputs['delta'].shape[0]
-            patch_num = patchified_inputs['delta'].shape[1]
             _, output, _ = self.combined_contextualizer(encodings, batch_size, patch_num, mask_ratio=0.0)
             #assert not torch.isnan(output).any()
             return patchified_inputs, encodings, decodings, None, output
         elif self.contextualizer_size == "LARGE":
             combined_manifold_output, wavelet_manifold_output, _ = self.mendr_contextualizer(encodings, batch_size, patch_num) # Mask indices should never be used here
-            return None
+            return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
     def freeze_autoencoder(self, require_grad=False):
         for param in self.encoder.parameters():
