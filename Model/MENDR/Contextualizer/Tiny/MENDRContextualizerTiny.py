@@ -52,7 +52,6 @@ class MENDRContextualizerTiny(nn.Module):
 			self.patch_lens = patch_lens
 
 		self.e2r = E2R()
-		self.ract = SPDRectified()
 		self.Contextualizer = MENDRContextualizer(
 											encoded_out=self.num_channels,
 											n_transformer_layers=contextualizer_layers)

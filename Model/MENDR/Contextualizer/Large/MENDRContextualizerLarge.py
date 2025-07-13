@@ -19,11 +19,9 @@ class MENDRContextualizerLarge(nn.Module):
 		self.combined_contextualizer = combined_contextualizer
 
 	def forward(self, x, batch_size, num_patches):
-		wavelet_manifold_output, epoched_shape = self.wavelet_contextualizer(x, batch_size, num_patches)
-		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
+		wavelet_manifold_output = self.wavelet_contextualizer(x, batch_size, num_patches)
 		# Never mask when calling it from here
-		combined_manifold_output, mask_idxes = self.combined_contextualizer(combined_manifold_output,
-												epoched_shape, mask_ratio=0.0)
+		combined_manifold_output, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0)
 		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
 
 class MENDRWaveletContextualizer(nn.Module):
@@ -111,7 +109,7 @@ class MENDRWaveletContextualizer(nn.Module):
 			for transformer in self.wavelet_manifold_transformers[band]:
 				wavelet_manifold_output[band] = transformer(wavelet_manifold_output[band], batch_size, num_patches)
 				# output shape is [B, P, N, N]
-		return wavelet_manifold_output, (batch_size, num_patches, self.num_channels, self.num_channels)
+		return wavelet_manifold_output
 
 class MENDRCombinedContextualizer(nn.Module):
 	def __init__(self, num_channels, n_transformer_layers=4):
@@ -135,10 +133,9 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = torch.from_numpy(np.random.rand(self.num_channels, self.num_channels)).float()
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
-	def forward(self, combined_manifold_output, og_output_shape, mask_ratio=0.0):
+	def forward(self, wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0):
+		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		# Combined Manifold Output should be a clone
-		batch_size = og_output_shape[0]
-		num_patches = og_output_shape[1]
 		combined_manifold_output_hidden_dim = combined_manifold_output.shape[-1]
 		mask_idxes = None
 		x = None
@@ -146,7 +143,7 @@ class MENDRCombinedContextualizer(nn.Module):
 			x = combined_manifold_output.clone() # Just in case
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
-			combined_manifold_output = combined_manifold_output.view(batch_size, num_patches, combined_manifold_output.shape[2], combined_manifold_output.shape[3])
+			combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]

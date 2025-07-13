@@ -5,7 +5,7 @@ meta_params:
   model_name: MENDR
   pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
   pretrained_contextualizer_path: null
-  contextualizer_size: LARGE
+  contextualizer_size: TINY
   log_system_metrics: True
   log_model_params_and_grads: False
   save_model: False
