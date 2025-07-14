@@ -54,7 +54,7 @@ class MENDRWaveletContextualizer(nn.Module):
 		# Positional Encoding
 		self.position_encoder = dict()
 		for band in self.patch_lens:
-			self.position_encoder[band] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens[band])
+			self.position_encoder[band] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens[band], is_large=True)
 		self.position_encoder = nn.ParameterDict(self.position_encoder)
 
 		self.wavelet_mlp = dict()
@@ -62,11 +62,9 @@ class MENDRWaveletContextualizer(nn.Module):
 			self.wavelet_mlp[band] = nn.Sequential(nn.GELU(),
 			nn.Linear(self.patch_lens[band]*out_dim, 4*self.patch_lens[band]*out_dim),
 			nn.GELU(),
-			nn.Linear(4*self.patch_lens[band]*out_dim, 4*self.patch_lens[band]*out_dim),
-			nn.GELU(),
 			nn.Linear(4*self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim))
-		self.wavelet_mlp = nn.ParameterDict(self.wavelet_mlp)
 
+		self.wavelet_mlp = nn.ParameterDict(self.wavelet_mlp)
 		self.e2r = E2R() # No learnable parameters
 
 		self.pre_attention_spd_transform = dict()
@@ -102,18 +100,16 @@ class MENDRWaveletContextualizer(nn.Module):
 			cov_matrices[band] = self.e2r(x[band])
 		
 		wavelet_manifold_output = dict()
-		
-		'''
 		for band, band_encodings in cov_matrices.items():
 			wavelet_manifold_output[band] = band_encodings
 			wavelet_manifold_output[band] = rearrange(band_encodings, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
 			wavelet_manifold_output[band] = rearrange(wavelet_manifold_output[band], '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
-		'''
-		for band in cov_matrices.keys():
+		for band in wavelet_manifold_output.keys():
 			for transformer in self.wavelet_manifold_transformers[band]:
 				# output shape is [B, P, N, N]
-				wavelet_manifold_output[band] = transformer(cov_matrices[band], batch_size, num_patches)
+				#print(f"Wavelet Manifold Transformer {transformer} Shape: {wavelet_manifold_output[band].shape}", band)
+				wavelet_manifold_output[band] = transformer(wavelet_manifold_output[band], batch_size, num_patches)
 		return wavelet_manifold_output
 
 	def _init_weights(self):
@@ -123,11 +119,13 @@ class MENDRWaveletContextualizer(nn.Module):
 				if module.bias is not None:
 					nn.init.constant_(module.bias, 0)
 
+
 class MENDRCombinedContextualizer(nn.Module):
 	def __init__(self, num_channels, n_transformer_layers=4):
 		super().__init__()
 		self.num_channels = num_channels
-		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
+		self.wavelet_attention = AttentionManifold(self.num_channels, self.num_channels, heads=1)
+		#self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
 
 		assert n_transformer_layers >= 1, "Must have at least one transformer layer"
 
@@ -147,21 +145,17 @@ class MENDRCombinedContextualizer(nn.Module):
 		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0):
-		'''
 		x = []
 		for band in wavelet_manifold_output.keys():
 			wavelet_manifold_output[band] = rearrange(wavelet_manifold_output[band], 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			x.append(wavelet_manifold_output[band])
 		x = torch.stack(x, dim=1)
-		#print("Before Attention Manifold: ", x.shape)
-		x, shape = self.attention_manifold(x)
-		#print("After Attention Manifold: ", x.shape)
+		x, shape = self.wavelet_attention(x)
 		x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=shape[0], P=shape[1], C1=self.num_channels, C2=self.num_channels)
 		transformed_dict = dict()
 		for band_idx, band in enumerate(wavelet_manifold_output.keys()):
 			transformed_dict[band] = rearrange(x[:, band_idx, :, :], '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
-		'''
-		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
+		combined_manifold_output = WaveletLogEuclideanMean(transformed_dict)
 		# Combined Manifold Output should be a clone
 		combined_manifold_output_hidden_dim = combined_manifold_output.shape[-1]
 		mask_idxes = None

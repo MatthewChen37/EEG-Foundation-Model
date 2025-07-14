@@ -10,24 +10,30 @@ svd = SVD.apply
 # Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
 # Positional as in "Temporal" w.r.t to Patches
 class PositionalEncoding(nn.Module):
-	def __init__(self, num_channels, out_dim, patch_len):
+	def __init__(self, num_channels, out_dim, patch_len, is_large=False):
 		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
 		self.patch_len = patch_len
+		self.is_large = is_large
 
 		# Asymmetric Conditional Positional Encoding (ACPE) like CBraMod
 		self.conv = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=self.out_dim*self.patch_len,
 					kernel_size=(19, 3), stride=(1, 1), padding=(9, (3 - 1) // 2), groups=self.out_dim*self.patch_len)
+		nn.init.normal_(self.conv.weight, mean=0, std=1)
+		nn.init.constant_(self.conv.bias, 0)
 		#self.act = nn.GELU()
 		#self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
 		#self.W_out = math.floor((self.W_out / 1) + 1)
 		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
-
+		if self.is_large:
+			self.conv2 = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=1, kernel_size=(3, 19), stride=(1, 1), padding=(1, (19 - 1) // 2))
+			nn.init.normal_(self.conv2.weight, mean=0, std=1)
+			nn.init.constant_(self.conv2.bias, 0)
 	def forward(self, x):
 		"""
 		Arguments:
-			x: Tensor, shape [Batch Size, Patches, Channels, Time Steps* out_dim]
+			x: Tensor, shape [Batch Size, Patches, Channels, Time Steps * out_dim]
 		"""
 		B, P = x.shape[0], x.shape[1]
 		x = rearrange(x, 'B P C (O T) -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
@@ -36,7 +42,16 @@ class PositionalEncoding(nn.Module):
 		# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
 		x = x + positional_encoding 
 		# x is now back to [Batch Size, Patches, Channels * out_dim, Time Steps]
-		x = rearrange(x, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		if self.is_large:
+			x = rearrange(x, 'B (O T) C P -> B (O T) P C', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			positional_encoding2 = self.conv2(x)
+			# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
+			# Positional encoding is broadcast against x:
+			# [Batch, #time_step, #patch, encoded_h] + [Batch, 1, #patch, encoded_h] = [Batch, #time_step, #patch, encoded_h]
+			x = x + positional_encoding2
+			x = rearrange(x, 'B (O T) P C -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		else:
+			x = rearrange(x, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		return x
 
 	

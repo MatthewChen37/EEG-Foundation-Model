@@ -58,7 +58,7 @@ class MENDR_model(nn.Module):
             #assert not torch.isnan(output).any()
             return patchified_inputs, encodings, decodings, None, output
         elif self.contextualizer_size == "LARGE":
-            combined_manifold_output, wavelet_manifold_output, mask_idxes = self.mendr_contextualizer(encodings, batch_size, patch_num) # Mask indices should never be used here
+            combined_manifold_output, wavelet_manifold_output, mask_idxes = self.mendr_contextualizer(encodings, batch_size, patch_num, mask_ratio=0.0) # Mask indices should never be used here
             return patchified_inputs, encodings, decodings, wavelet_manifold_output, combined_manifold_output
 
     def freeze_autoencoder(self, require_grad=False):
@@ -72,4 +72,6 @@ class MENDR_model(nn.Module):
             params += list(self.encoder.parameters())
         if self.trainable_state['combined_contextualizer']:
             params += list(self.combined_contextualizer.parameters())
+        if self.trainable_state['wavelet_contextualizer']:
+            params += list(self.wavelet_contextualizer.parameters())
         return params

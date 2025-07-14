@@ -87,7 +87,7 @@ class MENDRContextualizerTiny(nn.Module):
 		# Thus different patches will have different number of samples for calculating the covariance matrix
 		cov_matrices = dict()
 		for band in x.keys():
-			x[band] = x[band] + self.position_encoders[band](x[band])
+			x[band] = self.position_encoders[band](x[band])
 			x[band] = self.wavelet_mlp[band](x[band])
 			cov_matrices[band] = self.e2r(x[band])
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)

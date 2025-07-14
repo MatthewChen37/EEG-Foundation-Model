@@ -294,7 +294,7 @@ class BaseModelTrainer(object):
             sampler = self._create_weighted_sampler_optimized(dataset, cfg)
             loader_kwargs['sampler'] = sampler
         else:
-            loader_kwargs['shuffle'] = training
+            loader_kwargs['shuffle'] = True
         
         return DataLoader(dataset, **loader_kwargs)
 

@@ -85,11 +85,11 @@ def main(cfg:DictConfig) -> None:
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
             include_high=cfg.patch_encoder_params.include_high,
-            n_transformer_layers=4,
+            n_transformer_layers=6,
         )
         combined_contextualizer = MENDRCombinedContextualizer(
             num_channels=19,
-            n_transformer_layers=4,
+            n_transformer_layers=6,
         )
     else:
         raise Exception("Contextualizer size not found")
@@ -101,7 +101,7 @@ def main(cfg:DictConfig) -> None:
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
         for param in mendr_autoencoder.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
@@ -115,7 +115,7 @@ def main(cfg:DictConfig) -> None:
     optim_params = []
     optim_params += model.parameters()
     optim_params += list(model_decoder.parameters())
-    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate)
+    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate, betas=(0.9, 0.99), weight_decay=0.05)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                             T_max=cfg.training_params.epochs*ceil(len(finetune_train_dataset) / cfg.training_params.batch_size),
                                                             eta_min=cfg.training_params.eta_min)
@@ -124,8 +124,18 @@ def main(cfg:DictConfig) -> None:
     foundation_model_params = sum(p.numel() for p in model.parameters() if p.requires_grad) 
     decoder_params = sum(p.numel() for p in model_decoder.parameters() if p.requires_grad)
     print(f"Total Foundation Model Parameters: {foundation_model_params}")
+    '''
+    print("Named Modules with requires_grad and Parameter Count:")
+    for name, module in model.named_modules():
+        num_params = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        all_params_require_grad = all(p.requires_grad for p in module.parameters()) if list(module.parameters()) else False
+        
+        print(f"Module: {name}")
+        print(f"  Requires Grad (all parameters): {all_params_require_grad}")
+        print(f"  Number of trainable parameters: {num_params}")
     print(f"Total Decoder Parameters: {decoder_params}")
     print(f"Total Parameters: {foundation_model_params + decoder_params}")
+    '''
 
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
