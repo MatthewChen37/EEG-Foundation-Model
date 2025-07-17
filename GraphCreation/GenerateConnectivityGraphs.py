@@ -116,6 +116,7 @@ def createPositionMatrix(info):
 def midpoint_on_sphere(p1, p2):
 	'''
 	Computes the midpoint between two points on the unit sphere.
+	https://stackoverflow.com/questions/50451331/find-midpoint-between-two-points-on-a-sphere
 	'''
 	x1, y1, z1 = p1
 	x2, y2, z2 = p2
@@ -145,4 +146,3 @@ if __name__ == "__main__":
 	geodesic_distance_matrix = createGeodesicDistanceMatrix(info)
 
 	print("All tests passed!")	
-
