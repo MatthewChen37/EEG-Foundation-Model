@@ -113,6 +113,20 @@ def createPositionMatrix(info):
 	positions = torch.tensor(positions, dtype=torch.float32)
 	return positions
 
+def midpoint_on_sphere(p1, p2):
+	'''
+	Computes the midpoint between two points on the unit sphere.
+	'''
+	x1, y1, z1 = p1
+	x2, y2, z2 = p2
+
+	x3 = (x1 + x2) / 2
+	y3 = (y1 + y2) / 2
+	z3 = (z1 + z2) / 2
+
+	r = math.sqrt(x3**2 + y3**2 + z3**2)
+	return (x3/r, y3/r, z3/r)
+
 if __name__ == "__main__":
 	adj_matrix = np.random.rand(19, 19)
 	adj_matrix_list = [adj_matrix]
