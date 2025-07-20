@@ -59,7 +59,7 @@ def main(cfg:DictConfig) -> None:
 	print("Dataset Loaded. Length of Dataset: ", len(dataset), " given frac: ", total_frac)
 
 	### Model ###
-	autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, num_subjects=dataset.num_subjects, device=device)
+	autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, device=device)
 	for band, encoder_decoder in autoencoder.encoder_decoders.items():
 		encoder_decoder.disableDecoder()
 	autoencoder.load_state_dict(torch.load(cfg.training_params.autoencoder_ckpt_path, weights_only=True), strict=False)
@@ -67,16 +67,14 @@ def main(cfg:DictConfig) -> None:
 		param.requires_grad = False # Freeze the autoencoder
 	autoencoder.eval()
 
-	if cfg.meta_params.model_size.lower() == 'tiny':
+	if cfg.meta_params.contextualizer_size == "TINY":
 		contextualizer = MENDRContextualizerTiny(
-			encoded_h = cfg.patch_encoder_params.delta_encoded_h +
-						cfg.patch_encoder_params.theta_encoded_h +
-						cfg.patch_encoder_params.alpha_encoded_h +
-						cfg.patch_encoder_params.beta_encoded_h  +
-						cfg.patch_encoder_params.gamma_encoded_h,
-			patch_len = autoencoder.encoder_decoders['delta'].L_out_2,
-			device=device, **cfg.contextualizer_params)
-	elif cfg.meta_params.model_size.lower() == 'large':
+            num_channels=19,
+            out_dim=autoencoder.encoder_decoders['delta'].out_dim,
+            include_high=cfg.patch_encoder_params.include_high,
+			contextualizer_layers=cfg.contextualizer_params.contextualizer_layers
+        ).to(device)
+	elif cfg.meta_params.contextualizer_size == "LARGE":
 		raise ValueError("Large contextualizer not supported in this script")
 
 	optimizer = torch.optim.AdamW(contextualizer.parameters(),

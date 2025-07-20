@@ -87,7 +87,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				combined_manifold_output_masked = combined_manifold_output_masked.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
 				_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], num_patches=num_patches, num_cols=num_patches)
 				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
-				plt.close(combined_fig)
+				#plt.close(combined_fig)
 		return eval_metrics
 
 	def fit(self, training_dataset, cfg, validation_dataset=None):
@@ -168,14 +168,16 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		batch_size = wavelet_manifold_output['delta'].shape[0]
 		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
+		combined_manifold_output, combined_manifold_output_masked, mask_idxes, _ = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
 		# of shape Batch, epoch, C, C
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		og_eigenvalues = torch.linalg.svdvals(combined_manifold_output[mask_idxes])
-		masked_eigenvalues = torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes])
-		riemannian_loss = criterion(og_eigenvalues, masked_eigenvalues)
+		og_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output[mask_idxes]))
+		masked_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes]))
+		riemannian_loss = 1000*criterion(og_eigenvalues, masked_eigenvalues)
+		#print("Og Eigenvalues: ", og_eigenvalues)
+		#print("Masked Eigenvalues: ", masked_eigenvalues)
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	# Debugging function, usually not used.	

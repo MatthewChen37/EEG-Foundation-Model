@@ -364,7 +364,8 @@ class MENDRFinetuner(BaseModelTrainer):
                 Patch(facecolor=sns.color_palette()[5], label='bckg'),
             ]
             ax.legend(handles=patches, loc='upper right')
-        
+
+    '''    
     def _plot_confusion_matrix(self, cfg, output_labels_eval_all, predictions):
         if cfg.dataset_params.name == 'TUAB':
             labels = ['Normal', 'Abnormal']
@@ -375,13 +376,11 @@ class MENDRFinetuner(BaseModelTrainer):
         
         fig, ax = plt.subplots(figsize=(24, 24))
 
-        ''' 
         ax.imshow(cm, cmap='Blues')
         ax.set_title(f'{cfg.dataset_params.name} Confusion Matrix')
         ax.set_ylabel('True Label')
         ax.set_xlabel('Predicted Label')
         plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-        '''
         ax.set_xticks(np.arange(len(labels)))
         ax.set_yticks(np.arange(len(labels)))
         ax.set_xticklabels(labels)
@@ -391,3 +390,5 @@ class MENDRFinetuner(BaseModelTrainer):
         disp.plot(include_values=True, cmap='Blues', ax=ax)
         fig = disp.figure_
         mlflow.log_figure(fig, f'{cfg.dataset_params.name}_{cfg.meta_params.contextualizer_size}_confusion_matrix.pdf')
+
+    '''

@@ -57,8 +57,6 @@ class MENDRContextualizerTiny(nn.Module):
 											n_transformer_layers=contextualizer_layers)
 
 
-		self.pre_attention_transform = SPDTransform(self.num_channels, self.num_channels)
-
 		self.wavelet_mlp = {
 			'delta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim)),
 			'theta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim)),
@@ -87,22 +85,27 @@ class MENDRContextualizerTiny(nn.Module):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels, #time_step* #out_dim]
 		# Each patch gets coagulated into the same time scale through the covariance matrix
 		# Thus different patches will have different number of samples for calculating the covariance matrix
+		x_cov = dict()
+		for band in x.keys():
+			x_cov[band] = self.e2r(x[band])
+		combined_manifold_output = WaveletLogEuclideanMean(x_cov)
+
 		cov_matrices = dict()
 		for band in x.keys():
 			#print(band, x[band].shape)
-			cov_matrices[band] = self.position_encoders[band](x[band].clone())
-			#print("After Position Encoder: ", band, cov_matrices[band].shape)
-			cov_matrices[band] = self.wavelet_mlp[band](cov_matrices[band])
-			#print("After Wavelet MLP: ", band, cov_matrices[band].shape)
+			cov_matrices[band] = x[band] + self.wavelet_mlp[band](x[band].clone())
+			cov_matrices[band] = self.position_encoders[band](cov_matrices[band])
 			cov_matrices[band] = self.e2r(cov_matrices[band])
 			#print("After E2R: ", band, cov_matrices[band].shape)
-		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
+		combined_manifold_output_masked = WaveletLogEuclideanMean(cov_matrices)
+		'''
 		# this is an issue: https://github.com/arogozhnikov/einops/issues/204
 		combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 		# This is a transformation to generate a "token embedding" for each patch
 		combined_manifold_output = self.pre_attention_transform(combined_manifold_output)
 		combined_manifold_output = rearrange(combined_manifold_output, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
-		combined_manifold_output_masked, mask_idxes = self.Contextualizer(combined_manifold_output.clone(), batch_size, num_patches, mask_ratio)
+		'''
+		combined_manifold_output_masked, mask_idxes = self.Contextualizer(combined_manifold_output_masked, batch_size, num_patches, mask_ratio)
 		return combined_manifold_output, combined_manifold_output_masked, mask_idxes, cov_matrices
 	
 class MENDRContextualizer(nn.Module):

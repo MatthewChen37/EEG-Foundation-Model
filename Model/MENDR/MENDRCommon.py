@@ -86,45 +86,52 @@ class BatchTraceNormalization(nn.Module):
 		return x
 
 class LogEuclidLayerNorm(nn.Module):
-    def __init__(self, num_channels=19, epsilon=1e-5):
-        super().__init__()
-        self.num_channels = num_channels
-        self.epsilon      = epsilon
-        # params
-        self.gamma = nn.Parameter(torch.ones(num_channels))
-        self.beta  = nn.Parameter(torch.zeros(num_channels))
+	def __init__(self, num_channels=19, epsilon=1e-5):
+		super().__init__()
+		self.num_channels = num_channels
+		self.epsilon      = epsilon
 
-    def forward(self, C):
-        # assume SPD
-        # Eigendecompose
+		self.layer_norm = nn.LayerNorm(num_channels)
+
+		# params
+		# self.gamma = nn.Parameter(torch.ones(num_channels))
+		# self.beta  = nn.Parameter(torch.zeros(num_channels))
+
+	def forward(self, C):
+		# assume SPD
+		# Eigendecompose
 		# D: [B,N], U: [B,N,N]
-        U, D, _ = svd(C) 
+		U, D, _ = svd(C) 
 
-        # Log‐map + clamp
-        D = D.clamp(min=self.epsilon)
-        logD = torch.log(D)                    
+		# Log‐map + clamp
+		D = D.clamp(min=self.epsilon)
+		logD = torch.log(D)
 
-        # LayerNorm in log‐space
+		D_tilde = self.layer_norm(logD)
+
+		'''
+		# LayerNorm in log‐space
 		# [B,1]
-        mu    = logD.mean(dim=-1, keepdim=True)
+		mu    = logD.mean(dim=-1, keepdim=True)
 		# [B,1]      
-        var   = logD.var(dim=-1, unbiased=False, keepdim=True)
+		var   = logD.var(dim=-1, unbiased=False, keepdim=True)
 		# [B,N]
-        D_hat = (logD - mu) / torch.sqrt(var + self.epsilon)   
+		D_hat = (logD - mu) / torch.sqrt(var + self.epsilon)   
 
-        # transform
+		# transform
 		# [B,N]
-        D_tilde = self.gamma * D_hat + self.beta     
+		D_tilde = self.gamma * D_hat + self.beta     
+		'''
 
-        # exp, diagnolize, reconstruct
+		# exp, diagnolize, reconstruct
 		# [B,N,N]
-        C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.transpose(-2, -1)
+		C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.permute(0, 2, 1)
 
-        # ensure PD
-        I = torch.eye(self.num_channels, device=C.device).unsqueeze(0)
-        C_norm = C_norm + self.epsilon * I
+		# ensure PD
+		I = torch.eye(self.num_channels, device=C.device).unsqueeze(0)
+		C_norm = C_norm + self.epsilon * I
 
-        return C_norm
+		return C_norm
 
 class std_norm(nn.Module):
 	def __init__(self):
