@@ -81,15 +81,21 @@ class MENDRContextualizerTiny(nn.Module):
 		self.position_encoders = nn.ParameterDict(self.position_encoders)
 		self.wavelet_mlp = nn.ParameterDict(self.wavelet_mlp)
 
+		self.tangent_space = SPDTangentSpace(self.num_channels)
+
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels, #time_step* #out_dim]
 		# Each patch gets coagulated into the same time scale through the covariance matrix
 		# Thus different patches will have different number of samples for calculating the covariance matrix
 		cov_matrices = dict()
 		for band in x.keys():
-			x[band] = self.position_encoders[band](x[band])
-			x[band] = self.wavelet_mlp[band](x[band])
-			cov_matrices[band] = self.e2r(x[band])
+			#print(band, x[band].shape)
+			cov_matrices[band] = self.position_encoders[band](x[band].clone())
+			#print("After Position Encoder: ", band, cov_matrices[band].shape)
+			cov_matrices[band] = self.wavelet_mlp[band](cov_matrices[band])
+			#print("After Wavelet MLP: ", band, cov_matrices[band].shape)
+			cov_matrices[band] = self.e2r(cov_matrices[band])
+			#print("After E2R: ", band, cov_matrices[band].shape)
 		combined_manifold_output = WaveletLogEuclideanMean(cov_matrices)
 		# this is an issue: https://github.com/arogozhnikov/einops/issues/204
 		combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
@@ -97,7 +103,7 @@ class MENDRContextualizerTiny(nn.Module):
 		combined_manifold_output = self.pre_attention_transform(combined_manifold_output)
 		combined_manifold_output = rearrange(combined_manifold_output, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 		combined_manifold_output_masked, mask_idxes = self.Contextualizer(combined_manifold_output.clone(), batch_size, num_patches, mask_ratio)
-		return combined_manifold_output, combined_manifold_output_masked, mask_idxes 
+		return combined_manifold_output, combined_manifold_output_masked, mask_idxes, cov_matrices
 	
 class MENDRContextualizer(nn.Module):
 	def __init__(self, encoded_out, n_transformer_layers):

@@ -32,6 +32,7 @@ class MixOptimizer(object):
     def scheduler_step_cosine_annealing_warm_restarts(self, iteration):
         self.scheduler.step(iteration)
 
+    '''
     def step(self, closure=None):
         """Performs a single optimization step with parallel processing of parameters."""
         
@@ -87,8 +88,8 @@ class MixOptimizer(object):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(process_param_after_step, all_params)
         return loss
-
     '''
+
     def step(self, closure=None):
         """Performs a single optimization step.
 
@@ -121,4 +122,3 @@ class MixOptimizer(object):
                     trans = retraction(p.data, self.state[id(p)])
                     p.data.fill_(0).add_(trans)
         return loss
-    '''

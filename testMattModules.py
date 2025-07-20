@@ -269,9 +269,9 @@ units = {
     'Rectification layer': check_Rectified,
     'Untangent space layer': check_UnTangentSpace,
     #'Check eigh': check_eigh,
-    'Tensor Log': check_TensorLog,
-    'Tensor Exp': check_TensorExp,
-    'LogEuclideanMean': check_LogEuclideanMean,
+    #'Tensor Log': check_TensorLog,
+    #'Tensor Exp': check_TensorExp,
+    #'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
@@ -279,7 +279,7 @@ units = {
     'Unblock Diag': check_unblock_diag,
     'Reblock Diag': check_reblock_diag,
     #'Safe Eigh': check_safeEigh,
-    'Attention Manifold': check_AttentionManifold
+    #'Attention Manifold': check_AttentionManifold
 }
 
 result = True

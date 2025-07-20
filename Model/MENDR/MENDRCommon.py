@@ -5,6 +5,7 @@ import numpy as np
 from einops import rearrange
 import sys
 from Model.MENDR.safeSVD import SVD
+from Model.MENDR.Autoencoder.MENDRReconstructionDecoder import SEBasicBlock2d
 svd = SVD.apply
 
 # Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
@@ -26,10 +27,13 @@ class PositionalEncoding(nn.Module):
 		#self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
 		#self.W_out = math.floor((self.W_out / 1) + 1)
 		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
+
+		#self.se_block = SEBasicBlock2d(self.num_channels, self.num_channels, reduction=2)
 		if self.is_large:
 			self.conv2 = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=1, kernel_size=(3, 19), stride=(1, 1), padding=(1, (19 - 1) // 2))
 			nn.init.normal_(self.conv2.weight, mean=0, std=1)
 			nn.init.constant_(self.conv2.bias, 0)
+
 	def forward(self, x):
 		"""
 		Arguments:
@@ -49,9 +53,11 @@ class PositionalEncoding(nn.Module):
 			# Positional encoding is broadcast against x:
 			# [Batch, #time_step, #patch, encoded_h] + [Batch, 1, #patch, encoded_h] = [Batch, #time_step, #patch, encoded_h]
 			x = x + positional_encoding2
-			x = rearrange(x, 'B (O T) P C -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			x = rearrange(x, 'B (O T) P C -> B C P (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		else:
-			x = rearrange(x, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			x = rearrange(x, 'B (O T) C P -> B C P (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		# x = self.se_block(x)
+		x = rearrange(x, 'B C P (O T) -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		return x
 
 	
@@ -112,7 +118,7 @@ class LogEuclidLayerNorm(nn.Module):
 
         # exp, diagnolize, reconstruct
 		# [B,N,N]
-        C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.transpose(-2, -1) 
+        C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.transpose(-2, -1)
 
         # ensure PD
         I = torch.eye(self.num_channels, device=C.device).unsqueeze(0)

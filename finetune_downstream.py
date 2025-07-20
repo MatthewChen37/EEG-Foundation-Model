@@ -27,7 +27,7 @@ METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kap
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUEV")
+            config_name="TUAB")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
@@ -85,7 +85,7 @@ def main(cfg:DictConfig) -> None:
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
             include_high=cfg.patch_encoder_params.include_high,
-            n_transformer_layers=6,
+            n_transformer_layers=2,
         )
         combined_contextualizer = MENDRCombinedContextualizer(
             num_channels=19,
@@ -106,16 +106,18 @@ def main(cfg:DictConfig) -> None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
     if cfg.meta_params.contextualizer_size == "TINY":
-        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
     elif cfg.meta_params.contextualizer_size == "LARGE":
-        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size).to(device)
+        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        contextualizer_params = sum(p.numel() for p in combined_contextualizer.parameters() if p.requires_grad) + sum(p.numel() for p in wavelet_contextualizer.parameters() if p.requires_grad)
     else:
         raise Exception("Contextualizer size not found")
 
     optim_params = []
     optim_params += model.parameters()
     optim_params += list(model_decoder.parameters())
-    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate, betas=(0.9, 0.99), weight_decay=0.05)
+    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate, weight_decay=cfg.training_params.l2_weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                             T_max=cfg.training_params.epochs*ceil(len(finetune_train_dataset) / cfg.training_params.batch_size),
                                                             eta_min=cfg.training_params.eta_min)
@@ -124,6 +126,12 @@ def main(cfg:DictConfig) -> None:
     foundation_model_params = sum(p.numel() for p in model.parameters() if p.requires_grad) 
     decoder_params = sum(p.numel() for p in model_decoder.parameters() if p.requires_grad)
     print(f"Total Foundation Model Parameters: {foundation_model_params}")
+    if cfg.meta_params.pretrained_autoencoder_path is None:
+        encoder_params = sum(p.numel() for p in mendr_autoencoder.parameters() if p.requires_grad)
+        print(f"Total Encoder Parameters: {encoder_params}")
+    print(f"Total Contextualizer Parameters: {contextualizer_params}")
+    print(f"Total Decoder Parameters: {decoder_params}")
+    print(f"Total Parameters: {foundation_model_params + decoder_params}")
     '''
     print("Named Modules with requires_grad and Parameter Count:")
     for name, module in model.named_modules():
@@ -133,14 +141,20 @@ def main(cfg:DictConfig) -> None:
         print(f"Module: {name}")
         print(f"  Requires Grad (all parameters): {all_params_require_grad}")
         print(f"  Number of trainable parameters: {num_params}")
-    print(f"Total Decoder Parameters: {decoder_params}")
-    print(f"Total Parameters: {foundation_model_params + decoder_params}")
     '''
 
     trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
 
     ### Training ###
-    model, model_decoder, trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+    model, model_decoder = trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+
+    ### Evaluation and Visualization ###
+    trainer.evaluate(cfg=cfg, validation_dataset=finetune_eval_dataset)
+
+    '''
+    ### Save ###
+    trainer.save_best(epoch_ckpt_dir=cfg.training_params.ckpt_dir)
+    '''
 
 if __name__ == '__main__':
     main()

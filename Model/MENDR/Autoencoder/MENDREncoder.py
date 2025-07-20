@@ -117,11 +117,11 @@ class MENDRPatchEncoder(nn.Module):
         super().__init__()
         self.device = device
         self.num_channels = num_channels
+        self.hop_length = 0.5
         self.sampling_rate = sampling_rate
         self.super_patch_seconds = super_patch_seconds
         self.include_high = include_high
 
-        
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {
@@ -139,8 +139,11 @@ class MENDRPatchEncoder(nn.Module):
 
         self.WAVELET_LENGTHS = self.SUPPORTED_WAVELET_LENGTHS[self.sampling_rate]
         self.WAVELET_SUPER_PATCH_LENGTHS = dict()
+        self.WAVELET_SUPER_PATCH_HOP_LENGTHS = dict()
         for band, second_length in self.WAVELET_LENGTHS.items():
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
+            self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
+
 
         self.patch_normalizer = std_norm()
 
@@ -251,9 +254,10 @@ class MENDRPatchEncoder(nn.Module):
                 wavelet_data = data[band] # [Batches, Channels, Time Steps]
                 patched_wavelet_data = []
                 wavelet_super_patch_length = self.WAVELET_SUPER_PATCH_LENGTHS[band]
+                #wavelet_super_patch_hop_length = self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band]
                 '''
                 #this is usually slower
-                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_length):
+                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_hop_length):
                     if i + wavelet_super_patch_length <= wavelet_data.shape[-1]:
                         patched_wavelet_data.append(wavelet_data[:, :, i:i + wavelet_super_patch_length])
                 patched_wavelet_data = torch.stack(patched_wavelet_data, dim=1) # [Batch, Patches, C, T]

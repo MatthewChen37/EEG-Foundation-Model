@@ -56,7 +56,7 @@ class WaveletTUABDataset(Dataset):
                 folder_epochs[epoch_idx]['graph_name'] = graph_name
             # Store file paths instead of loading data
             folder_epochs[epoch_idx][band] = os.path.join(wavelet_folder, file_name)
-        
+
         # Create epoch tuples with file paths
         for epoch_idx, epoch_files_dict in folder_epochs.items():
             for split_idx in range(6):
@@ -71,7 +71,7 @@ class WaveletTUABDataset(Dataset):
                     epoch_files_dict.get('alpha'), epoch_files_dict.get('beta'),
                     epoch_files_dict.get('gamma'))
                 self.epochs.append(epoch_tuple)
-        """
+        '''
         for epoch_idx, epoch_files_dict in folder_epochs.items():
             if self.include_high:
                 epoch_tuple = (epoch_files_dict['graph_name'], wavelet_folder, epoch_idx,
@@ -82,7 +82,7 @@ class WaveletTUABDataset(Dataset):
                     epoch_files_dict['delta'], epoch_files_dict['theta'], epoch_files_dict['alpha'], epoch_files_dict['beta'],
                     epoch_files_dict['gamma'])
             self.epochs.append(epoch_tuple)
-        """
+        '''
     def _load_and_split_band(self, file_path, band, split_idx):
         """Load wavelet data and return the appropriate split"""
         if file_path is None:
@@ -115,23 +115,23 @@ class WaveletTUABDataset(Dataset):
         # Return the appropriate split
         return data[:, split_length * split_idx: split_length * (split_idx + 1)]
 
-    ''' 
+    '''
     def _load_band(self, file_path, band):
         if file_path is None:
             return None
         data = torch.load(file_path, weights_only=False)
         if band == 'delta':
-            data = data[:, :240]
+            data = data[:, 3:243]
         elif band == 'theta':
-            data = data[:, :240]
+            data = data[:, 3:243]
         elif band == 'alpha':
-            data = data[:, :480]
+            data = data[:, 3:483]
         elif band == 'beta':
-            data = data[:, :960]
+            data = data[:, 3:963]
         elif band == 'gamma':
-            data = data[:, :1920]
+            data = data[:, 2:1922]
         elif band == 'high':
-            data = data[:, :3840]
+            data = data[:, 2:3842]
         else:
             raise Exception("Band not found")
         return data
@@ -208,7 +208,6 @@ class WaveletTUABDataset(Dataset):
         return data
 
 '''
-
 class WaveletTUABDataset(Dataset):
 	def __init__(self, root, include_high=False, frac=1.0, transform=None):
 		super(WaveletTUABDataset, self).__init__(root, transform)

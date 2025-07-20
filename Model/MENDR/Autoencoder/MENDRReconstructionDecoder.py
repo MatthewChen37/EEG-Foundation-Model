@@ -179,6 +179,59 @@ class SEBasicBlock(nn.Module):
 
         return out
 
+class SELayer2d(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)  # Changed from 1D to 2D
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, h, w = x.size()  # Updated for 2D case
+        y = self.avg_pool(x).view(b, c)  # Global average pooling across height and width
+        y = self.fc(y).view(b, c, 1, 1)  # View to broadcast across spatial dimensions
+        return x * y.expand_as(x)  # Broadcasting y over spatial dimensions
+
+
+class SEBasicBlock2d(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, 
+                downsample=None, groups=1,
+                dilation=1, norm_layer=None,
+                 *, reduction=16):
+        super().__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride, padding=1)  # Changed to Conv2d
+        self.bn1 = nn.BatchNorm2d(planes)  # Changed to BatchNorm2d
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1)  # Changed to Conv2d
+        self.bn2 = nn.BatchNorm2d(planes)  # Changed to BatchNorm2d
+        self.se = SELayer2d(planes, reduction)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.se(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
 if __name__ == "__main__":
     # Delta Parameters
     num_channels = 19

@@ -357,7 +357,7 @@ class BaseModelTrainer(object):
 
         validation_dataloader = None
         if self.validation_dataset != None:
-            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg,training=False, sampler=val_sampler)
+            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg, training=False, sampler=val_sampler)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
         if rank == 0:
