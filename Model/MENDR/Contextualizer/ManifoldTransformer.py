@@ -19,8 +19,8 @@ class ManifoldTransformer(nn.Module):
                                                          self.activation,
                                                          SPDTransform(int(self.hidden_scale * self.encoded_h), self.encoded_h))
         self.riemannian_residual = _RiemannianResidual()
-        self.trace_normalization = BatchTraceNormalization()
-        #self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
+        #self.trace_normalization = BatchTraceNormalization()
+        self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
 
     def forward(self, x, batch_size, num_patches):
         # X is list of [Batch_Size, epochs, C, C]
@@ -28,11 +28,11 @@ class ManifoldTransformer(nn.Module):
         # x_res is [Batch_Size*epochs, C, C]
         x = rearrange(x, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.encoded_h, C2=self.encoded_h)
         x = self.riemannian_residual(x, x_res)
-        x = self.trace_normalization(x)
+        x = self.layer_normalization(x)
         x_res = self.manifold_self_spd_transform(x)
         x = self.riemannian_residual(x, x_res)
         if self.norm_output:
-            x = self.trace_normalization(x)
+            x = self.layer_normalization(x)
         x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.encoded_h, C2=self.encoded_h)
         # Symmetrize/Regularize Due to Numeric Instability
         x = 0.5 * (x + x.transpose(-1, -2))

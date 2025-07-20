@@ -175,7 +175,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		og_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output[mask_idxes]))
 		masked_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes]))
-		riemannian_loss = 1000*criterion(og_eigenvalues, masked_eigenvalues)
+		riemannian_loss = 100*criterion(og_eigenvalues, masked_eigenvalues)
 		#print("Og Eigenvalues: ", og_eigenvalues)
 		#print("Masked Eigenvalues: ", masked_eigenvalues)
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes

@@ -57,14 +57,6 @@ class MENDRContextualizerTiny(nn.Module):
 											n_transformer_layers=contextualizer_layers)
 
 
-		self.wavelet_mlp = {
-			'delta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['delta']*out_dim, self.patch_lens['delta']*out_dim)),
-			'theta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['theta']*out_dim, self.patch_lens['theta']*out_dim)),
-			'alpha': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['alpha']*out_dim, self.patch_lens['alpha']*out_dim)),
-			'beta': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['beta']*out_dim, self.patch_lens['beta']*out_dim)),
-			'gamma': nn.Sequential(nn.GELU(), nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['gamma']*out_dim, self.patch_lens['gamma']*out_dim)),
-		}
-
 		self.position_encoders = {
 			'delta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['delta']),
 			'theta': PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['theta']),
@@ -75,10 +67,8 @@ class MENDRContextualizerTiny(nn.Module):
 
 		if self.include_high:
 			self.position_encoders['high'] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens['high'])
-			self.wavelet_mlp['high'] = nn.Sequential(nn.Linear(self.patch_lens['high']*out_dim, self.patch_lens['high']*out_dim), nn.GELU(), nn.Linear(self.patch_lens['high']*out_dim, self.patch_lens['high']*out_dim))
-		self.position_encoders = nn.ParameterDict(self.position_encoders)
-		self.wavelet_mlp = nn.ParameterDict(self.wavelet_mlp)
 
+		self.position_encoders = nn.ParameterDict(self.position_encoders)
 		self.tangent_space = SPDTangentSpace(self.num_channels)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
@@ -93,8 +83,8 @@ class MENDRContextualizerTiny(nn.Module):
 		cov_matrices = dict()
 		for band in x.keys():
 			#print(band, x[band].shape)
-			cov_matrices[band] = x[band] + self.wavelet_mlp[band](x[band].clone())
-			cov_matrices[band] = self.position_encoders[band](cov_matrices[band])
+			#cov_matrices[band] = x[band] + self.wavelet_mlp[band](x[band].clone())
+			cov_matrices[band] = self.position_encoders[band](x[band])
 			cov_matrices[band] = self.e2r(cov_matrices[band])
 			#print("After E2R: ", band, cov_matrices[band].shape)
 		combined_manifold_output_masked = WaveletLogEuclideanMean(cov_matrices)
@@ -138,6 +128,8 @@ class MENDRContextualizer(nn.Module):
 			x_input = x.clone()
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
+			I = torch.eye(self.encoded_out, device=x.device).unsqueeze(0)
+			spd_mask = I * 0.0001 + spd_mask
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
 			x_input[mask_idxes] = spd_mask
 		else:
