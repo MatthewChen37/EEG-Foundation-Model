@@ -149,9 +149,9 @@ class SPDTangentSpaceFunction(Function):
         '''
 
         ctx.save_for_backward(input)
-        u, s, v = svd(input)
+        u, s, _ = svd(input)
         s = s.log()
-        output = torch.bmm(u, torch.bmm(s.diag_embed(), v.transpose(1, 2)))
+        output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
         return output
         
 
