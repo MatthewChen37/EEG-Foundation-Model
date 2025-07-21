@@ -103,7 +103,20 @@ def main(cfg:DictConfig) -> None:
         for param in mendr_autoencoder.parameters():
             param.requires_grad = False
     if cfg.meta_params.pretrained_contextualizer_path is not None:
-        contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+        if cfg.meta_params.contextualizer_size == "TINY":
+            contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            contextualizer.eval()
+            for param in contextualizer.parameters():
+                param.requires_grad = False
+        elif cfg.meta_params.contextualizer_size == "LARGE":
+            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            wavelet_contextualizer.eval()
+            combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            combined_contextualizer.eval()
+            for param in wavelet_contextualizer.parameters():
+                param.requires_grad = False
+            for param in combined_contextualizer.parameters():
+                param.requires_grad = False
 
     if cfg.meta_params.contextualizer_size == "TINY":
         model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
