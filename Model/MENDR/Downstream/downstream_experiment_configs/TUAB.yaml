@@ -21,10 +21,10 @@ dataset_params:
 training_params:
   task_loss: BCEWithLogitsLoss
   learning_rate: 0.001
-  l2_weight_decay: 0.001
+  l2_weight_decay: 0.01
   ckpt_dir: ./checkpoints
   random_seed: 42
-  epochs: 1
+  epochs: 5
   batch_size: 512
   scheduler_after_batch: True
   num_workers: 32

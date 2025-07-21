@@ -21,7 +21,7 @@ class SPDTransform(nn.Module):
             self.increase_dim = SPDIncreaseDim(input_size, output_size)
             input_size = output_size
         self.weight = StiefelParameter(torch.FloatTensor(input_size, output_size), requires_grad=True)
-        nn.init.orthogonal_(self.weight)
+        nn.init.orthogonal_(self.weight, gain=1)
 
     def forward(self, input):
         output = input
@@ -367,7 +367,7 @@ class SPDRectifiedFunction(Function):
             grad_output = symmetric(grad_output)
 
             # Perform eigen decomposition
-            s, u = torch.linalg.eigh(input)  # Batch eigen decomposition
+            u, s, _ = svd(input)  # Batch eigen decomposition
 
             # Compute masks and diagonal matrices
             max_mask = s > epsilon

@@ -44,7 +44,7 @@ class PositionalEncoding(nn.Module):
 		# x is now [Batch Size, out_dim * time_steps, Patches, Channels]
 		positional_encoding = self.conv(x)
 		# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
-		x = x + positional_encoding 
+		# x = x + positional_encoding 
 		# x is now back to [Batch Size, Patches, Channels * out_dim, Time Steps]
 		if self.is_large:
 			x = rearrange(x, 'B (O T) C P -> B (O T) P C', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
@@ -57,8 +57,9 @@ class PositionalEncoding(nn.Module):
 		else:
 			x = rearrange(x, 'B (O T) C P -> B C P (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		# x = self.se_block(x)
-		x = rearrange(x, 'B C P (O T) -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
-		return x
+		#x = rearrange(x, 'B C P (O T) -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		positional_encoding = rearrange(positional_encoding, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		return positional_encoding
 
 	
 def _make_mask_idxes(batch_size, num_patches, mask_ratio):
@@ -101,7 +102,7 @@ class LogEuclidLayerNorm(nn.Module):
 		# assume SPD
 		# Eigendecompose
 		# D: [B,N], U: [B,N,N]
-		U, D, _ = svd(C) 
+		U, D, V = svd(C) 
 
 		# Log‐map + clamp
 		D = D.clamp(min=self.epsilon)
@@ -125,7 +126,7 @@ class LogEuclidLayerNorm(nn.Module):
 
 		# exp, diagnolize, reconstruct
 		# [B,N,N]
-		C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ U.permute(0, 2, 1)
+		C_norm = U @ torch.diag_embed(torch.exp(D_tilde)) @ V.permute(0, 2, 1)
 
 		# ensure PD
 		I = torch.eye(self.num_channels, device=C.device).unsqueeze(0)

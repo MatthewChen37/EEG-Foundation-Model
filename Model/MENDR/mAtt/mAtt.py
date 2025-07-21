@@ -26,6 +26,9 @@ class signal2spd(nn.Module):
         tra = tra + (1e-7)*torch.ones(tra.shape).to(tra.device)
         cov /= tra
         identity = torch.eye(cov.shape[-1], cov.shape[-1], device=dev).repeat(x.shape[0], 1, 1)
+        #identity = torch.diag_embed(torch.arange(1, cov.shape[-1] + 1, device=dev)).repeat(x.shape[0], 1, 1)
+        #print(identity.shape, cov.shape)
+        #print(identity)
         # Notice how they also added 1e-5 originally
         cov = cov+(1e-7*identity)
         return cov 
@@ -52,6 +55,8 @@ class AttentionManifold(nn.Module):
         self.q_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
         self.k_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
         self.v_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+
+        self.temp = nn.Parameter(torch.tensor(1.0, requires_grad=True, dtype=torch.float32))
         #self.project_out = SPDTransform(self.heads*self.d_out, self.d_out)
 
     '''
@@ -115,8 +120,10 @@ class AttentionManifold(nn.Module):
         K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
         
         atten_energy = log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
-        atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
-        
+        #print(nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))))
+
+        atten_prob = nn.Softmax(dim=-2)((torch.exp(-self.temp*atten_energy))).permute(0, 2, 1)#now row is c.c.
+
         # calculate outputs(v_i') of attention module
         output = LogEuclideanMean(atten_prob, V)
 

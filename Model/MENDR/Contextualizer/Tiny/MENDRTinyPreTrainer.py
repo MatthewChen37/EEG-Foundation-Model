@@ -64,7 +64,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 	def backward(self, loss):
 		self.optimizer.zero_grad()
 		loss.backward()
-		
+
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
@@ -124,10 +124,10 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 					input_batch = self._get_batch(val_data_iterator)
 					val_metrics = self.evaluate_step(input_batch, step_idx=iteration)
 					pbar.set_postfix(val_metrics)
-					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
-					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
 					if cfg.meta_params.log_model_params_and_grads:
 						self.logger.log_model_gradients(self.contextualizer, epoch=epoch*len(pbar) + iteration)
+				epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+				mlflow.log_metrics(epoch_metrics, step=epoch)
 
 			### SAVE ###
 			if cfg.meta_params.save_model:
@@ -175,7 +175,15 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		# Only compare loss of masked parts
 		og_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output[mask_idxes]))
 		masked_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes]))
+		#print(og_eigenvalues[0:5])
+		#print(masked_eigenvalues[0:5])
 		riemannian_loss = 100*criterion(og_eigenvalues, masked_eigenvalues)
+		'''
+		for batch_idx in range(batch_size):
+			for i in range(2):
+				assert not torch.allclose(og_eigenvalues[batch_idx*4 + i], og_eigenvalues[batch_idx*4 + (i + 1)], atol=1e-12, rtol=1e-08), f"Eigenvalues are the same: {og_eigenvalues[batch_idx*4 + i]} {og_eigenvalues[batch_idx*4 + (i + 1)]}"
+				assert not torch.allclose(masked_eigenvalues[batch_idx*4 + i], masked_eigenvalues[batch_idx*4 + (i + 1)], atol=1e-8, rtol=1e-05), f"Eigenvalues are the same: {masked_eigenvalues[batch_idx*4 + i]} {masked_eigenvalues[batch_idx*4 + (i + 1)]}"
+		'''
 		#print("Og Eigenvalues: ", og_eigenvalues)
 		#print("Masked Eigenvalues: ", masked_eigenvalues)
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes

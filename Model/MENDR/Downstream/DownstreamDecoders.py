@@ -7,22 +7,24 @@ class TUABFinetuneDecoder(nn.Module):
         super().__init__()
         self.tangent = SPDTangentSpace(19)
         self.flatten = nn.Flatten()
-        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.LayerNorm(5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 1*19*10))
+        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.GELU(), nn.Linear(5*19*10, 5*19*10))
         #self.seq = nn.Sequential(nn.Linear(1*1*10, 1*1*10), nn.LayerNorm(1*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*10, 1*1*10))
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(1*19*10, 1))
+        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*5*11+5*19*1, 1))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*10, 1))
+        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
         #self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
 
         '''
         self.decoders = nn.ParameterDict({
-            'delta': nn.Sequential(nn.Linear(5*19*32, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1), nn.LayerNorm(1*19*1)), 
-            'theta': nn.Sequential(nn.Linear(5*19*32, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1), nn.LayerNorm(1*19*1)),
-            'alpha': nn.Sequential(nn.Linear(5*19*64, 1*19*64), nn.LayerNorm(1*19*64), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*64, 1*19*1), nn.LayerNorm(1*19*1)),
-            'beta': nn.Sequential(nn.Linear(5*19*128, 1*19*128), nn.LayerNorm(1*19*128), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*128, 1*19*1), nn.LayerNorm(1*19*1)),
-            'gamma': nn.Sequential(nn.Linear(5*19*256, 1*19*256), nn.LayerNorm(1*19*256), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*256, 1*19*1), nn.LayerNorm(1*19*1)),
+            'delta': nn.Sequential(nn.Linear(5*19*96, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)), 
+            'theta': nn.Sequential(nn.Linear(5*19*96, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
+            'alpha': nn.Sequential(nn.Linear(5*19*192, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
+            'beta': nn.Sequential(nn.Linear(5*19*384, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
+            'gamma': nn.Sequential(nn.Linear(5*19*768, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
             #'high': nn.Sequential(nn.Linear(5*19*512, 1*19*512), nn.LayerNorm(1*19*512), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*512, 1*19*1), nn.LayerNorm(1*19*1)),
         })
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
         '''
+        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
 
     '''
     def forward(self, encodings):
@@ -44,8 +46,17 @@ class TUABFinetuneDecoder(nn.Module):
         #print(x.shape)
         x = self.flatten(x)
         #print(x.shape)
-        x = self.seq(x)
+        #x = self.seq(x)
         #print(x.shape)
+        '''
+        feautrizations = dict()
+        for band, decoder in self.decoders.items():
+            feautrizations[band] = decoder(self.flatten(encodings[band]))
+        feautrizations = torch.cat(list(feautrizations.values()), dim=-1)
+        return self.final_decoder(feautrizations)
+        #return self.final_decoder(torch.cat([x, feautrizations], dim=-1))
+        '''
+        x = self.seq(x)
         return self.final_decoder(x)
 
 class TUEVFinetuneDecoder(nn.Module):

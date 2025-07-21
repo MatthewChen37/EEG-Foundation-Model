@@ -16,7 +16,7 @@ class MENDRContextualizerLarge(nn.Module):
 				combined_contextualizer):
 		super().__init__()
 		self.wavelet_contextualizer = wavelet_contextualizer	
-		self.combined_contextualizer = combined_contextualize
+		self.combined_contextualizer = combined_contextualizer
 		self.tangent_space = SPDTangentSpace(self.wavelet_contextualizer.num_channels)
 
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
@@ -78,9 +78,9 @@ class MENDRWaveletContextualizer(nn.Module):
 			self.wavelet_manifold_transformers[band] = []
 			for i in range(n_transformer_layers):
 				if i == n_transformer_layers - 1:
-					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels, norm_output=False, hidden_scale=1.5))
+					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels, norm_output=False))
 				else:
-					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels, hidden_scale=1.5))
+					self.wavelet_manifold_transformers[band].append(ManifoldTransformer(self.num_channels))
 			self.wavelet_manifold_transformers[band] = nn.ModuleList(self.wavelet_manifold_transformers[band])
 		self.wavelet_manifold_transformers = nn.ParameterDict(self.wavelet_manifold_transformers)
 
@@ -152,9 +152,9 @@ class MENDRCombinedContextualizer(nn.Module):
 		manifold_transformers = []
 		for i in range(n_transformer_layers):
 			if i == n_transformer_layers - 1:
-				manifold_transformers.append(ManifoldTransformer(self.num_channels, norm_output=False, hidden_scale=1.5))
+				manifold_transformers.append(ManifoldTransformer(self.num_channels, norm_output=False))
 			else:
-				manifold_transformers.append(ManifoldTransformer(self.num_channels, hidden_scale=1.5))
+				manifold_transformers.append(ManifoldTransformer(self.num_channels))
 
 		self.manifold_transformer = nn.ModuleList(manifold_transformers)
 		

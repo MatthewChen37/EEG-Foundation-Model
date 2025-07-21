@@ -59,7 +59,7 @@ class MENDR_model(nn.Module):
         batch_size = patchified_inputs['delta'].shape[0]
         patch_num = patchified_inputs['delta'].shape[1]
         if self.contextualizer_size == "TINY":
-            _, output, _, wavelet_manifold_output= self.combined_contextualizer(encodings, batch_size, patch_num, mask_ratio=0.0)
+            _, output, _, wavelet_manifold_output = self.combined_contextualizer(encodings, batch_size, patch_num, mask_ratio=0.0)
             #assert not torch.isnan(output).any()
             return patchified_inputs, encodings, decodings, wavelet_manifold_output, output
         elif self.contextualizer_size == "LARGE":

@@ -101,7 +101,7 @@ def main(cfg:DictConfig) -> None:
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
         for param in mendr_autoencoder.parameters():
-            param.requires_grad = True
+            param.requires_grad = False
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
 
