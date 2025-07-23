@@ -39,17 +39,17 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		# Clamp gradients
 		# This clips gradients before backpropagation: https://stackoverflow.com/a/54816498
 		for p in self.parameters():
-			p.register_hook(lambda grad: torch.clamp(grad, -cfg.training_params.gradient_clip_value, cfg.training_params.gradient_clip_value))
+			p.register_hook(lambda grad: torch.clamp(grad,
+											 -cfg.training_params.gradient_clip_value,
+											  cfg.training_params.gradient_clip_value))
 
 	def forward(self, data):
-		patchified_inputs, encodings, decodings = self.autoencoder.forward(data)
+		_, encodings, _ = self.autoencoder.forward(data)
 		wavelet_manifold_output, epoched_shape = self.wavelet_contextualizer(encodings)
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn, negatives=self.cfg.training_params.negatives_loo)
 		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		return {
-				'patchified_inputs': patchified_inputs,
 				'encodings': encodings,
-				'decodings': decodings,
 				'wavelet_manifold_output': wavelet_manifold_output,
 				'combined_manifold_output': combined_manifold_output,
 				'wavelet_loss': w_loss,
@@ -65,12 +65,8 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		outputs = self.forward(inputs)
 		self.backward(loss=outputs['wavelet_loss'])
 		self.optimizer.step()
-		return {
-			'wavelet_loss': outputs['wavelet_loss'].item(),
-			'wavelet_acc': outputs['wavelet_acc'],
-			'lr': self.optimizer.scheduler.get_last_lr()[0],
-		}
-
+		self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'])
+		
 	def evaluate_step(self, inputs, step_idx):
 		self.train(False)
 		with torch.no_grad():
@@ -82,9 +78,13 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 												outputs['combined_manifold_output'].reshape(batch_size, num_patches, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels),
 												f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
+		return self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'])
+
+
+	def _calculate_metrics(self, wavelet_loss, wavelet_acc):
 		return {
-			'wavelet_loss': outputs['wavelet_loss'].item(),
-			'wavelet_acc': outputs['wavelet_acc'],
+			'wavelet_loss': wavelet_loss,
+			'wavelet_acc': wavelet_acc,
 			'lr': self.optimizer.scheduler.get_last_lr()[0],
 		}
 
@@ -216,13 +216,11 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		# Based on the Log-Euclidean metric
-		a_u, a_s, a_v = self.svd(batch_A + eps)
-		b_u, b_s, b_v = self.svd(batch_B + eps)
-		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s + eps)) @ a_v.permute(0, 2, 1)
-		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s + eps)) @ b_v.permute(0, 2, 1)
+		tensor_log_A = tensor_log(batch_A + eps)
+		tensor_log_B = tensor_log(batch_B + eps)
+
 		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro')
-
 		output = 1 / (1 + torch.log(1 + output))
 		output = output * torch.exp(self.wavelet_contextualizer.temp1)
 		return output

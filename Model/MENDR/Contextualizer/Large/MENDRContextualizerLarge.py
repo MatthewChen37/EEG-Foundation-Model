@@ -29,7 +29,7 @@ class MENDRWaveletContextualizer(nn.Module):
 	def __init__(self, num_channels, out_dim,
 				include_high=False,
 				temp=10.0, patch_lens=None,
-				n_transformer_layers=2):
+				n_transformer_layers=6):
 		super().__init__()
 		self.num_channels = num_channels
 		self.out_dim = out_dim
@@ -60,7 +60,7 @@ class MENDRWaveletContextualizer(nn.Module):
 
 		self.wavelet_mlp = dict()
 		for band in self.patch_lens:
-			self.wavelet_mlp[band] = nn.Sequential(nn.GELU(),
+			self.wavelet_mlp[band] = nn.Sequential(
 			nn.Linear(self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim),
 			nn.GELU(),
 			nn.Linear(self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim))
@@ -68,10 +68,12 @@ class MENDRWaveletContextualizer(nn.Module):
 		self.wavelet_mlp = nn.ParameterDict(self.wavelet_mlp)
 		self.e2r = E2R() # No learnable parameters
 
+		'''
 		self.pre_attention_spd_transform = dict()
 		for band in self.patch_lens:
 			self.pre_attention_spd_transform[band] = nn.Sequential(SPDTransform(self.num_channels, self.num_channels), SPDRectified(), SPDTransform(self.num_channels, self.num_channels))
 		self.pre_attention_spd_transform = nn.ParameterDict(self.pre_attention_spd_transform)
+		'''
 
 		self.wavelet_manifold_transformers = dict()
 		for band in self.patch_lens:
@@ -102,9 +104,13 @@ class MENDRWaveletContextualizer(nn.Module):
 		#assert x.keys() == self.wavelet_attention_manifolds.keys()
 		# Batch Size, Num of Channels, Time Length
 		#combined_seq = []
+		x_og = dict()
+		x_position_encodings = dict()
+
 		for band in x.keys():
-			x[band] = self.position_encoder[band](x[band])
-			x[band] = self.wavelet_mlp[band](x[band])
+			x_og[band] = x[band].clone()
+			x_og[band] = x_og[band] + self.wavelet_mlp[band](x_og[band])
+			x_position_encodings = self.position_encoder[band](x[band])
 			#combined_seq.append(x[band])
 			#print(band, x[band].shape)
 		'''	
@@ -118,18 +124,17 @@ class MENDRWaveletContextualizer(nn.Module):
 
 		'''
 		wavelet_manifold_output = dict()
-		for band, band_encodings in x.items():
+		for band, band_encodings in x_og.items():
+			wavelet_manifold_output[band] = band_encodings + x_position_encodings[band]
 			wavelet_manifold_output[band] = self.e2r(band_encodings)
 			#wavelet_manifold_output[band] = rearrange(wavelet_manifold_output[band], 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			#wavelet_manifold_output[band] = self.pre_attention_spd_transform[band](wavelet_manifold_output[band])
 			#wavelet_manifold_output[band] = rearrange(wavelet_manifold_output[band], '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
-		'''
 		for band in x.keys():
 			for transformer in self.wavelet_manifold_transformers[band]:
 				# output shape is [B, P, N, N]
 				#print(f"Wavelet Manifold Transformer {transformer} Shape: {wavelet_manifold_output[band].shape}", band)
 				wavelet_manifold_output[band] = transformer(x[band], batch_size, num_patches)
-		'''
 		return wavelet_manifold_output
 
 	def _init_weights(self):
@@ -141,7 +146,7 @@ class MENDRWaveletContextualizer(nn.Module):
 
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, num_channels, n_transformer_layers=4):
+	def __init__(self, num_channels, n_transformer_layers=6):
 		super().__init__()
 		self.num_channels = num_channels
 		self.wavelet_attention = AttentionManifold(self.num_channels, self.num_channels, heads=1)
