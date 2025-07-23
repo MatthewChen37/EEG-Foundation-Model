@@ -104,6 +104,7 @@ class AttentionManifold(nn.Module):
     def forward(self, x, shape=None):
         if len(x.shape) == 3 and shape is not None:
             x = x.view(shape[0], shape[1], self.d_in, self.d_in)
+        torch.clamp(self.temp, min=1.0) # Ensure temp is always greater than 1.0
         x = x.to(torch.float)# patch:[b, #patch, c, c]
         # calculate Q K V
         bs = x.shape[0]

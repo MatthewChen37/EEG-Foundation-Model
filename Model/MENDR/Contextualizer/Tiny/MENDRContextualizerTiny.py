@@ -62,9 +62,9 @@ class MENDRContextualizerTiny(nn.Module):
 		self.wavelet_conv_reduce = dict()
 		for band in self.patch_lens.keys():
 			self.wavelet_conv_reduce[band] = nn.Sequential(
-														nn.Linear(self.out_dim*self.patch_lens[band], self.out_dim*self.patch_lens[band]),
-														nn.GELU(),
-														nn.Linear(self.out_dim*self.patch_lens[band], self.out_dim*self.patch_lens[band]),
+												nn.Conv2d(self.num_channels, self.num_channels, kernel_size=(3, self.patch_lens[band] + 1), stride=(1, 1), padding=(1, self.patch_lens[band] // 2)),
+												nn.GELU(),
+												nn.Linear(self.out_dim*self.patch_lens[band], self.out_dim*self.patch_lens[band])
 											)
 
 		'''
@@ -99,7 +99,7 @@ class MENDRContextualizerTiny(nn.Module):
 
 		for band in x.keys():
 			x_og[band] = x[band].clone()
-			x_og[band] = rearrange(x_og[band], 'B P C (O T) -> B C P  (O T)', B=batch_size, P=num_patches, C=self.num_channels, O=self.out_dim, T=self.patch_lens[band])
+			x_og[band] = rearrange(x_og[band], 'B P C (O T) -> B C P (O T)', B=batch_size, P=num_patches, C=self.num_channels, O=self.out_dim, T=self.patch_lens[band])
 			x_og[band] = self.wavelet_conv_reduce[band](x_og[band])
 			x_og[band] = rearrange(x_og[band], 'B C P (O T) -> B P C (O T)', B=batch_size, P=num_patches, C=19, O=self.out_dim, T=self.patch_lens[band])
 			x_masked[band] = x_og[band].clone()

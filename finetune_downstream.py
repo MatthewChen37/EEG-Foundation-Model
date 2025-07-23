@@ -105,9 +105,9 @@ def main(cfg:DictConfig) -> None:
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         if cfg.meta_params.contextualizer_size == "TINY":
             contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
-            contextualizer.eval()
+            contextualizer.train()
             for param in contextualizer.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
         elif cfg.meta_params.contextualizer_size == "LARGE":
             wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
             wavelet_contextualizer.eval()
