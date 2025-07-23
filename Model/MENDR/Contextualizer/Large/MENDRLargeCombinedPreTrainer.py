@@ -15,7 +15,7 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 	'''
 	Based on BENDRTrainer.py	
 	'''
-	def __init__(self, autoencoder, wavelet_contextualizer, optimizer, cfg, **kwargs):
+	def __init__(self, autoencoder, wavelet_contextualizer, combined_contextualizer, optimizer, cfg, **kwargs):
 		self.svd = SVD.apply
 		self.contrastive_loss_fn = nn.CrossEntropyLoss()
 
@@ -26,10 +26,11 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		for band, encoder_decoder in autoencoder.encoder_decoders.items():
 			encoder_decoder.disableDecoder()
 
-		assert isinstance(contextualizer, MENDRContextualizerLarge), f"Contextualizer must be of type MENDRContextualizerLarge, but got {type(contextualizer)}"
+		assert isinstance(wavelet_contextualizer, MENDRWaveletContextualizer), f"Wavelet Contextualizer must be of type MENDRWaveletContextualizer, but got {type(wavelet_contextualizer)}"
+		assert isinstance(combined_contextualizer, MENDRCombinedContextualizer), f"Combined Contextualizer must be of type MENDRombinedContextualizer, but got {type(combined_contextualizer)}"
 
-		super(MENDRLargeCombinedPreTrainer, self).__init__(autoencoder=autoencoder, contextualizer=contextualizer,
-			contrastive_loss_fn_wavelet=self.contrastive_loss_fn_wavelet,
+		super(MENDRLargeCombinedPreTrainer, self).__init__(autoencoder=autoencoder, wavelet_contextualizer=wavelet_contextualizer,
+			combined_contextualizer=combined_contextualizer,
 			contrastive_loss_fn_combined=self.contrastive_loss_fn,
 			lr=cfg.train_params.learning_rate,
 			l2_weight_decay=cfg.training_params.l2_weight_decay,
@@ -71,6 +72,13 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 				}
 		else:
 			raise ValueError(f"Invalid training mode: {self.train_mode}. Must be 'wavelet' or 'combined'.")
+		
+	def _calculate_metrics(self, riemannian_loss):
+		metrics = {
+			'riemannian_loss': riemannian_loss,
+			'lr': self.optimizer.param_groups[0]['lr'],
+		}
+		return metrics
 		
 	def epochMaskedRecon(self, wavelet_manifold_output, epoched_shape, criterion):
 		frequency_bands = list(wavelet_manifold_output.keys())

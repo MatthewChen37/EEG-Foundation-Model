@@ -123,10 +123,10 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 					input_batch = self._get_batch(val_data_iterator)
 					val_metrics = self.evaluate_step(input_batch, step_idx=iteration)
 					pbar.set_postfix(val_metrics)
-					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
 					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
 					if cfg.meta_params.log_model_params_and_grads:
 						self.logger.log_model_gradients(self.wavelet_contextualizer, epoch=epoch*len(pbar) + iteration)
+				mlflow.log_metrics(epoch_metrics, step=epoch)
 
 			### SAVE ###
 			if cfg.meta_params.save_model:

@@ -18,6 +18,9 @@ from Model.MENDR.Contextualizer.Tiny.MENDRTinyPreTrainer import MENDRTinyPreTrai
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Datasets.datasetPretrain import WaveletPretrainDataset, WaveletPretrainConcatDataset
+from Model.MENDR.Contextualizer.Large.MENDRLargeWaveletPreTrainer import MENDRLargeWaveletPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRLargeCombinedPreTrainer import MENDRLargeCombinedPreTrainer
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Contextualizer/Tiny/tiny_experiment_configs/",
@@ -75,7 +78,31 @@ def main(cfg:DictConfig) -> None:
 			contextualizer_layers=cfg.contextualizer_params.contextualizer_layers
         ).to(device)
 	elif cfg.meta_params.contextualizer_size == "LARGE":
-		raise ValueError("Large contextualizer not supported in this script")
+		if cfg.meta_params.contextualizer_type == "WAVELET":
+			contextualizer = MENDRWaveletContextualizer(
+				num_channels=19,
+				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
+				include_high=cfg.patch_encoder_params.include_high,
+				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+			).to(device)
+		elif cfg.meta_params.contextualizer_type == "COMBINED":
+			contextualizer = MENDRCombinedContextualizer(
+				num_channels=19,
+				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+			).to(device)
+
+			wavelet_contextualizer = MENDRWaveletContextualizer(
+				num_channels=19,
+				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
+				include_high=cfg.patch_encoder_params.include_high,
+				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+			).to(device)
+			wavelet_contextualizer.load_state_dict(torch.load(cfg.training_params.wavelet_contextualizer_ckpt_path, weights_only=True), strict=False)
+			for param in wavelet_contextualizer.parameters():
+				param.requires_grad = False
+			wavelet_contextualizer.eval()
+		else:
+			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 
 	optimizer = torch.optim.AdamW(contextualizer.parameters(),
 				lr=cfg.training_params.learning_rate,
@@ -88,8 +115,13 @@ def main(cfg:DictConfig) -> None:
 
 	if cfg.meta_params.model_size.lower() == 'tiny':
 		trainer = MENDRTinyPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
-	else:
-		raise ValueError("Large contextualizer not supported in this script")
+	elif cfg.meta_params.model_size.lower() == 'large':
+		if cfg.meta_params.contextualizer_type == "WAVELET":
+			trainer = MENDRLargeWaveletPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
+		elif cfg.meta_params.contextualizer_type == "COMBINED":
+			trainer = MENDRLargeCombinedPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
+		else:
+			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 
 	### Training ###
 	if cfg.training_params.val_frac > 0:
