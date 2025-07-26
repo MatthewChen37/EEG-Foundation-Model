@@ -3,9 +3,9 @@ meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
   run_name: finetune_TUAB_downstream
   model_name: MENDR
-  pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
-  pretrained_contextualizer_path: "./checkpoint/pretrained_contextualizer_tiny/contextualizer_weights.pth"
-  contextualizer_size: TINY
+  pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
+  pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny/contextualizer_weights.pth"
+  contextualizer_size: LARGE
   log_system_metrics: True
   log_model_params_and_grads: False
   save_model: False
@@ -24,7 +24,7 @@ training_params:
   l2_weight_decay: 0.01
   ckpt_dir: ./checkpoints
   random_seed: 42
-  epochs: 5
+  epochs: 3
   batch_size: 512
   scheduler_after_batch: True
   num_workers: 32
@@ -38,5 +38,5 @@ patch_encoder_params:
   n_gnn_transformer_layers: 3
   n_gnn_heads: 2
   num_subjects: 13190
-  include_high: False
+  include_high: True
   channel_dropout_p: 0.1

@@ -124,6 +124,7 @@ class AttentionManifold(nn.Module):
         #print(nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))))
 
         atten_prob = nn.Softmax(dim=-2)((torch.exp(-self.temp*atten_energy))).permute(0, 2, 1)#now row is c.c.
+        #atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)
 
         # calculate outputs(v_i') of attention module
         output = LogEuclideanMean(atten_prob, V)

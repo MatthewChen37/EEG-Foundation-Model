@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
-from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean
+from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean, log_euclidean_distance
+from Model.MENDR.mAtt.utils import symmetric
 from Model.MENDR.safeSVD import SVD, svdv2
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer
 from Explainability.embeddingVisualization import plotSPDEmbedding
@@ -45,7 +46,9 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 
 	def forward(self, data):
 		_, encodings, _ = self.autoencoder.forward(data)
-		wavelet_manifold_output, epoched_shape = self.wavelet_contextualizer(encodings)
+		batch_size = encodings['delta'].shape[0]
+		num_patches = encodings['delta'].shape[1]
+		wavelet_manifold_output = self.wavelet_contextualizer(encodings, batch_size=batch_size, num_patches=num_patches)
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn, negatives=self.cfg.training_params.negatives_loo)
 		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		return {
@@ -54,18 +57,22 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 				'combined_manifold_output': combined_manifold_output,
 				'wavelet_loss': w_loss,
 				'wavelet_acc': w_correct / w_pairs,
+				'w_correct': w_correct,
+				'w_pairs': w_pairs,
+				'temp': self.wavelet_contextualizer.temp1,
 			}
 
 	def backward(self, loss):
 		self.optimizer.zero_grad()
 		loss.backward()
+		torch.clamp(self.wavelet_contextualizer.temp1, min=0.0)
 
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
 		self.backward(loss=outputs['wavelet_loss'])
 		self.optimizer.step()
-		self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'])
+		return self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'], outputs['w_correct'], outputs['w_pairs'])
 		
 	def evaluate_step(self, inputs, step_idx):
 		self.train(False)
@@ -81,11 +88,14 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		return self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'])
 
 
-	def _calculate_metrics(self, wavelet_loss, wavelet_acc):
+	def _calculate_metrics(self, wavelet_loss, wavelet_acc, w_correct, w_pairs):
 		return {
 			'wavelet_loss': wavelet_loss,
 			'wavelet_acc': wavelet_acc,
+			'w_correct': w_correct,
+			'w_pairs': w_pairs,
 			'lr': self.optimizer.scheduler.get_last_lr()[0],
+			'temp': self.wavelet_contextualizer.temp1.item(),
 		}
 
 
@@ -146,7 +156,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		if cfg.meta_params.log_model_params_and_grads:
 			self.logger.closeWriter()
 
-	def leave_one_out(self, embeddings, criterion, negatives=20):
+	def leave_one_out(self, embeddings, criterion, negatives):
 		"""
 		Compute leave-one-out loss for wavelet embeddings.
 
@@ -174,11 +184,11 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			negative_selection = torch.randperm(batch_size)
 			negative_indices = negative_selection[:negatives]
 			for j in list(range(i)) + list(range(i + 1, num_targets)):
-				embedding_tensor = embeddings[frequency_bands[j]].clone().view(-1, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels) # [Batch * epochs, C, C]
+				embedding_tensor = embeddings[frequency_bands[j]].clone().view(-1, 9, 9) # [Batch * epochs, C, C]
 				embedding_tensor = embedding_tensor[negative_indices]
 				other_embeddings.append(embedding_tensor)
 
-			curr_target = embeddings[frequency_bands[i]].clone().view(-1, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels)[negative_indices]
+			curr_target = embeddings[frequency_bands[i]].clone().view(-1, 9, 9)[negative_indices]
 			other_embeddings_mean = self.wavelet_contextualizer._batch_LogEuclideanMean(other_embeddings)
 
 			# Why does this fail for higher precisions?
@@ -210,17 +220,33 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			loss += l
 			correct += (torch.argmax(reverse_logits, axis=0) == labels).sum().item()
 			pairs += reverse_logits.size(0)
+
+		#print(f"Leave One Out Loss: {loss}, Leave One Out Correct: {correct}, Leave One Out Pairs: {pairs}")
 		return loss, correct, pairs
 
-	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, eps=1e-12):
+	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, eps=1e-7):
 		# This can be sped up
 		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		# Based on the Log-Euclidean metric
-		tensor_log_A = tensor_log(batch_A + eps)
-		tensor_log_B = tensor_log(batch_B + eps)
+
+		'''
+		a_u, a_s, a_v = self.svd(batch_A + eps)
+		b_u, b_s, b_v = self.svd(batch_B + eps)
+		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s + eps)) @ a_v.permute(0, 2, 1)
+		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s + eps)) @ b_v.permute(0, 2, 1)
+		'''
+
+		identityA = torch.eye(batch_A.shape[-1], batch_A.shape[-1], device=self.device).repeat(batch_A.shape[0], 1, 1)
+		identityB = torch.eye(batch_B.shape[-1], batch_B.shape[-1], device=self.device).repeat(batch_B.shape[0], 1, 1)
+		batch_A = batch_A + (eps * identityA)
+		batch_B = batch_B + (eps * identityB)
+		tensor_log_A = tensor_log(batch_A)
+		tensor_log_B = tensor_log(batch_B)
 
 		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro')
 		output = 1 / (1 + torch.log(1 + output))
 		output = output * torch.exp(self.wavelet_contextualizer.temp1)
 		return output
+
+	

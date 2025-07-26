@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, AttentionManifold, SPDRectified, tensor_log, tensor_exp, log_euclidean_distance, LogEuclideanMean
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
+from Model.MENDR.mAtt.utils import symmetric, is_pos_def
 from Model.MENDR.MENDRCommon import PositionalEncoding, BatchTraceNormalization, _make_mask_idxes, LogEuclidLayerNorm
 from einops import rearrange
 
@@ -19,8 +20,8 @@ class ManifoldTransformer(nn.Module):
                                                          self.activation,
                                                          SPDTransform(int(1.5*self.encoded_h), self.encoded_h))
         self.riemannian_residual = _RiemannianResidual()
-        #self.trace_normalization = BatchTraceNormalization()
-        self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
+        self.trace_normalization = BatchTraceNormalization()
+        #self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
 
     def forward(self, x, batch_size, num_patches):
         # X is list of [Batch_Size, epochs, C, C]
@@ -29,14 +30,18 @@ class ManifoldTransformer(nn.Module):
         x = rearrange(x, 'B P C1 C2 -> (B P) C1 C2', B=shape[0], P=shape[1], C1=self.encoded_h, C2=self.encoded_h)
         #x = self.down_project(x)
         x = self.riemannian_residual(x, x_res)
-        x = self.layer_normalization(x)
+        x = self.trace_normalization(x)
         x_res = self.manifold_self_spd_transform(x)
         x = self.riemannian_residual(x, x_res)
         if self.norm_output:
-            x = self.layer_normalization(x)
+            x = self.trace_normalization(x)
         x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=shape[0], P=shape[1], C1=self.encoded_h, C2=self.encoded_h)
         # Symmetrize/Regularize Due to Numeric Instability
-        # x = 0.5 * (x + x.transpose(-1, -2))
+        identity = torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], x.shape[1], 1, 1)
+        #torch.set_printoptions(profile="full", linewidth=1000)
+        #assert torch.isfinite(x).all(), f"Manifold Transformer Output is not finite: {x}"
+        #assert is_pos_def(x), f"Manifold Transformer Output is not positive definite: {x}"
+        x = x + (1e-7 * identity)
         return x
 
 # https://proceedings.neurips.cc/paper_files/paper/2023/file/c868aa7437dc9b29e674cd2e25689021-Paper-Conference.pdf
@@ -52,5 +57,7 @@ class _RiemannianResidual(nn.Module):
         # y: [Batch*#patches, C, C]
         #x = 0.5 * (x + x.transpose(-1, -2))
         #y = 0.5 * (y + y.transpose(-1, -2))
-        x = tensor_exp(tensor_log(x) + tensor_log(y))
-        return x
+        xIdentity = 1e-7*torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], 1, 1)
+        yIdentity = 1e-7*torch.eye(y.shape[-1], y.shape[-1], device=y.device).repeat(y.shape[0], 1, 1)
+        result = tensor_exp(tensor_log(x + xIdentity) + tensor_log(y + yIdentity))
+        return result

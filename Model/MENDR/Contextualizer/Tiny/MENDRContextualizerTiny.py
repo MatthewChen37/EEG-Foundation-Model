@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, AttentionManifold, SPDRectified, WaveletLogEuclideanMean
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
+from Model.MENDR.mAtt.utils import symmetric
 from Model.MENDR.MENDRCommon import (PositionalEncoding,
 							_make_mask_idxes,
 							BatchTraceNormalization,

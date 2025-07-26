@@ -70,6 +70,7 @@ def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_o
         legends = np.unique(labels)
 
         data = np.concatenate(data, axis=0)
+        print("datashape", data.shape, data)
         embedding = riemannian_reducer.fit(data)
         assert embedding.shape[0] == num_samples * num_sample_patches * 6, f"Embedding Shape: {embedding.shape} Expected Shape: {num_samples * num_sample_patches * 6}"
 

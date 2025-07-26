@@ -6,6 +6,7 @@ from einops import rearrange
 import sys
 from Model.MENDR.safeSVD import SVD
 from Model.MENDR.Autoencoder.MENDRReconstructionDecoder import SEBasicBlock2d
+from Model.MENDR.mAtt.utils import symmetric
 svd = SVD.apply
 
 # Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
@@ -23,14 +24,14 @@ class PositionalEncoding(nn.Module):
 					kernel_size=(19, 3), stride=(1, 1), padding=(9, (3 - 1) // 2), groups=self.out_dim*self.patch_len)
 		nn.init.normal_(self.conv.weight, mean=0, std=1)
 		nn.init.constant_(self.conv.bias, 0)
-		#self.act = nn.GELU()
+		self.act = nn.GELU()
 		#self.W_out = self.encoded_h + 2 * ((self.encoded_h - 1) // 2) - 1 * (self.encoded_h - 1) - 1
 		#self.W_out = math.floor((self.W_out / 1) + 1)
 		#self.conv_adj = nn.Conv2d(self.W_out, self.encoded_h, kernel_size=(1, self.encoded_h), stride=(1, 1), padding=(0, 0)).to(self.device)
 
 		#self.se_block = SEBasicBlock2d(self.num_channels, self.num_channels, reduction=2)
 		if self.is_large:
-			self.conv2 = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=1, kernel_size=(3, 19), stride=(1, 1), padding=(1, (19 - 1) // 2))
+			self.conv2 = nn.Conv2d(in_channels=self.out_dim*self.patch_len, out_channels=1, kernel_size=(5, 19), stride=(1, 1), padding=(2, (19 - 1) // 2))
 			nn.init.normal_(self.conv2.weight, mean=0, std=1)
 			nn.init.constant_(self.conv2.bias, 0)
 
@@ -40,25 +41,24 @@ class PositionalEncoding(nn.Module):
 			x: Tensor, shape [Batch Size, Patches, Channels, Time Steps * out_dim]
 		"""
 		B, P = x.shape[0], x.shape[1]
-		x = rearrange(x, 'B P C (O T) -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+		x_input = rearrange(x.clone(), 'B P C (O T) -> B (O T) C P', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		# x is now [Batch Size, out_dim * time_steps, Patches, Channels]
-		positional_encoding = self.conv(x)
+		positional_encoding = self.conv(x_input)
 		# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
 		# x = x + positional_encoding 
 		# x is now back to [Batch Size, Patches, Channels * out_dim, Time Steps]
 		if self.is_large:
-			x = rearrange(x, 'B (O T) C P -> B (O T) P C', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
-			positional_encoding2 = self.conv2(x)
+			positional_encoding = rearrange(positional_encoding, 'B (O T) C P -> B (O T) P C', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			positional_encoding = self.act(positional_encoding)
+			positional_encoding = self.conv2(positional_encoding)
 			# Positional Encoding is now [Batch, out_dim * time_steps, patches, encoded_h]
 			# Positional encoding is broadcast against x:
 			# [Batch, #time_step, #patch, encoded_h] + [Batch, 1, #patch, encoded_h] = [Batch, #time_step, #patch, encoded_h]
-			x = x + positional_encoding2
-			x = rearrange(x, 'B (O T) P C -> B C P (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			positional_encoding = rearrange(positional_encoding, 'B (O T) P C -> B P C (O T)', B=B, P=P, C=self.num_channels, O=1, T=1)
 		else:
-			x = rearrange(x, 'B (O T) C P -> B C P (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
+			positional_encoding = rearrange(positional_encoding, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		# x = self.se_block(x)
 		#x = rearrange(x, 'B C P (O T) -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
-		positional_encoding = rearrange(positional_encoding, 'B (O T) C P -> B P C (O T)', B=B, P=P, C=self.num_channels, O=self.out_dim, T=self.patch_len)
 		return positional_encoding
 
 	
@@ -82,8 +82,9 @@ class BatchTraceNormalization(nn.Module):
 		trace = trace.view(-1, 1, 1)
 		trace = trace + self.epsilon*torch.ones(trace.shape).to(x.device)
 		x /= trace
-		identity = torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], 1, 1)
-		x = x + (self.epsilon * identity)
+		#identity = torch.eye(x.shape[-1], x.shape[-1], device=x.device).repeat(x.shape[0], 1, 1)
+		#x = symmetric(x)
+		#x = x + (self.epsilon * identity)
 		return x
 
 class LogEuclidLayerNorm(nn.Module):
