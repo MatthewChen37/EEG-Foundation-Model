@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
 from Model.MENDR.mAtt.mAtt import tensor_exp, tensor_log, WaveletLogEuclideanMean, log_euclidean_distance
-from Model.MENDR.mAtt.utils import symmetric
+from Model.MENDR.mAtt.utils import symmetric, is_pos_def
 from Model.MENDR.safeSVD import SVD, svdv2
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRWaveletContextualizer
 from Explainability.embeddingVisualization import plotSPDEmbedding
@@ -51,6 +51,15 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		wavelet_manifold_output = self.wavelet_contextualizer(encodings, batch_size=batch_size, num_patches=num_patches)
 		w_loss, w_correct, w_pairs = self.leave_one_out(wavelet_manifold_output, self.contrastive_loss_fn, negatives=self.cfg.training_params.negatives_loo)
 		combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
+		'''
+		assert torch.isfinite(combined_manifold_output).all(), f"Combined Manifold Output is not finite: {combined_manifold_output}"
+		for band in wavelet_manifold_output.keys():
+			assert torch.isfinite(wavelet_manifold_output[band]).all(), f"Wavelet Manifold Output {band} is not finite: {wavelet_manifold_output[band]}"
+			assert is_pos_def(wavelet_manifold_output[band]), f"Wavelet Manifold Output {band} is not positive definite: {wavelet_manifold_output[band]}"
+			#assert (wavelet_manifold_output[band] > 0).all(), f"Wavelet Manifold Output {band} is not positive: {wavelet_manifold_output[band]}"
+		#assert (combined_manifold_output > 0).all(), f"Combined Manifold Output is not positive: {combined_manifold_output}"
+		assert is_pos_def(combined_manifold_output), f"Combined Manifold Output is not positive definite: {combined_manifold_output}"
+		'''
 		return {
 				'encodings': encodings,
 				'wavelet_manifold_output': wavelet_manifold_output,
@@ -65,7 +74,10 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 	def backward(self, loss):
 		self.optimizer.zero_grad()
 		loss.backward()
-		torch.clamp(self.wavelet_contextualizer.temp1, min=0.0)
+		'''
+		with torch.no_grad():
+			self.wavelet_contextualizer.temp1.copy_(torch.clamp(self.wavelet_contextualizer.temp1, min=0.0))
+		'''
 
 	def train_step(self, inputs):
 		self.train(True)
@@ -82,10 +94,10 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			num_patches = outputs['wavelet_manifold_output']['delta'].shape[1]
 			if step_idx == 0: # Log only the first batch in the validation set
 				fig = plotWaveletEmbeddingsRiemannian(outputs['wavelet_manifold_output'],
-												outputs['combined_manifold_output'].reshape(batch_size, num_patches, self.cfg.patch_encoder_params.num_channels, self.cfg.patch_encoder_params.num_channels),
+												outputs['combined_manifold_output'].reshape(batch_size, num_patches, 6, 6),
 												f"epoch_{self.epoch} wavelet embeddings", reduction="TSNE")
 				mlflow.log_figure(fig, f"epoch_{self.epoch}_wavelet_embeddings.html")
-		return self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'])
+		return self._calculate_metrics(outputs['wavelet_loss'].item(), outputs['wavelet_acc'], outputs['w_correct'], outputs['w_pairs'])
 
 
 	def _calculate_metrics(self, wavelet_loss, wavelet_acc, w_correct, w_pairs):
@@ -173,6 +185,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		frequency_bands = list(embeddings.keys())
 		num_targets = len(frequency_bands)
 		batch_size = embeddings['delta'].shape[0]
+		num_patches = embeddings['delta'].shape[1]
 
 		loss = 0.0
 		correct = 0
@@ -181,14 +194,15 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		for i in range(num_targets):
 			# Average embeddings of all other modalities
 			other_embeddings = []
+			#negative_selection = torch.randperm(batch_size * num_patches)
 			negative_selection = torch.randperm(batch_size)
-			negative_indices = negative_selection[:negatives]
+			negative_indices = negative_selection[:negatives] # negatives = batch_size works best # negatives = batch_size works best # negatives = batch_size works best
 			for j in list(range(i)) + list(range(i + 1, num_targets)):
-				embedding_tensor = embeddings[frequency_bands[j]].clone().view(-1, 9, 9) # [Batch * epochs, C, C]
+				embedding_tensor = embeddings[frequency_bands[j]].clone() # [Batch * epochs, C, C]
 				embedding_tensor = embedding_tensor[negative_indices]
 				other_embeddings.append(embedding_tensor)
 
-			curr_target = embeddings[frequency_bands[i]].clone().view(-1, 9, 9)[negative_indices]
+			curr_target = embeddings[frequency_bands[i]].clone()[negative_indices]
 			other_embeddings_mean = self.wavelet_contextualizer._batch_LogEuclideanMean(other_embeddings)
 
 			# Why does this fail for higher precisions?
@@ -203,8 +217,13 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 			# assert torch.allclose(curr_target, curr_target.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(curr_target)
 			# assert torch.allclose(other_embeddings_mean, other_embeddings_mean.mT, atol=(10 ** -ABS_PRECISION), rtol=(10 ** -REL_PRECISION)), self._findNonSymmetry(other_embeddings_mean)
 
+
 			# Compute logits
+			#print(f"curr_target: {curr_target.shape}")
+			#print(f"other_embeddings_mean: {other_embeddings_mean.shape}")
 			logits = self._batchWiseMatrixSimilarity(curr_target, other_embeddings_mean)
+			logits = logits.sum(dim=-1)
+			logits = (logits + logits.transpose(-1, -2)) * 0.5
 			labels = torch.arange(logits.shape[0], device=self.device)
 
 			# Forward loss
@@ -226,7 +245,7 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 
 	def _batchWiseMatrixSimilarity(self, batch_A, batch_B, eps=1e-7):
 		# This can be sped up
-		output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
+		#output = torch.zeros((batch_A.shape[0], batch_B.shape[0])).to(self.device)
 		# Based on the Log-Euclidean metric
 
 		'''
@@ -235,18 +254,26 @@ class MENDRLargeWaveletPreTrainer(BaseModelTrainer):
 		tensor_log_A = a_u @ torch.diag_embed(torch.log(a_s + eps)) @ a_v.permute(0, 2, 1)
 		tensor_log_B = b_u @ torch.diag_embed(torch.log(b_s + eps)) @ b_v.permute(0, 2, 1)
 		'''
-
-		identityA = torch.eye(batch_A.shape[-1], batch_A.shape[-1], device=self.device).repeat(batch_A.shape[0], 1, 1)
-		identityB = torch.eye(batch_B.shape[-1], batch_B.shape[-1], device=self.device).repeat(batch_B.shape[0], 1, 1)
+		batch_A = (batch_A + batch_A.transpose(-1, -2)) * 0.5
+		batch_B = (batch_B + batch_B.transpose(-1, -2)) * 0.5
+		identityA = torch.eye(batch_A.shape[-1], batch_A.shape[-1], device=self.device).repeat(batch_A.shape[0], batch_A.shape[1], 1, 1)
+		identityB = torch.eye(batch_B.shape[-1], batch_B.shape[-1], device=self.device).repeat(batch_B.shape[0], batch_B.shape[1], 1, 1)
 		batch_A = batch_A + (eps * identityA)
 		batch_B = batch_B + (eps * identityB)
 		tensor_log_A = tensor_log(batch_A)
 		tensor_log_B = tensor_log(batch_B)
 
-		inner_term = tensor_log_A[:, None, :, :] - tensor_log_B[None, :, :, :]
+		inner_term = tensor_log_A[:, None, :, :, :] - tensor_log_B[None, :, :, :, :]
 		output = torch.linalg.matrix_norm(inner_term, ord='fro')
 		output = 1 / (1 + torch.log(1 + output))
 		output = output * torch.exp(self.wavelet_contextualizer.temp1)
 		return output
 
-	
+	def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
+		tqdm.tqdm.write("Retaining checkpoint...")
+		epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
+		self.save_best(epoch_ckpt_dir)
+		print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
+		# Always save scheduler 
+		torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
+		self.load_best(epoch_ckpt_dir)

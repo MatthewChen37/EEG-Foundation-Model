@@ -23,20 +23,19 @@ contextualizer_params:
   contextualizer_layers: 6
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
-  pretrained_patch_encoder_dir: null
-  train_frac: 0.1
-  val_frac: 0.01  
+  train_frac: 0.05
+  val_frac: 0.001
   random_seed: 42
-  learning_rate: 0.001
-  l2_weight_decay: 0.001
-  batch_size: 128
+  learning_rate: 0.01
+  l2_weight_decay: 0.01
+  batch_size: 16
   epochs: 5
   T_max: 5
   eta_min: 1.0e-7
   scheduler_after_batch: False
   ckpt_dir: ./checkpoint
   num_workers: 32
-  gradient_clip_value: 1e9
+  gradient_clip_value: 1e7
   autoencoder_ckpt_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
   weighted_random_sampler: False
-  negatives_loo: 20
+  negatives_loo: 16

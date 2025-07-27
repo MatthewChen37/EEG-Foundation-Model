@@ -23,14 +23,14 @@ class signal2spd(nn.Module):
         tra = cov.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
         tra = tra.view(-1, 1, 1)
         # To avoid division by 0 error
-        tra = tra + (1e-7)*torch.ones(tra.shape).to(tra.device)
+        tra = tra + (1e-5)*torch.ones(tra.shape).to(tra.device)
         cov /= tra
         identity = torch.eye(cov.shape[-1], cov.shape[-1], device=dev).repeat(x.shape[0], 1, 1)
         #identity = torch.diag_embed(torch.arange(1, cov.shape[-1] + 1, device=dev)).repeat(x.shape[0], 1, 1)
         #print(identity.shape, cov.shape)
         #print(identity)
         # Notice how they also added 1e-5 originally
-        cov = cov+(1e-7*identity)
+        cov = cov+(1e-5*identity)
         return cov 
 
 class E2R(nn.Module):
@@ -104,7 +104,7 @@ class AttentionManifold(nn.Module):
     def forward(self, x, shape=None):
         if len(x.shape) == 3 and shape is not None:
             x = x.view(shape[0], shape[1], self.d_in, self.d_in)
-        torch.clamp(self.temp, min=1.0) # Ensure temp is always greater than 1.0
+        #torch.clamp(self.temp, min=1.0) # Ensure temp is always greater than 1.0
         x = x.to(torch.float)# patch:[b, #patch, c, c]
         # calculate Q K V
         bs = x.shape[0]
@@ -152,6 +152,9 @@ def tensor_log(t):
         patch_num = t.shape[1]
         channel_num = t.shape[2]
         t = t.reshape(batch_size*patch_num, channel_num, channel_num)
+    #t = t + t.transpose(-1, -2)
+    #identity = torch.eye(t.shape[-1], t.shape[-1], device=t.device).repeat(t.shape[0], 1, 1)
+    #t = t + 1e-7*identity
     #s, u = torch.linalg.eigh(t)
     u, s, _ = svd(t)
     output = u @ torch.diag_embed(torch.log(s)) @ u.permute(0, 2, 1)
@@ -180,6 +183,9 @@ def tensor_exp(t):#4dim
         patch_num = t.shape[1]
         channel_num = t.shape[2]
         t = t.reshape(batch_size*patch_num, channel_num, channel_num)
+    #t = t + t.transpose(-1, -2)
+    #identity = torch.eye(t.shape[-1], t.shape[-1], device=t.device).repeat(t.shape[0], 1, 1)
+    #t = t + 1e-7*identity
     #s, u = torch.linalg.eigh(t)
     u, s, _ = svd(t)
     output = u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 2, 1)

@@ -423,6 +423,9 @@ class SPDRectifiedFunction(Function):
 
                 grad_input[k] = u.mm(symmetric(P.t() * u.t().mm(dLdV))+dLdS).mm(u.t())
             '''
+        #torch.set_printoptions(profile="full", linewidth=1000)
+        #print(f"SPDTransform Gradient Input Shape: {grad_input.shape}")
+        #print(f"grad_input: {grad_input}")
         return grad_input, None
     
 class SPDRectified(nn.Module):

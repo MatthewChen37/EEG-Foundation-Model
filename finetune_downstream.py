@@ -88,7 +88,7 @@ def main(cfg:DictConfig) -> None:
             n_transformer_layers=6,
         )
         combined_contextualizer = MENDRCombinedContextualizer(
-            num_channels=9,
+            num_channels=6,
             n_transformer_layers=6,
         )
     else:

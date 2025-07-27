@@ -29,7 +29,7 @@ class MENDRWaveletContextualizer(nn.Module):
 	def __init__(self, num_channels, out_dim,
 				include_high=False,
 				temp=1.0, patch_lens=None,
-				encoded_out=9,
+				encoded_out=6,
 				n_transformer_layers=2):
 		super().__init__()
 		self.num_channels = num_channels
@@ -66,16 +66,16 @@ class MENDRWaveletContextualizer(nn.Module):
 		# Positional Encoding
 		self.position_encoder = dict()
 		for band in self.patch_lens:
-			self.position_encoder[band] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens[band], is_large=True)
+			self.position_encoder[band] = PositionalEncoding(self.num_channels, self.out_dim, self.patch_lens[band], is_large=False)
 		self.position_encoder = nn.ModuleDict(self.position_encoder)
 
 		self.wavelet_conv_reduce = dict()
 		for band in self.patch_lens:
 			self.wavelet_conv_reduce[band] = nn.Sequential(
 				nn.Linear(self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim),
-				#nn.Conv2d(self.num_channels, self.num_channels, kernel_size=(3, self.patch_lens[band] + 1), stride=(1, 1), padding=(1, self.patch_lens[band] // 2)),
 				nn.GELU(),
-				nn.Linear(self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim))
+				nn.Linear(self.patch_lens[band]*out_dim, self.patch_lens[band]*out_dim),
+				)
 
 		self.wavelet_conv_reduce = nn.ModuleDict(self.wavelet_conv_reduce)
 		self.e2r = E2R() # No learnable parameters
@@ -156,11 +156,24 @@ class MENDRWaveletContextualizer(nn.Module):
 				if module.bias is not None:
 					nn.init.constant_(module.bias, 0)
 
+	'''
 	def _batch_LogEuclideanMean(self, x):
 		# X is list of [Batch_Size * epochs, C, C]
 		x_stacked = torch.stack(x, dim=1)
 		x_log = tensor_log(x_stacked)
 		x_mean = tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
+		return x_mean
+	'''
+	def _batch_LogEuclideanMean(self, x):
+		batch_size = x[0].shape[0]
+		num_patches = x[0].shape[1]
+		# X is list of [Batch_Size, epochs, C, C]
+		x_stacked = torch.stack(x, dim=2)
+		# x is now [Batch_Size, epochs, 4/5, C, C] -1 because we only call from LOO
+		x_stacked = rearrange(x_stacked, 'B P W C1 C2 -> (B P) W C1 C2', B=batch_size, P=num_patches, W=len(self.patch_lens) - 1, C1=self.encoded_out, C2=self.encoded_out)
+		x_log = tensor_log(x_stacked)
+		x_mean = tensor_exp(x_log.sum(dim=1, keepdim=True) / x_stacked.shape[1])[:, 0, :, :]
+		x_mean = rearrange(x_mean, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.encoded_out, C2=self.encoded_out)
 		return x_mean
 
 
