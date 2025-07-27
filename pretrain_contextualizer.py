@@ -24,7 +24,7 @@ from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRConte
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Contextualizer/Large/large_experiment_configs/",
-            config_name="wavelet_pretrain")
+            config_name="combined_pretrain")
 def main(cfg:DictConfig) -> None:
 	# Start Run
 	print("Job Started. Parameters:")
@@ -90,14 +90,14 @@ def main(cfg:DictConfig) -> None:
 		elif cfg.meta_params.contextualizer_type == "COMBINED":
 			contextualizer = MENDRCombinedContextualizer(
 				num_channels=19,
-				n_transformer_layers=cfg.contextualizer_params.contextualizer_layers
+				n_transformer_layers=cfg.contextualizer_params.combined_contextualizer_layers
 			).to(device)
 
 			wavelet_contextualizer = MENDRWaveletContextualizer(
-				num_channels=19,
+				num_channels=6,
 				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
 				include_high=cfg.patch_encoder_params.include_high,
-				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+				n_transformer_layers=cfg.contextualizer_params.wavelet_contextualizer_layers
 			).to(device)
 			wavelet_contextualizer.load_state_dict(torch.load(cfg.training_params.wavelet_contextualizer_ckpt_path, weights_only=True), strict=False)
 			for param in wavelet_contextualizer.parameters():
@@ -121,7 +121,12 @@ def main(cfg:DictConfig) -> None:
 		if cfg.meta_params.contextualizer_type == "WAVELET":
 			trainer = MENDRLargeWaveletPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
 		elif cfg.meta_params.contextualizer_type == "COMBINED":
-			trainer = MENDRLargeCombinedPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
+			trainer = MENDRLargeCombinedPreTrainer(autoencoder=autoencoder,
+										wavelet_contextualizer=wavelet_contextualizer,
+										combined_contextualizer=contextualizer, 
+										mix_optimizer=mix_optimizer,
+										cfg=cfg,
+										cuda=device)
 		else:
 			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 

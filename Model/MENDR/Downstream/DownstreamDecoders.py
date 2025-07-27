@@ -5,12 +5,12 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace
 class TUABFinetuneDecoder(nn.Module):
     def __init__(self):
         super().__init__()
-        self.tangent = SPDTangentSpace(9)
+        self.tangent = SPDTangentSpace(19)
         self.flatten = nn.Flatten()
-        self.seq = nn.Sequential(nn.Linear(5*9*5, 5*9*5), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*9*5, 5*9*5))
+        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 5*19*10))
         #self.seq = nn.Sequential(nn.Linear(1*1*10, 1*1*10), nn.LayerNorm(1*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*10, 1*1*10))
         #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*5*11+5*19*1, 1))
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(0.1), nn.Linear(5*9*5, 1))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(0.1), nn.Linear(5*19*10, 1))
         #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
         #self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
 

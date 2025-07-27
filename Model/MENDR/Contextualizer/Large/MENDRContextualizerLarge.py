@@ -19,7 +19,7 @@ class MENDRContextualizerLarge(nn.Module):
 		self.combined_contextualizer = combined_contextualizer
 		self.tangent_space = SPDTangentSpace(self.wavelet_contextualizer.num_channels)
 
-	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
+	def forward(self, x, batch_size, num_patches):
 		wavelet_manifold_output = self.wavelet_contextualizer(x, batch_size, num_patches)
 		# Never mask when calling it from here
 		combined_manifold_output, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0)
@@ -219,18 +219,17 @@ class MENDRCombinedContextualizer(nn.Module):
 		combined_manifold_output = rearrange(combined_manifold_output, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 
 		# Combined Manifold Output should be a clone
-		combined_manifold_output_hidden_dim = combined_manifold_output.shape[-1]
 		mask_idxes = None
 		if mask_ratio > 0.0:
-			x = combined_manifold_output.clone() # Just in case
+			combined_manifold_output_masked = combined_manifold_output.clone() # Just in case
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
-			combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
+			combined_manifold_output_masked = rearrange(combined_manifold_output_masked, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			combined_manifold_output[mask_idxes] = spd_mask
+			combined_manifold_output_masked[mask_idxes] = spd_mask
 
 			'''
 			print(mask_idxes.shape)
@@ -241,7 +240,7 @@ class MENDRCombinedContextualizer(nn.Module):
 						assert not torch.equal(combined_manifold_output[batch_idx, patch_idx], torch.zeros(combined_manifold_output[batch_idx, patch_idx].shape, device=self.device)), f"Masked SPD Matrix {batch_idx, patch_idx} is not equal to the mask"
 			'''
 		else:
-			x = combined_manifold_output.clone()
+			combined_manifold_output_masked = combined_manifold_output.clone()
 		for transformer in self.manifold_transformer:
-			x = transformer(x, batch_size, num_patches)
-		return x, mask_idxes
+			combined_manifold_output_masked = transformer(combined_manifold_output_masked, batch_size, num_patches)
+		return combined_manifold_output, combined_manifold_output_masked, mask_idxes

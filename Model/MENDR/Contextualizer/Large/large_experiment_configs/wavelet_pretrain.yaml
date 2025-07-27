@@ -28,7 +28,7 @@ training_params:
   random_seed: 42
   learning_rate: 0.01
   l2_weight_decay: 0.01
-  batch_size: 16
+  batch_size: 32
   epochs: 5
   T_max: 5
   eta_min: 1.0e-7
@@ -38,4 +38,4 @@ training_params:
   gradient_clip_value: 1e7
   autoencoder_ckpt_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
   weighted_random_sampler: False
-  negatives_loo: 16
+  negatives_loo: 32
