@@ -85,7 +85,7 @@ def process_session(session_path):
 				raw = simplePipelineNoEpoch(raw, sample_rate=128, low_pass=75)
 				for idx, annotation in enumerate(annotations):
 					raw_annotation_event = build_events(raw.copy(), annotation)
-					if raw_annotation_event.times[-1] - raw_annotation_event.times[0] != 20:
+					if raw_annotation_event.times[-1] - raw_annotation_event.times[0] != 6:
 						print(f"Annotation {annotation} is not 20 seconds long ------------------------------------")
 					if args.split == "train":
 						file_ouput_path = os.path.join(args.output_dir, f"{annotation['description']}_{file[:-4]}_event_{idx}.fif")
@@ -106,7 +106,7 @@ def process_session(session_path):
 def build_events(raw, annotation):
 	offset = raw.times[-1]
 	raw_modified = mne.concatenate_raws([raw, raw, raw])
-	raw_annotation_event = raw_modified.copy().crop(offset + annotation['onset'] - 9, offset + annotation['onset'] + round(annotation['duration']) + 10)
+	raw_annotation_event = raw_modified.copy().crop(offset + annotation['onset'] - 2, offset + annotation['onset'] + round(annotation['duration']) + 3)
 	return raw_annotation_event
 
 def parse_args():
