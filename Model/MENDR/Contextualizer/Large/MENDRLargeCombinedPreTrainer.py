@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from Model.baseModelTrainer import BaseModelTrainer
 from Model.MENDR.safeSVD import SVD, svdv2
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
-import from Explainability.embeddingVisualization import plotSPDEmbedding
+from Explainability.embeddingVisualization import plotSPDEmbedding
 from Explainability.plotWaveletEmbeddings import plotWaveletEmbeddingsRiemannian
 import mlflow
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 	'''
 	def __init__(self, autoencoder, wavelet_contextualizer, combined_contextualizer, optimizer, cfg, **kwargs):
 		self.svd = SVD.apply
-		self.contrastive_loss_fn = nn.CrossEntropyLoss()
+		self.contrastive_loss_fn = nn.MSELoss()
 
 		# Freeze the autoencoder and disable the decoder
 		for param in autoencoder.parameters():
@@ -34,13 +34,11 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		assert isinstance(wavelet_contextualizer, MENDRWaveletContextualizer), f"Wavelet Contextualizer must be of type MENDRWaveletContextualizer, but got {type(wavelet_contextualizer)}"
 		assert isinstance(combined_contextualizer, MENDRCombinedContextualizer), f"Combined Contextualizer must be of type MENDRombinedContextualizer, but got {type(combined_contextualizer)}"
 
-		super(MENDRLargeCombinedPreTrainer, self).__init__(autoencoder=autoencoder, wavelet_contextualizer=wavelet_contextualizer,
+		super(MENDRLargeCombinedPreTrainer, self).__init__(autoencoder=autoencoder,
+			wavelet_contextualizer=wavelet_contextualizer,
 			combined_contextualizer=combined_contextualizer,
-			contrastive_loss_fn_combined=self.contrastive_loss_fn,
-			lr=cfg.train_params.learning_rate,
-			l2_weight_decay=cfg.training_params.l2_weight_decay,
-			metrics=dict(),
-			ckpt_dir=cfg.training_params.ckpt_dir,
+			optimizer=optimizer,
+			cfg=cfg,
 			**kwargs)
 
 		# Clamp gradients
@@ -57,13 +55,14 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		batch_size = encodings['delta'].shape[0]
 		num_patches = encodings['delta'].shape[1]
 		wavelet_manifold_output = self.wavelet_contextualizer(encodings, batch_size=batch_size, num_patches=num_patches)
-		combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size=batch_size, num_patches=num_patches)
-		riemannian_loss = self._epochMaskedRecon(combined_manifold_output, combined_manifold_output_masked, mask_idxes, self.contrastive_loss_fn_combined)
+		combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size=batch_size, num_patches=num_patches, mask_ratio=self.cfg.training_params.mask_ratio)
+		riemannian_loss = self.epochMaskedRecon(combined_manifold_output, combined_manifold_output_masked, mask_idxes, self.contrastive_loss_fn)
 		return {
 				'encodings': encodings,
 				'combined_manifold_output': combined_manifold_output,
 				'combined_manifold_output_masked': combined_manifold_output_masked,
 				'riemannian_loss': riemannian_loss,
+				'mask_idxes': mask_idxes
 		}
 	
 	def train_step(self, data):
@@ -71,7 +70,7 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		outputs = self.forward(data)
 		self.backward(loss=outputs['riemannian_loss'])
 		self.optimizer.step()
-		return self._calculate_metrics(outputs['riemannian_loss'])
+		return self._calculate_metrics(outputs['riemannian_loss'].item())
 	
 	def evaluate_step(self, inputs, step_idx):
 		self.train(False)
@@ -101,7 +100,7 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		og_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output[mask_idxes]))
 		masked_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes]))
 		riemannian_loss = 100*criterion(og_eigenvalues, masked_eigenvalues)
-		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
+		return riemannian_loss
 	
 
 	def fit(self, training_dataset, cfg, validation_dataset=None):
@@ -161,11 +160,11 @@ class MENDRLargeCombinedPreTrainer(BaseModelTrainer):
 		if cfg.meta_params.log_model_params_and_grads:
 			self.logger.closeWriter()
 
-		def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
-			tqdm.tqdm.write("Retaining checkpoint...")
-			epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
-			self.save_best(epoch_ckpt_dir)
-			print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
-			# Always save scheduler 
-			torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
-			self.load_best(epoch_ckpt_dir)
+	def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
+		tqdm.tqdm.write("Retaining checkpoint...")
+		epoch_ckpt_dir = f'{self.ckpt_dir}/{mlflow.active_run().info.run_id}_{epoch_idx}'
+		self.save_best(epoch_ckpt_dir)
+		print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}")
+		# Always save scheduler 
+		torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
+		self.load_best(epoch_ckpt_dir)

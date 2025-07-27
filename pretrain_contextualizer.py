@@ -88,13 +88,9 @@ def main(cfg:DictConfig) -> None:
 				n_transformer_layers=cfg.contextualizer_params.contextualizer_layers
 			).to(device)
 		elif cfg.meta_params.contextualizer_type == "COMBINED":
-			contextualizer = MENDRCombinedContextualizer(
-				num_channels=19,
-				n_transformer_layers=cfg.contextualizer_params.combined_contextualizer_layers
-			).to(device)
-
+			
 			wavelet_contextualizer = MENDRWaveletContextualizer(
-				num_channels=6,
+				num_channels=19,
 				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
 				include_high=cfg.patch_encoder_params.include_high,
 				n_transformer_layers=cfg.contextualizer_params.wavelet_contextualizer_layers
@@ -103,6 +99,13 @@ def main(cfg:DictConfig) -> None:
 			for param in wavelet_contextualizer.parameters():
 				param.requires_grad = False
 			wavelet_contextualizer.eval()
+
+			contextualizer = MENDRCombinedContextualizer(
+				num_channels=6,
+				patch_lens=wavelet_contextualizer.patch_lens,
+				n_transformer_layers=cfg.contextualizer_params.combined_contextualizer_layers
+			).to(device)
+
 		else:
 			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 
@@ -124,7 +127,7 @@ def main(cfg:DictConfig) -> None:
 			trainer = MENDRLargeCombinedPreTrainer(autoencoder=autoencoder,
 										wavelet_contextualizer=wavelet_contextualizer,
 										combined_contextualizer=contextualizer, 
-										mix_optimizer=mix_optimizer,
+										optimizer=mix_optimizer,
 										cfg=cfg,
 										cuda=device)
 		else:

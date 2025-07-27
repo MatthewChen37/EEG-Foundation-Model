@@ -9,6 +9,21 @@ from Model.MENDR.Autoencoder.MENDRReconstructionDecoder import SEBasicBlock2d
 from Model.MENDR.mAtt.utils import symmetric
 svd = SVD.apply
 
+class SimplePositionalEncoding(nn.Module):
+	def __init__(self, d_model: int, max_length: int = 100): # max_length is 100 patches
+		super().__init__()
+		self.d_model = d_model
+
+	def forward(self, x, batch_size, num_patches):
+		# x is [B*P, C, C]
+		patch_encoding = torch.zeros(num_patches, self.d_model, self.d_model, device=x.device)
+		for patch_idx in range(num_patches):
+			diagonal_elements = torch.tensor([patch_idx + 1] * self.d_model, device=x.device)
+			patch_encoding[patch_idx] = torch.diag_embed(diagonal_elements)
+		patch_encoding = patch_encoding.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+		patch_encoding = rearrange(patch_encoding, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.d_model, C2=self.d_model)
+		return patch_encoding
+	
 # Based on CBraMod's Assymetric Conditional Positional Encoding (ACPE)
 # Positional as in "Temporal" w.r.t to Patches
 class PositionalEncoding(nn.Module):

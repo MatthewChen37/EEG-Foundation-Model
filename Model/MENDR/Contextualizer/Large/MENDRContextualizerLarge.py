@@ -3,8 +3,8 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, SPDRectified, WaveletLogEuclideanMean, tensor_exp, tensor_log, AttentionManifold
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
-from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes
-from ..ManifoldTransformer import ManifoldTransformer
+from Model.MENDR.MENDRCommon import PositionalEncoding, _make_mask_idxes, SimplePositionalEncoding
+from ..ManifoldTransformer import ManifoldTransformer, _RiemannianResidual
 from einops import rearrange
 
 '''
@@ -178,13 +178,25 @@ class MENDRWaveletContextualizer(nn.Module):
 
 
 class MENDRCombinedContextualizer(nn.Module):
-	def __init__(self, num_channels, n_transformer_layers=6):
+	def __init__(self, num_channels, patch_lens, n_transformer_layers=6):
 		super().__init__()
 		self.num_channels = num_channels
 		self.wavelet_attention = AttentionManifold(self.num_channels, self.num_channels, heads=1)
 		self.pre_attention_spd_transform = nn.Sequential(SPDTransform(self.num_channels, self.num_channels), SPDRectified(), SPDTransform(self.num_channels, self.num_channels))
+		self.patch_lens = patch_lens
+
+		self.wavelet_preattention_spd_transform = dict()
+		for band in self.patch_lens:
+			self.wavelet_preattention_spd_transform[band] = nn.Sequential(SPDTransform(self.num_channels, self.num_channels),
+															SPDRectified(),
+															SPDTransform(self.num_channels, self.num_channels))
+		self.wavelet_preattention_spd_transform = nn.ModuleDict(self.wavelet_preattention_spd_transform)
+
+		self.simple_positional_encoding = SimplePositionalEncoding(self.num_channels)
 
 		assert n_transformer_layers >= 1, "Must have at least one transformer layer"
+
+		self.riemannian_residual = _RiemannianResidual()
 
 		manifold_transformers = []
 		for i in range(n_transformer_layers):
@@ -199,7 +211,7 @@ class MENDRCombinedContextualizer(nn.Module):
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
 		self.mask = torch.from_numpy(np.random.rand(self.num_channels, self.num_channels)).float()
-		self.mask = nn.Parameter(self.mask, requires_grad=True)
+		# self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0):
 		x = []
@@ -216,20 +228,25 @@ class MENDRCombinedContextualizer(nn.Module):
 		#combined_manifold_output = WaveletLogEuclideanMean(wavelet_manifold_output)
 		combined_manifold_output = rearrange(combined_manifold_output, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 		combined_manifold_output = self.pre_attention_spd_transform(combined_manifold_output)
+
+		combined_manifold_output_masked = combined_manifold_output.clone() # Just in case
+		positional_encoding = self.simple_positional_encoding(combined_manifold_output_masked, batch_size, num_patches)
+		combined_manifold_output_masked = self.riemannian_residual(combined_manifold_output_masked, positional_encoding)
+
+		combined_manifold_output_masked = rearrange(combined_manifold_output_masked, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 		combined_manifold_output = rearrange(combined_manifold_output, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 
-		# Combined Manifold Output should be a clone
 		mask_idxes = None
 		if mask_ratio > 0.0:
-			combined_manifold_output_masked = combined_manifold_output.clone() # Just in case
 			# Construct the mask at runtime
 			spd_mask = torch.matmul(self.mask, self.mask.T)
-			combined_manifold_output_masked = rearrange(combined_manifold_output_masked, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
+			# combined_manifold_output_masked = rearrange(combined_manifold_output_masked, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
 			# We randomly mask each patch with probability mask_ratio
 			# and calculate the LEM and then compare it with the full LEM
 			# [B, P, C, C]
 			mask_idxes = _make_mask_idxes(batch_size, num_patches, mask_ratio)
-			combined_manifold_output_masked[mask_idxes] = spd_mask
+			# print(mask_idxes.shape, combined_manifold_output.shape, spd_mask.shape)
+			combined_manifold_output_masked[mask_idxes] = spd_mask.to(combined_manifold_output.device)
 
 			'''
 			print(mask_idxes.shape)
@@ -239,8 +256,7 @@ class MENDRCombinedContextualizer(nn.Module):
 						print("HERE", mask_idxes.shape)
 						assert not torch.equal(combined_manifold_output[batch_idx, patch_idx], torch.zeros(combined_manifold_output[batch_idx, patch_idx].shape, device=self.device)), f"Masked SPD Matrix {batch_idx, patch_idx} is not equal to the mask"
 			'''
-		else:
-			combined_manifold_output_masked = combined_manifold_output.clone()
+
 		for transformer in self.manifold_transformer:
 			combined_manifold_output_masked = transformer(combined_manifold_output_masked, batch_size, num_patches)
 		return combined_manifold_output, combined_manifold_output_masked, mask_idxes

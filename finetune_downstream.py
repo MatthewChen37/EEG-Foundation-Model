@@ -27,7 +27,7 @@ METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kap
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUAB")
+            config_name="TUEV")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")

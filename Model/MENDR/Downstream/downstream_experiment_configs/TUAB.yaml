@@ -23,7 +23,7 @@ training_params:
   learning_rate: 0.001
   l2_weight_decay: 0.01
   ckpt_dir: ./checkpoints
-  random_seed: 42
+  random_seed: 84
   epochs: 4
   batch_size: 512
   scheduler_after_batch: True
