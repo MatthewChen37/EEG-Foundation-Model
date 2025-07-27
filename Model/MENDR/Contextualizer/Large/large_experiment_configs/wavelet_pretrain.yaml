@@ -1,9 +1,10 @@
 meta_params:
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
-  model_size: tiny
-  experiment_name: pretrain_tiny_contextualizer
-  run_name: pretrain_${meta_params.model_size}_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
-  contextualizer_size: TINY
+  model_size: large
+  experiment_name: pretrain_large_contextualizer_wavelet
+  run_name: pretrain_${meta_params.model_size}_wavelet_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
+  contextualizer_size: LARGE
+  contextualizer_type: WAVELET
   log_system_metrics: True
   log_model_params_and_grads: False
   save_model: True
@@ -37,5 +38,5 @@ training_params:
   num_workers: 32
   gradient_clip_value: 1e7
   autoencoder_ckpt_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
-  mask_ratio: 0.2
   weighted_random_sampler: False
+  negatives_loo: 10

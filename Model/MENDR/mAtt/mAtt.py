@@ -26,6 +26,9 @@ class signal2spd(nn.Module):
         tra = tra + (1e-7)*torch.ones(tra.shape).to(tra.device)
         cov /= tra
         identity = torch.eye(cov.shape[-1], cov.shape[-1], device=dev).repeat(x.shape[0], 1, 1)
+        #identity = torch.diag_embed(torch.arange(1, cov.shape[-1] + 1, device=dev)).repeat(x.shape[0], 1, 1)
+        #print(identity.shape, cov.shape)
+        #print(identity)
         # Notice how they also added 1e-5 originally
         cov = cov+(1e-7*identity)
         return cov 
@@ -43,41 +46,84 @@ class E2R(nn.Module):
         return x
 
 class AttentionManifold(nn.Module):
-    def __init__(self, in_embed_size, out_embed_size):
+    def __init__(self, in_embed_size, out_embed_size, heads=1):
         super().__init__()
         self.d_in = in_embed_size
         self.d_out = out_embed_size
+        self.heads = heads
 
-        self.q_trans = SPDTransform(self.d_in, self.d_out)
-        self.k_trans = SPDTransform(self.d_in, self.d_out)
-        self.v_trans = SPDTransform(self.d_in, self.d_out)
+        self.q_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+        self.k_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
+        self.v_trans = SPDTransform(self.heads*self.d_in, self.heads*self.d_out)
 
+        self.temp = nn.Parameter(torch.tensor(1.0, requires_grad=True, dtype=torch.float32))
+        #self.project_out = SPDTransform(self.heads*self.d_out, self.d_out)
+
+    '''
     def forward(self, x, shape=None):
         if len(x.shape)==3 and shape is not None:
             x = x.view(shape[0], shape[1], self.d_in, self.d_in)
-        x = x.to(torch.float)# patch:[b, #patch, c, c]
+
+        x = x.to(torch.float) # patch:[b, #patch, c, c]
         # calculate Q K V
         bs = x.shape[0]
         m = x.shape[1]
         x = x.reshape(bs*m, self.d_in, self.d_in)
+        x = block_diag(x, self.heads)
 
         # repeat 
-        Q = self.q_trans(x).view(bs, m, self.d_out, self.d_out)
-        K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
-        V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
+        Q = self.q_trans(x)
+        K = self.k_trans(x)
+        V = self.v_trans(x)
+
+        Q = unblock_diag(Q, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
+        K = unblock_diag(K, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
+        V = unblock_diag(V, self.heads).view(bs, m, self.heads, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous().view(bs*self.heads, m, self.d_out, self.d_out)
 
         # Don't need to be symmetric
         #assert torch.allclose(Q, Q.mT, atol=(10 ** -10)), f"Q: {Q}"
         #assert torch.allclose(K, K.mT, atol=(10 ** -10)), "K"
         #assert torch.allclose(V, V.mT, atol=(10 ** -10)), "V"
+    
+        # calculate the attention score
+        Q_expand = Q.repeat(1, V.shape[1], 1, 1)
+        K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1)
+        K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
+
+        atten_energy = log_euclidean_distance(Q_expand, K_expand).view(bs*self.heads, m, m)
+        atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)
+
+        # calculate outputs(v_i') of attention module
+        output = LogEuclideanMean(atten_prob, V).view(bs, self.heads, m, self.d_out, self.d_out).permute(0, 2, 1, 3, 4).contiguous()
+        output = reblock_diag(output, self.heads)
+        output = output.contiguous().view(-1, self.heads*self.d_out, self.heads*self.d_out)
+        output = self.project_out(output) # Removes head dimensions
+        return output, (bs, m, -1)
+    '''
+
+    def forward(self, x, shape=None):
+        if len(x.shape) == 3 and shape is not None:
+            x = x.view(shape[0], shape[1], self.d_in, self.d_in)
+        torch.clamp(self.temp, min=1.0) # Ensure temp is always greater than 1.0
+        x = x.to(torch.float)# patch:[b, #patch, c, c]
+        # calculate Q K V
+        bs = x.shape[0]
+        m = x.shape[1]
+        x = x.reshape(bs*m, self.d_in, self.d_in)
+        Q = self.q_trans(x).view(bs, m, self.d_out, self.d_out)
+        K = self.k_trans(x).view(bs, m, self.d_out, self.d_out)
+        V = self.v_trans(x).view(bs, m, self.d_out, self.d_out)
+
         # calculate the attention score
         Q_expand = Q.repeat(1, V.shape[1], 1, 1)
     
         K_expand = K.unsqueeze(2).repeat(1, 1, V.shape[1], 1, 1 )
         K_expand = K_expand.view(K_expand.shape[0], K_expand.shape[1] * K_expand.shape[2], K_expand.shape[3], K_expand.shape[4])
-
+        
         atten_energy = log_euclidean_distance(Q_expand, K_expand).view(V.shape[0], V.shape[1], V.shape[1])
-        atten_prob = nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))).permute(0, 2, 1)#now row is c.c.
+        #print(nn.Softmax(dim=-2)(1/(1+torch.log(1 + atten_energy))))
+
+        atten_prob = nn.Softmax(dim=-2)((torch.exp(-self.temp*atten_energy))).permute(0, 2, 1)#now row is c.c.
 
         # calculate outputs(v_i') of attention module
         output = LogEuclideanMean(atten_prob, V)
@@ -106,8 +152,9 @@ def tensor_log(t):
         channel_num = t.shape[2]
         t = t.reshape(batch_size*patch_num, channel_num, channel_num)
     #s, u = torch.linalg.eigh(t)
-    u, s, v = svd(t)
-    output = u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 2, 1)
+    u, s, _ = svd(t)
+    output = u @ torch.diag_embed(torch.log(s)) @ u.permute(0, 2, 1)
+
     if patch_num is not None:
         return output.reshape(batch_size, patch_num, channel_num, channel_num)
     else:
@@ -133,8 +180,8 @@ def tensor_exp(t):#4dim
         channel_num = t.shape[2]
         t = t.reshape(batch_size*patch_num, channel_num, channel_num)
     #s, u = torch.linalg.eigh(t)
-    u, s, v = svd(t)
-    output = u @ torch.diag_embed(torch.exp(s)) @ v.permute(0, 2, 1)
+    u, s, _ = svd(t)
+    output = u @ torch.diag_embed(torch.exp(s)) @ u.permute(0, 2, 1)
     if patch_num is not None:
         return output.reshape(batch_size, patch_num, channel_num, channel_num)
     else:
@@ -172,7 +219,7 @@ def LogEuclideanMean(weight, cov):
     return tensor_exp(output)
 
 def WaveletLogEuclideanMean(x):
-    # x is dict where each entry is [Batch_Size * epochs, C, C]
+    # x is dict where each entry is [Batch_Size * #patches, C, C]
     x_input = dict()
     if len(x['delta'].shape) == 4:
         for band in x.keys():
@@ -189,3 +236,48 @@ def WaveletLogEuclideanMean(x):
         combined_manifold_output = combined_manifold_output.reshape(x['delta'].shape[0], x['delta'].shape[1],
                                                                     x['delta'].shape[2], x['delta'].shape[3])
     return combined_manifold_output
+
+
+def block_diag(x, heads):
+    # x is a tensor of shape [Batch * #patches, C, C]
+    batch_size, c, _ = x.shape
+    
+    # Create a block diagonal tensor
+    block_size = c * heads
+    result = torch.zeros(batch_size, block_size, block_size, device=x.device, dtype=x.dtype)
+    
+    # Place each block on the diagonal
+    for i in range(heads):
+        start_idx = i * c
+        end_idx = (i + 1) * c
+        result[:, start_idx:end_idx, start_idx:end_idx] = x
+    
+    return result
+
+def unblock_diag(x, heads):
+    # x is a tensor of shape [Batch * #patches, heads*C, heads*C]
+    batch_size, total_c, _ = x.shape
+    c = total_c // heads
+    
+    # Extract diagonal blocks one by one
+    result = torch.zeros(batch_size, heads, c, c, device=x.device, dtype=x.dtype)
+    
+    for i in range(heads):
+        start_idx = i * c
+        end_idx = (i + 1) * c
+        result[:, i, :, :] = x[:, start_idx:end_idx, start_idx:end_idx]
+    return result
+
+def reblock_diag(x, heads):
+    # x is a tensor of shape [Batch, #patches, heads, C, C]
+    batch_size, patches, heads, c, _ = x.shape
+    result = torch.zeros(batch_size, patches, heads*c, heads*c, device=x.device, dtype=x.dtype)
+
+    for i in range(batch_size):
+        for j in range(patches):
+            for k in range(heads):
+                start_idx = k * c
+                end_idx = (k + 1) * c
+                result[:, :, start_idx:end_idx, start_idx:end_idx] = x[i, j, k, :, :]
+    return result
+

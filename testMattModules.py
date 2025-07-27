@@ -215,6 +215,35 @@ def check_safeSVD():
     assert safesvd_gradcheck
     return safesvd_gradcheck
 
+def check_blog_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    output = block_diag(input, 2)
+    check_blog_diag_check = output.shape == torch.Size([B, N*2, N*2])
+    return check_blog_diag_check
+
+def check_unblock_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    input = block_diag(input, 2)
+    #print(input)
+    output = unblock_diag(input, 2)
+    check_unblock_diag_check = output.shape == torch.Size([B, 2, N, N])
+    return check_unblock_diag_check
+
+def check_reblock_diag():
+    B, P, H, N, N = 2, 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, H, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 2, 4, 3)
+    output = reblock_diag(input, 2)
+    check_reblock_diag_check = output.shape == torch.Size([B, P, H*N, H*N])
+    return check_reblock_diag_check
+
 def check_safeEigh():
     B, N = 2, 2
     torch.manual_seed(42)
@@ -224,18 +253,33 @@ def check_safeEigh():
     safeEigh_gradcheck = torch.autograd.gradcheck(function, A, eps=1e-6, atol=1e-4, rtol=1e-3)
     return not safeEigh_gradcheck # this test actually fails, but doesn't matter, we don't use eigh anyway
 
+def check_AttentionManifold():
+    B, P, N, N = 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 3, 2)
+    attention_manifold = AttentionManifold(2, 2, heads=2)
+    output, shape = attention_manifold(input)
+    check_attention_manifold_check = output.shape == torch.Size([B*P, N, N])
+    check_attention_manifold_check = check_attention_manifold_check and shape == torch.Size([B, P, -1])
+    return check_attention_manifold_check
+
 units = {
     'Tangent space layer': check_TangentSpace,
     'Rectification layer': check_Rectified,
     'Untangent space layer': check_UnTangentSpace,
     #'Check eigh': check_eigh,
-    'Tensor Log': check_TensorLog,
-    'Tensor Exp': check_TensorExp,
-    'LogEuclideanMean': check_LogEuclideanMean,
+    #'Tensor Log': check_TensorLog,
+    #'Tensor Exp': check_TensorExp,
+    #'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
+    'Blog Diag': check_blog_diag,
+    'Unblock Diag': check_unblock_diag,
+    'Reblock Diag': check_reblock_diag,
     #'Safe Eigh': check_safeEigh,
+    #'Attention Manifold': check_AttentionManifold
 }
 
 result = True

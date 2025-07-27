@@ -20,7 +20,7 @@ intepretation.
 class WaveletEncoderDecoder(nn.Module):
     def __init__(self, num_channels, sub_patch_size, super_patch_seq_len,
                 hidden_gnn_mlp_ratio, n_gnn_transformer_layers, n_gnn_heads,
-                channel_dropout_p, device, num_subjects=None, out_dim=24):
+                channel_dropout_p, device, num_subjects=None, out_dim=12):
         super().__init__()
         self.num_channels = num_channels
         self.channel_dropout = Dropout1dWithIndexTracking(p=channel_dropout_p)
@@ -117,11 +117,11 @@ class MENDRPatchEncoder(nn.Module):
         super().__init__()
         self.device = device
         self.num_channels = num_channels
+        self.hop_length = 0.5
         self.sampling_rate = sampling_rate
         self.super_patch_seconds = super_patch_seconds
         self.include_high = include_high
 
-        
         # Each represents one second of data
         self.SUPPORTED_WAVELET_LENGTHS = {
             128 : {
@@ -139,8 +139,11 @@ class MENDRPatchEncoder(nn.Module):
 
         self.WAVELET_LENGTHS = self.SUPPORTED_WAVELET_LENGTHS[self.sampling_rate]
         self.WAVELET_SUPER_PATCH_LENGTHS = dict()
+        self.WAVELET_SUPER_PATCH_HOP_LENGTHS = dict()
         for band, second_length in self.WAVELET_LENGTHS.items():
             self.WAVELET_SUPER_PATCH_LENGTHS[band] = self.super_patch_seconds * second_length
+            self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band] = int(self.WAVELET_SUPER_PATCH_LENGTHS[band] * self.hop_length)
+
 
         self.patch_normalizer = std_norm()
 
@@ -251,9 +254,10 @@ class MENDRPatchEncoder(nn.Module):
                 wavelet_data = data[band] # [Batches, Channels, Time Steps]
                 patched_wavelet_data = []
                 wavelet_super_patch_length = self.WAVELET_SUPER_PATCH_LENGTHS[band]
+                #wavelet_super_patch_hop_length = self.WAVELET_SUPER_PATCH_HOP_LENGTHS[band]
                 '''
                 #this is usually slower
-                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_length):
+                for i in range(0, wavelet_data.shape[-1], wavelet_super_patch_hop_length):
                     if i + wavelet_super_patch_length <= wavelet_data.shape[-1]:
                         patched_wavelet_data.append(wavelet_data[:, :, i:i + wavelet_super_patch_length])
                 patched_wavelet_data = torch.stack(patched_wavelet_data, dim=1) # [Batch, Patches, C, T]
@@ -261,7 +265,6 @@ class MENDRPatchEncoder(nn.Module):
                 patched_wavelet_data = rearrange(wavelet_data, 'b c (pn pl) -> b pn c pl', pl=wavelet_super_patch_length)
                 patchified_data[band] = self.patch_normalizer(patched_wavelet_data)
                 #patchified_data[band] = patched_wavelet_data
-        # Truncate patches to the minimum number of patches
         return patchified_data
 
     # For downstream tasks
@@ -270,7 +273,7 @@ class MENDRPatchEncoder(nn.Module):
                                     embedding_dim=1)
 
 class PatchEmbedder(nn.Module):
-    def __init__(self, patch_size, seq_len, in_dim=1, out_dim=8):
+    def __init__(self, patch_size, seq_len, out_dim, in_dim=1):
         super().__init__()
         self.seq_len = seq_len
         self.patch_size = (patch_size // 2) + 1
@@ -288,19 +291,19 @@ class PatchEmbedder(nn.Module):
         # Maintain sequence length
         self.proj1 = nn.Sequential(
             nn.Conv2d(in_channels=self.in_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 
         self.proj2 = nn.Sequential(
             nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 
         self.proj3 = nn.Sequential(
             nn.Conv2d(in_channels=self.out_dim, out_channels=self.out_dim, kernel_size=(1, self.patch_size), stride=(1, self.stride), padding=(0, self.padding)),
-            nn.GroupNorm(num_groups=4, num_channels=self.out_dim),
+            nn.GroupNorm(num_groups=self.out_dim // 4, num_channels=self.out_dim),
             nn.GELU(),
         )
 

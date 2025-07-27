@@ -87,7 +87,7 @@ class MixOptimizer(object):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(process_param_after_step, all_params)
         return loss
-    
+
     '''
     def step(self, closure=None):
         """Performs a single optimization step.

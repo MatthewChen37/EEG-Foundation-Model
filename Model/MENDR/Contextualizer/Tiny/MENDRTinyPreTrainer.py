@@ -64,7 +64,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 	def backward(self, loss):
 		self.optimizer.zero_grad()
 		loss.backward()
-		
+
 	def train_step(self, inputs):
 		self.train(True)
 		outputs = self.forward(inputs)
@@ -87,7 +87,7 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 				combined_manifold_output_masked = combined_manifold_output_masked.reshape(-1, combined_manifold_output.shape[-2], combined_manifold_output.shape[-1])
 				_, combined_fig = plotSPDEmbedding(None, combined_manifold_output, combined_manifold_output_masked, inputs['subject_name'], outputs['mask_idxes'], num_patches=num_patches, num_cols=num_patches)
 				mlflow.log_figure(combined_fig, f"epoch_{self.epoch}_combined_embeddings.pdf")
-				plt.close(combined_fig)
+				#plt.close(combined_fig)
 		return eval_metrics
 
 	def fit(self, training_dataset, cfg, validation_dataset=None):
@@ -124,10 +124,10 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 					input_batch = self._get_batch(val_data_iterator)
 					val_metrics = self.evaluate_step(input_batch, step_idx=iteration)
 					pbar.set_postfix(val_metrics)
-					mlflow.log_metrics(val_metrics, step=epoch*len(pbar) + iteration)
-					epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
 					if cfg.meta_params.log_model_params_and_grads:
 						self.logger.log_model_gradients(self.contextualizer, epoch=epoch*len(pbar) + iteration)
+				epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
+				mlflow.log_metrics(epoch_metrics, step=epoch)
 
 			### SAVE ###
 			if cfg.meta_params.save_model:
@@ -168,14 +168,24 @@ class MENDRTinyPreTrainer(BaseModelTrainer):
 		batch_size = wavelet_manifold_output['delta'].shape[0]
 		num_epochs = wavelet_manifold_output['delta'].shape[1]
 		# Only ever have a non-zero mask ratio HERE
-		combined_manifold_output, combined_manifold_output_masked, mask_idxes = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
+		combined_manifold_output, combined_manifold_output_masked, mask_idxes, _ = self.contextualizer(wavelet_manifold_output, batch_size, num_epochs, mask_ratio=self.mask_ratio)
 		# of shape Batch, epoch, C, C
 
 		# Masked Reconstruction loss
 		# Only compare loss of masked parts
-		og_eigenvalues = torch.linalg.svdvals(combined_manifold_output[mask_idxes])
-		masked_eigenvalues = torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes])
-		riemannian_loss = criterion(og_eigenvalues, masked_eigenvalues)
+		og_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output[mask_idxes]))
+		masked_eigenvalues = torch.log(torch.linalg.svdvals(combined_manifold_output_masked[mask_idxes]))
+		#print(og_eigenvalues[0:5])
+		#print(masked_eigenvalues[0:5])
+		riemannian_loss = 100*criterion(og_eigenvalues, masked_eigenvalues)
+		'''
+		for batch_idx in range(batch_size):
+			for i in range(2):
+				assert not torch.allclose(og_eigenvalues[batch_idx*4 + i], og_eigenvalues[batch_idx*4 + (i + 1)], atol=1e-12, rtol=1e-08), f"Eigenvalues are the same: {og_eigenvalues[batch_idx*4 + i]} {og_eigenvalues[batch_idx*4 + (i + 1)]}"
+				assert not torch.allclose(masked_eigenvalues[batch_idx*4 + i], masked_eigenvalues[batch_idx*4 + (i + 1)], atol=1e-8, rtol=1e-05), f"Eigenvalues are the same: {masked_eigenvalues[batch_idx*4 + i]} {masked_eigenvalues[batch_idx*4 + (i + 1)]}"
+		'''
+		#print("Og Eigenvalues: ", og_eigenvalues)
+		#print("Masked Eigenvalues: ", masked_eigenvalues)
 		return riemannian_loss, combined_manifold_output, combined_manifold_output_masked, mask_idxes
 
 	# Debugging function, usually not used.	

@@ -7,17 +7,17 @@ from Model.MENDR.MENDRCommon import PositionalEncoding, BatchTraceNormalization,
 from einops import rearrange
 
 class ManifoldTransformer(nn.Module):
-    def __init__(self, encoded_h, hidden_scale=1.5, norm_output=True):
+    def __init__(self, num_channels, norm_output=True):
         super().__init__()
-        self.encoded_h = encoded_h
-        self.hidden_scale = hidden_scale
+        self.encoded_h = num_channels
         self.norm_output = norm_output
 
+        #self.down_project = SPDTransform(self.encoded_h, self.encoded_h)
         self.manifold_self_attention = AttentionManifold(self.encoded_h, self.encoded_h)
         self.activation = SPDRectified()
-        self.manifold_self_spd_transform = nn.Sequential(SPDTransform(self.encoded_h, int(self.hidden_scale * self.encoded_h)),
+        self.manifold_self_spd_transform = nn.Sequential(SPDTransform(self.encoded_h, int(1.5*self.encoded_h)),
                                                          self.activation,
-                                                         SPDTransform(int(self.hidden_scale * self.encoded_h), self.encoded_h))
+                                                         SPDTransform(int(1.5*self.encoded_h), self.encoded_h))
         self.riemannian_residual = _RiemannianResidual()
         #self.trace_normalization = BatchTraceNormalization()
         self.layer_normalization = LogEuclidLayerNorm(self.encoded_h)
@@ -26,16 +26,17 @@ class ManifoldTransformer(nn.Module):
         # X is list of [Batch_Size, epochs, C, C]
         x_res, shape = self.manifold_self_attention(x)
         # x_res is [Batch_Size*epochs, C, C]
-        x = rearrange(x, 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.encoded_h, C2=self.encoded_h)
+        x = rearrange(x, 'B P C1 C2 -> (B P) C1 C2', B=shape[0], P=shape[1], C1=self.encoded_h, C2=self.encoded_h)
+        #x = self.down_project(x)
         x = self.riemannian_residual(x, x_res)
         x = self.layer_normalization(x)
         x_res = self.manifold_self_spd_transform(x)
         x = self.riemannian_residual(x, x_res)
         if self.norm_output:
             x = self.layer_normalization(x)
-        x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=batch_size, P=num_patches, C1=self.encoded_h, C2=self.encoded_h)
+        x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=shape[0], P=shape[1], C1=self.encoded_h, C2=self.encoded_h)
         # Symmetrize/Regularize Due to Numeric Instability
-        x = 0.5 * (x + x.transpose(2, 3))
+        # x = 0.5 * (x + x.transpose(-1, -2))
         return x
 
 # https://proceedings.neurips.cc/paper_files/paper/2023/file/c868aa7437dc9b29e674cd2e25689021-Paper-Conference.pdf
@@ -49,5 +50,7 @@ class _RiemannianResidual(nn.Module):
     def forward(self, x, y):
         # x: [Batch*#patches, C, C]
         # y: [Batch*#patches, C, C]
+        #x = 0.5 * (x + x.transpose(-1, -2))
+        #y = 0.5 * (y + y.transpose(-1, -2))
         x = tensor_exp(tensor_log(x) + tensor_log(y))
         return x
