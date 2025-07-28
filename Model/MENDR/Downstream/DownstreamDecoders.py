@@ -229,3 +229,24 @@ class TUEVFinetuneDecoder(nn.Module):
                 nn.init.xavier_uniform_(module.weight, gain=0.1)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
+class ISRUCFinetuneDecoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.tangent = SPDTangentSpace(19)
+        self.flatten = nn.Flatten()
+        self.seq = nn.TransformerDecoderLayer(d_model=190, nhead=4, dim_feedforward=1024, dropout=0.1, batch_first=True)
+        #self.seq = nn.Sequential(nn.Linear(30*19*10, 30*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(30*19*10, 30*19*10))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(30*19*10, 5))
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+        num_patches = x.shape[1]
+        embedding_dim = x.shape[2]
+        x = self.tangent(x.view(batch_size*num_patches, embedding_dim, embedding_dim))
+        x = self.flatten(x)
+        x = x.view(batch_size, num_patches, 30*19*10)
+        x = self.seq(x)
+        x = self.flatten(x)
+        x = self.final_decoder(x)
+        return x
