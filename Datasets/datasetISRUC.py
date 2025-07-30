@@ -1,10 +1,12 @@
 import torch
 import os
 import warnings
-from torch_geometric.data import Dataset
+import numpy as np
+import math
+import mne
+from torch_geometric.data import Dataset, Data
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
 class WaveletISRUCDataset(Dataset):
@@ -14,6 +16,15 @@ class WaveletISRUCDataset(Dataset):
 		# Prevents the FutureWarning: from loading without setting weights_only to True
 		warnings.filterwarnings("ignore", category=FutureWarning)
 		self._index_data()
+
+		self.og_indices = [
+			2,
+			4,
+			8,
+			3,
+			5,
+			9,
+		]
 
 	def _index_data(self):
 		self.graphs = dict()
@@ -50,11 +61,11 @@ class WaveletISRUCDataset(Dataset):
 
 	def len(self):
 		return self.length
-
+	
 	def get(self, idx):
 		epoch_tuple = self.epochs[idx]
-		graph = self.graphs[epoch_tuple[0]].clone()
-		band_file_paths = epoch_tuple[2]
+		graph = torch.load("/home/azureuser/mycontainer/TUEV_processed_3/wavelet_data/eval/1_spsw_005_a__event_0/graphs/1_spsw_005_a__event_0_graph_epoch_0.pt")
+		band_file_paths = epoch_tuple[2]		
 		
 		# Load wavelet data lazily on-demand
 		data = {
@@ -66,7 +77,24 @@ class WaveletISRUCDataset(Dataset):
 			'beta': torch.load(band_file_paths['beta']),
 			'gamma': torch.load(band_file_paths['gamma']),
 		}
-		return data
+
+		new_data = {
+			'delta': torch.zeros(19, data['delta'].shape[1], dtype=torch.double),
+			'theta': torch.zeros(19, data['theta'].shape[1], dtype=torch.double),
+			'alpha': torch.zeros(19, data['alpha'].shape[1], dtype=torch.double),
+			'beta': torch.zeros(19, data['beta'].shape[1], dtype=torch.double),
+			'gamma': torch.zeros(19, data['gamma'].shape[1], dtype=torch.double),
+		}
+
+		new_data['delta'][self.og_indices, :] = data['delta']
+		new_data['theta'][self.og_indices, :] = data['theta']
+		new_data['alpha'][self.og_indices, :] = data['alpha']
+		new_data['beta'][self.og_indices, :] = data['beta']
+		new_data['gamma'][self.og_indices, :] = data['gamma']
+
+		new_data['graph'] = graph
+		new_data['wavelet_folder'] = epoch_tuple[1]
+		return new_data
 	
 if __name__ == "__main__":
 	train_dataset = WaveletISRUCDataset(root="/home/azureuser/mycontainer/ISRUC_Processed/wavelet_data/train", frac=1.0)
@@ -104,15 +132,21 @@ if __name__ == "__main__":
 	data = next(iter(finetune_train_loader))
 	edge_index = data['graph'].edge_index
 	edge_dist = data['graph'].edge_attr
-	assert edge_index[0].min() == 0 and edge_index[0].max() <= 36, f"{edge_index[0].min()}, {edge_index[0].max()}"
-	assert edge_index[1].min() == 0 and edge_index[1].max() <= 36, f"{edge_index[1].min()}, {edge_index[1].max()}"
+	assert edge_index[0].min() == 0 and edge_index[0].max() <= 76, f"{edge_index[0].min()}, {edge_index[0].max()}"
+	assert edge_index[1].min() == 0 and edge_index[1].max() <= 76, f"{edge_index[1].min()}, {edge_index[1].max()}"
 	assert edge_dist.min() == 0 and edge_dist.max() <= 1
 
 	data = next(iter(finetune_eval_loader))
 	edge_index = data['graph'].edge_index
 	edge_dist = data['graph'].edge_attr
-	assert edge_index[0].min() == 0 and edge_index[0].max() <= 36, f"{edge_index[0].min()}, {edge_index[0].max()}"
-	assert edge_index[1].min() == 0 and edge_index[1].max() <= 36, f"{edge_index[1].min()}, {edge_index[1].max()}"
+	assert edge_index[0].min() == 0 and edge_index[0].max() <= 76, f"{edge_index[0].min()}, {edge_index[0].max()}"
+	assert edge_index[1].min() == 0 and edge_index[1].max() <= 76, f"{edge_index[1].min()}, {edge_index[1].max()}"
 	assert edge_dist.min() == 0 and edge_dist.max() <= 1
+
+	torch.set_printoptions(profile="full")
+	print(edge_index)
+	print("---------------")
+	print(edge_dist)
+
 
 	print("All tests passed")
