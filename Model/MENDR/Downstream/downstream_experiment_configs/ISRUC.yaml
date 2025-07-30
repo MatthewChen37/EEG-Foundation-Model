@@ -1,7 +1,7 @@
 meta_params:
-  experiment_name: TUAB_Downstream
+  experiment_name: ISRUC_Downstream
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
-  run_name: finetune_TUAB_downstream
+  run_name: finetune_ISRUC_downstream
   model_name: MENDR
   pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
   pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
@@ -11,25 +11,27 @@ meta_params:
   save_model: False
   save_final_model: False
 dataset_params:
-  name: TUAB
-  train_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/train"
-  eval_data_dir: "/storage/ice1/shared/bmed6780/mip_group_6/ef/TUAB-128Hz/eval"
+  name: ISRUC
+  train_data_dir: "/home/hice1/mchen439/scratch/TUEV_small/train"
+  eval_data_dir: "/home/hice1/mchen439/scratch/TUEV_small/eval"
   train_frac: 1.0
   eval_frac: 1.0
-  metrics: ['accuracy', 'balanced_accuracy', 'auc_pr', 'auroc']
-  task: binary
+  metrics: ['accuracy', 'balanced_accuracy', 'f1', 'cohens_kappa']
+  task: multiclass
 training_params:
-  task_loss: BCEWithLogitsLoss
+  task_loss: CrossEntropyLoss
+  task_loss_params:
+    label_smoothing: 0.1
   learning_rate: 0.001
-  l2_weight_decay: 0.01
+  l2_weight_decay: 0.1
   ckpt_dir: ./checkpoints
-  random_seed: 84
-  epochs: 4
-  batch_size: 512
+  random_seed: 210
+  epochs: 5
+  batch_size: 256
   scheduler_after_batch: True
   num_workers: 32
   eta_min: 1.0e-7
-  weighted_random_sampler: False
+  weighted_random_sampler: True
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128

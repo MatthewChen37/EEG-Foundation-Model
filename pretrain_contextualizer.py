@@ -23,8 +23,8 @@ from Model.MENDR.Contextualizer.Large.MENDRLargeCombinedPreTrainer import MENDRL
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
 
 @hydra.main(version_base="1.2", 
-            config_path="Model/MENDR/Contextualizer/Tiny/tiny_experiment_configs/",
-            config_name="default")
+            config_path="Model/MENDR/Contextualizer/Large/large_experiment_configs/",
+            config_name="combined_pretrain")
 def main(cfg:DictConfig) -> None:
 	# Start Run
 	print("Job Started. Parameters:")
@@ -65,7 +65,9 @@ def main(cfg:DictConfig) -> None:
 	autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params, device=device)
 	for band, encoder_decoder in autoencoder.encoder_decoders.items():
 		encoder_decoder.disableDecoder()
-	autoencoder.load_state_dict(torch.load(cfg.training_params.autoencoder_ckpt_path, weights_only=True), strict=False)
+	if cfg.training_params.autoencoder_ckpt_path is not None:
+		print(f"Loading Autoencoder from {cfg.training_params.autoencoder_ckpt_path}")
+		autoencoder.load_state_dict(torch.load(cfg.training_params.autoencoder_ckpt_path, weights_only=True), strict=False)
 	for param in autoencoder.parameters():
 		param.requires_grad = False # Freeze the autoencoder
 	autoencoder.eval()
@@ -83,24 +85,27 @@ def main(cfg:DictConfig) -> None:
 				num_channels=19,
 				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
 				include_high=cfg.patch_encoder_params.include_high,
-				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+				n_transformer_layers=cfg.contextualizer_params.contextualizer_layers
 			).to(device)
 		elif cfg.meta_params.contextualizer_type == "COMBINED":
-			contextualizer = MENDRCombinedContextualizer(
-				num_channels=19,
-				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
-			).to(device)
-
+			
 			wavelet_contextualizer = MENDRWaveletContextualizer(
 				num_channels=19,
 				out_dim=autoencoder.encoder_decoders['delta'].out_dim,
 				include_high=cfg.patch_encoder_params.include_high,
-				n_transformer_layers=cfg.contextualizer_params.n_transformer_layers
+				n_transformer_layers=cfg.contextualizer_params.wavelet_contextualizer_layers
 			).to(device)
 			wavelet_contextualizer.load_state_dict(torch.load(cfg.training_params.wavelet_contextualizer_ckpt_path, weights_only=True), strict=False)
 			for param in wavelet_contextualizer.parameters():
 				param.requires_grad = False
 			wavelet_contextualizer.eval()
+
+			contextualizer = MENDRCombinedContextualizer(
+				num_channels=6,
+				patch_lens=wavelet_contextualizer.patch_lens,
+				n_transformer_layers=cfg.contextualizer_params.combined_contextualizer_layers
+			).to(device)
+
 		else:
 			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 
@@ -119,7 +124,12 @@ def main(cfg:DictConfig) -> None:
 		if cfg.meta_params.contextualizer_type == "WAVELET":
 			trainer = MENDRLargeWaveletPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
 		elif cfg.meta_params.contextualizer_type == "COMBINED":
-			trainer = MENDRLargeCombinedPreTrainer(autoencoder, contextualizer, mix_optimizer, cfg, cuda=device)
+			trainer = MENDRLargeCombinedPreTrainer(autoencoder=autoencoder,
+										wavelet_contextualizer=wavelet_contextualizer,
+										combined_contextualizer=contextualizer, 
+										optimizer=mix_optimizer,
+										cfg=cfg,
+										cuda=device)
 		else:
 			raise ValueError(f"Unsupported contextualizer type: {cfg.meta_params.contextualizer_type}")
 

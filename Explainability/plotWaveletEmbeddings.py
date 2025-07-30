@@ -42,10 +42,10 @@ def plotWaveletEmbeddingsEuclidean(wavelet_manifold_output, combined_manifold_ou
 
     return fig
 
-def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, title, num_samples=1, num_sample_patches=11, reduction="TSNE"):
+def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_output, title, num_samples=1, num_sample_patches=30, reduction="TSNE"):
     with torch.no_grad():
         if reduction == "TSNE":
-            riemannian_reducer = Riem_Riem_tSNE(perplexity=int(0.75 * num_sample_patches * 6), max_it=10000, max_time=6000)
+            riemannian_reducer = Riem_Riem_tSNE(perplexity=int(0.75 * num_sample_patches * 6), max_it=10000, max_time=600)
         elif reduction == "MDS":
             riemannian_reducer = Riem_Riem_MDS(max_it=100000, max_time=6000)
         else:
@@ -70,6 +70,7 @@ def plotWaveletEmbeddingsRiemannian(wavelet_manifold_output, combined_manifold_o
         legends = np.unique(labels)
 
         data = np.concatenate(data, axis=0)
+        #print("datashape", data.shape)
         embedding = riemannian_reducer.fit(data)
         assert embedding.shape[0] == num_samples * num_sample_patches * 6, f"Embedding Shape: {embedding.shape} Expected Shape: {num_samples * num_sample_patches * 6}"
 

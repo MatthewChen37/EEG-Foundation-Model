@@ -5,7 +5,7 @@ meta_params:
   run_name: pretrain_${meta_params.model_size}_combined_contextualizer_train_size_${training_params.train_frac}_val_size_${training_params.val_frac}
   contextualizer_size: LARGE
   contextualizer_type: COMBINED
-  log_system_metrics: True
+  log_system_metrics: False
   log_model_params_and_grads: False
   save_model: True
   save_final_model: True
@@ -20,10 +20,10 @@ patch_encoder_params:
   include_high: False
   channel_dropout_p: 0.1
 contextualizer_params:
-  contextualizer_layers: 6
+  wavelet_contextualizer_layers: 6
+  combined_contextualizer_layers: 8
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
-  pretrained_patch_encoder_dir: null
   train_frac: 0.9
   val_frac: 0.1   
   random_seed: 42
@@ -39,5 +39,5 @@ training_params:
   gradient_clip_value: 1e7
   mask_ratio: 0.2
   autoencoder_ckpt_path: "./checkpoint/pretrained_autoencoder_no_high_out_dim_12/autoencoder_weights.pth"
-  wavelet_contextualizer_ckpt_path: "./checkpoint/pretrained_wavelet_contextualizer/combined_wavelet_contextualizer_weights.pth"
+  wavelet_contextualizer_ckpt_path: "./checkpoint/pretrained_wavelet_contextualizer_trace/wavelet_contextualizer_weights.pth"
   weighted_random_sampler: False

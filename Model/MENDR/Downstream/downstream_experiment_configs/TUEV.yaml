@@ -4,12 +4,12 @@ meta_params:
   run_name: finetune_TUEV_downstream
   model_name: MENDR
   pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
-  pretrained_contextualizer_path: null
+  pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
   contextualizer_size: TINY
-  log_system_metrics: True
+  log_system_metrics: False
   log_model_params_and_grads: False
   save_model: False
-  save_final_model: True
+  save_final_model: False
 dataset_params:
   name: TUEV
   train_data_dir: "/home/hice1/mchen439/scratch/TUEV_small/train"
@@ -22,16 +22,16 @@ training_params:
   task_loss: CrossEntropyLoss
   task_loss_params:
     label_smoothing: 0.1
-  learning_rate: 0.0005
-  l2_weight_decay: 0.05
+  learning_rate: 0.001
+  l2_weight_decay: 0.1
   ckpt_dir: ./checkpoints
-  random_seed: 42
+  random_seed: 210
   epochs: 10
   batch_size: 256
   scheduler_after_batch: True
   num_workers: 32
-  eta_min: 1.0e-6
-  weighted_random_sampler: False
+  eta_min: 1.0e-7
+  weighted_random_sampler: True
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128

@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from Model.MENDR.mAtt.mAtt import E2R, AttentionManifold, SPDRectified, WaveletLogEuclideanMean
 from Model.MENDR.mAtt.spd import SPDTangentSpace, SPDTransform
+from Model.MENDR.mAtt.utils import symmetric
 from Model.MENDR.MENDRCommon import (PositionalEncoding,
 							_make_mask_idxes,
 							BatchTraceNormalization,
@@ -62,7 +63,7 @@ class MENDRContextualizerTiny(nn.Module):
 		self.wavelet_conv_reduce = dict()
 		for band in self.patch_lens.keys():
 			self.wavelet_conv_reduce[band] = nn.Sequential(
-												nn.Conv2d(self.num_channels, self.num_channels, kernel_size=(3, self.patch_lens[band] + 1), stride=(1, 1), padding=(1, self.patch_lens[band] // 2)),
+												nn.Linear(self.out_dim*self.patch_lens[band], self.out_dim*self.patch_lens[band]),
 												nn.GELU(),
 												nn.Linear(self.out_dim*self.patch_lens[band], self.out_dim*self.patch_lens[band])
 											)

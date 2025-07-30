@@ -19,7 +19,7 @@ def is_nan_or_inf(A):
     return False
 
 def is_pos_def(x):
-    return torch.all(torch.linalg.eigvals(x) > 0)
+    return torch.all(torch.linalg.eigvals(x).real > 0)
 
 def matrix_operator(A, operator):
     s, u = torch.linalg.eigh(A)

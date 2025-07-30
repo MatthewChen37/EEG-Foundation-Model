@@ -27,7 +27,7 @@ METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kap
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUAB")
+            config_name="TUEV")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
@@ -85,10 +85,10 @@ def main(cfg:DictConfig) -> None:
             num_channels=19,
             out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
             include_high=cfg.patch_encoder_params.include_high,
-            n_transformer_layers=2,
+            n_transformer_layers=6,
         )
         combined_contextualizer = MENDRCombinedContextualizer(
-            num_channels=19,
+            num_channels=6,
             n_transformer_layers=6,
         )
     else:
@@ -110,19 +110,19 @@ def main(cfg:DictConfig) -> None:
                 param.requires_grad = True
         elif cfg.meta_params.contextualizer_size == "LARGE":
             wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
-            wavelet_contextualizer.eval()
+            wavelet_contextualizer.train()
             combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
-            combined_contextualizer.eval()
+            combined_contextualizer.train()
             for param in wavelet_contextualizer.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
             for param in combined_contextualizer.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
 
     if cfg.meta_params.contextualizer_size == "TINY":
         model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
         contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
     elif cfg.meta_params.contextualizer_size == "LARGE":
-        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder=cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
         contextualizer_params = sum(p.numel() for p in combined_contextualizer.parameters() if p.requires_grad) + sum(p.numel() for p in wavelet_contextualizer.parameters() if p.requires_grad)
     else:
         raise Exception("Contextualizer size not found")
