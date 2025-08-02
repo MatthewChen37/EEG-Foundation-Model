@@ -112,7 +112,7 @@ def process_annotation(annotations_for_epoch):
 	return torch.tensor(annotations)
 
 def parse_args():
-	parser = argparse.ArgumentParser(description='Create graphs for TUAB')
+	parser = argparse.ArgumentParser(description='Create graphs for TUEV')
 	parser.add_argument('--input_directory', type=str, required=True,
 					  help='Path to epoched data.')
 	parser.add_argument('--output_directory', type=str, required=True,

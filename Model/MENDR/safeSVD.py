@@ -81,7 +81,36 @@ class SVD(torch.autograd.Function):
 		dA = U @ (Su + Sv + torch.diag_embed(dS)) @ Vt 
 		return dA
 
-	
+class SVD_eigh(torch.autograd.Function):
+	@staticmethod
+	def forward(self, A):
+		U, S, _ = torch.svd(A)
+		self.save_for_backward(U, S)
+		return U, S
+
+	@staticmethod
+	# Must be a decomposition of batches of matrices
+	def backward(self, dU, dS):
+		U, S = self.saved_tensors
+		# U: [B, N, N], S: [B, N], V: [B, N, N]
+		Ut = U.permute(0, 2, 1)
+		M = U.size(1)
+		#NS = len(S[1])
+
+		F = (S[..., None, :] - S[..., None])
+		F.diagonal(dim1=-2, dim2=-1).fill_(np.inf)
+		mask = (torch.abs(F) <= 1e-20)
+		F[mask] += 1e-20
+		F = 1./F
+
+		UdU = Ut @ dU
+
+		Su = (F+G)*(UdU-UdU.permute(0, 2, 1))/2
+
+		dA = U @ (torch.diag_embed(dS) + F*(Udu-UdU.permute(0, 2, 1))/2) @ Ut
+		return dA
+
+
 # From https://github.com/xitorch/xitorch/blob/ad9eec1b02804d0934e091640559cb66e3ec7f2c/xitorch/_impls/linalg/symeig.py#L47
 class Eigh(torch.autograd.Function):
 	def forward(self, A):

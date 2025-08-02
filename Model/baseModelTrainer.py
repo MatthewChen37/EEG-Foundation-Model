@@ -1,25 +1,24 @@
 import torch
-import torch.nn as nn
 import tqdm
 import re
 import os
 import mlflow
+import numpy as np
 from torch_geometric.loader import DataLoader
+from torch.utils.data import WeightedRandomSampler
 from sys import gettrace
-from .transforms import BatchTransform
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from pathlib import Path
 from Model.loggingUtil import MENDRLogger
-from Explainability.embeddingVisualization import plotSPDEmbedding
-import matplotlib.pyplot as plt
+import multiprocessing
+import concurrent.futures
 
 '''
 Based on:
 1. https://github.com/SPOClab-ca/dn3/blob/master/dn3/trainable/processes.py
 '''
 class BaseModelTrainer(object):
-
-    def __init__(self, lr=0.001, l2_weight_decay=0.01, cuda=None, ckpt_dir=None, **kwargs):
+    def __init__(self, optimizer, cfg, cuda, **kwargs):
         """
         By default uses the SGD with momentum optimization.
         """
@@ -38,56 +37,33 @@ class BaseModelTrainer(object):
 
         self.cuda = cuda
         self.device = torch.device(cuda)
-        
         _before_members = set(self.__dict__.keys())
         self.__dict__.update(**kwargs)
-
         new_members = set(self.__dict__.keys()).difference(_before_members)
         self._training = False
 
-        # Names of trainable objects
+        # Note: I think BENDR's implementation is incorrect:
+        # https://github.com/SPOClab-ca/dn3/blob/4d477fe42d3d8ce64f3b790585bfa5c7acb84848/dn3/trainable/processes.py#L85
+        # Trainables should be tensors/modules that have grads or are in training mode
         self._trainables = list()
         for member in new_members:
             if isinstance(self.__dict__[member], (torch.nn.Module, torch.Tensor, torch.nn.Parameter)):
-                if not (isinstance(self.__dict__[member], torch.Tensor) and not self.__dict__[member].requires_grad):
+                if isinstance(self.__dict__[member], (torch.Tensor, torch.nn.Parameter)) and not self.__dict__[member].requires_grad:
                     self._trainables.append(member)
+                if isinstance(self.__dict__[member], torch.nn.Module) and self.__dict__[member].training:
+                    self._trainables.append(member)
+                
                 self.__dict__[member] = self.__dict__[member].to(self.device)
         print(f"Trainables: {self._trainables}")
-        self.optimizer = MixOptimizer(torch.optim.SGD(self.parameters(), weight_decay=l2_weight_decay, lr=lr, nesterov=True, momentum=0.9))
-        self.scheduler_after_batch = True
-        self.epoch = None
-        self.lr = lr
-        self.weight_decay = l2_weight_decay
-        self.ckpt_dir = ckpt_dir
-        self.loaded_from_ckpt = False
 
-    def set_optimizer(self, optimizer):
-        # assert isinstance(optimizer, torch.optim.Optimizer)
-        del self.optimizer
         self.optimizer = optimizer
-        self.lr = float(self.optimizer.optimizer.param_groups[0]['lr'])
-
-    def _optimize_dataloader_kwargs(self, num_worker_cap=6, **loader_kwargs):
-        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
-        # Use multiple worker processes when NOT DEBUGGING
-        if gettrace() is None:
-            try:
-                # Find number of cpus available (taken from second answer):
-                # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
-                m = re.search(r'(?m)^Cpus_allowed:\s*(.*)$',
-                              open('/proc/self/status').read())
-                nw = bin(int(m.group(1).replace(',', ''), 16)).count('1')
-                # Cap the number of workers at 6 (actually 4) to avoid pummeling disks too hard
-                nw = min(num_worker_cap, nw)
-            except FileNotFoundError:
-                # Fallback for when proc/self/status does not exist
-                nw = 2
-        else:
-            # 0 workers means not extra processes are spun up
-            nw = 2
-        loader_kwargs.setdefault('num_workers', int(nw - 2))
-        print("Loading data with {} additional workers".format(loader_kwargs['num_workers']))
-        return loader_kwargs
+        self.scheduler_after_batch = cfg.training_params.scheduler_after_batch
+        self.epoch = None
+        self.ckpt_dir = cfg.training_params.ckpt_dir
+        self.loaded_from_ckpt = False
+        self.train_dataset = None
+        self.validation_dataset = None
+        self.cfg = cfg
 
     def _get_batch(self, iterator):
         batch = next(iterator)
@@ -129,23 +105,10 @@ class BaseModelTrainer(object):
         '''
         raise NotImplementedError
 
-    def calculate_metrics(self, inputs, outputs):
-        """
-        Given the inputs to and outputs from underlying modules, calculate the metrics.
-
-        Returns
-        -------
-        metrics : dict
-                  Dictionary of metrics to be recorded.
-        """
-        raise NotImplementedError
-
     def train(self, mode=True):
         self._training = mode
         for member in self._trainables:
             self.__dict__[member].train(mode=mode)
-            if hasattr(member, 'freeze_features'):
-                member.freeze_features(unfreeze=mode)
 
     def train_step(self, inputs):
         ''' 
@@ -189,25 +152,34 @@ class BaseModelTrainer(object):
         
     @classmethod
     def standard_logging(cls, metrics: dict, start_message="End of Epoch"):
+        val_seen = False
         if start_message.rstrip()[-1] != '|':
-            start_message = start_message.rstrip() + " |" + "\n"
+            start_message = start_message.rstrip() + " |"
         for m in metrics:
+            if 'val' in m.lower() and not val_seen:
+                val_seen = True
+                start_message += "\n    "
             if 'acc' in m.lower() or 'pct' in m.lower():
-                start_message += " {}: {:.2%} |".format(m, metrics[m]) + "\n"
+                start_message += " {}: {:.2%} |".format(m, metrics[m])
             elif m == 'lr':
-                start_message += " {}: {:.3e} |".format(m, metrics[m]) + "\n"
+                start_message += " {}: {:.3e} |".format(m, metrics[m])
             else:
-                start_message += " {}: {:.3f} |".format(m, metrics[m]) + "\n"
+                start_message += " {}: {:.3f} |".format(m, metrics[m])
         tqdm.tqdm.write(start_message)
 
     def save_best(self, epoch_ckpt_dir):
         """
         Create a snapshot of what is being currently trained for re-loading with the load_best() method.
         """
+        world_size = int(os.environ.get("WORLD_SIZE",1))
+        distributed = world_size > 1
         assert epoch_ckpt_dir != None, "Checkpoint Directory is none."
         Path(epoch_ckpt_dir).mkdir(parents=True, exist_ok=True)
         for trainable_member in self._trainables:
-            torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
+            if distributed:
+                torch.save(self.__dict__[trainable_member].module.state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
+            else:
+                torch.save(self.__dict__[trainable_member].state_dict(), os.path.join(epoch_ckpt_dir, f'{trainable_member}_weights.pth'))
 
     def load_best(self, epoch_ckpt_dir):
         """
@@ -221,9 +193,17 @@ class BaseModelTrainer(object):
                 module_weight_path = os.path.join(epoch_ckpt_path, f'{trainable_member}_weights.pth') 
                 assert os.path.exists(module_weight_path), f"{trainable_member}_weights.pth does not exist"
                 self.__dict__[trainable_member].load_state_dict(torch.load(module_weight_path, weights_only=True))
-        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=True))
+        self.optimizer.scheduler.load_state_dict(torch.load(os.path.join(epoch_ckpt_path,"scheduler.pth"), weights_only=False))
         self.loaded_from_ckpt = True
 
+
+    def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
+        """
+        Save model depending on the metrics. This must be implemented in the child class.
+        """
+        raise NotImplementedError
+
+    '''
     def _retain_best(self, epoch_idx : int, metrics_to_check: dict):
         training_Combined_loss = metrics_to_check[f'total_epoch_training_Combined Riemannian Loss']
         validation_Combined_loss = metrics_to_check[f'total_epoch_validation_Combined Riemannian Loss']
@@ -239,104 +219,168 @@ class BaseModelTrainer(object):
         torch.save(self.optimizer.scheduler.state_dict(), f'{epoch_ckpt_dir}/scheduler.pth')
         self.load_best(epoch_ckpt_dir)
         # Always save scheduler 
+    '''
 
-    @staticmethod
-    def _dataloader_args(dataset, training=False, **loader_kwargs):
-        # Only shuffle and drop last when training
-        loader_kwargs.setdefault('shuffle', training)
-        loader_kwargs.setdefault('drop_last', training)
-
-        return loader_kwargs
-
-    def _make_dataloader(self, dataset, training=False, **loader_kwargs):
-        """Any args that make more sense as a convenience function to be set"""
+    def _make_dataloader(self, dataset, cfg, training=False, sampler=None):
+        '''
         if isinstance(dataset, DataLoader):
             return dataset
+        loader_kwargs = dict()
+        loader_kwargs.setdefault('pin_memory', self.cuda == 'cuda')
+        loader_kwargs.setdefault('num_workers', cfg.training_params.num_workers)
+        loader_kwargs.setdefault('batch_size', cfg.training_params.batch_size)
+        loader_kwargs.setdefault('persistent_workers', True)
+        loader_kwargs.setdefault('drop_last', training)
+        loader_kwargs.setdefault('sampler', sampler)
+        if cfg.training_params.weighted_random_sampler and training: # only use weighted sampler for training datasets
+            print("Using Weighted Random Sampler")
+            print("Loading dataset class counts")
+            if cfg.dataset_params.name == "TUAB":
+                label_count = {
+                    0: 0,
+                    1: 0,
+                }
+                y = []
+                for i in tqdm.tqdm(range(len(dataset))):
+                    graph = dataset[i]['graph']
+                    train_label = graph.y.item()
+                    assert train_label >= 0 and train_label <= 1, f"Label {train_label} is not in range [0, 1]"
+                    label_count[train_label] += 1
+                    y.append(train_label)
+                print("Label Counts", label_count)
+                label_counts_arr = np.array(list(label_count.values()))
+                sampler_class_weight = 1. / torch.from_numpy(label_counts_arr)
+                samples_weight = np.array([sampler_class_weight[t] for t in y])
+                sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight))
+                loader_kwargs['sampler'] = sampler
+            elif cfg.dataset_params.name == "TUEV":
+                label_count = {
+                    0: 645,
+                    1: 11254,
+                    2: 6184,
+                    3: 1070,
+                    4: 11053,
+                    5: 53726
+                }
+                y = []
+                for i in tqdm.tqdm(range(len(dataset))):
+                    graph = dataset[i]['graph']
+                    train_label = graph.y.item()
+                    #assert train_label >= 0 and train_label <= 5, f"Label {train_label} is not in range [0, 5]"
+                    #label_count[train_label] += 1
+                    y.append(train_label)
+                print("Label Counts", label_count)
+                label_counts_arr = np.array(list(label_count.values()))
+                sampler_class_weight = 1. / torch.from_numpy(label_counts_arr)
+                samples_weight = np.array([sampler_class_weight[t] for t in y])
+                sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight))
+                loader_kwargs['sampler'] = sampler
+        else:
+            loader_kwargs.setdefault('shuffle', True)
+        return DataLoader(dataset, **loader_kwargs)
+        '''
+        if isinstance(dataset, DataLoader):
+            return dataset
+        loader_kwargs = {
+            'pin_memory': self.cuda == 'cuda',
+            'num_workers': cfg.training_params.num_workers,
+            'batch_size': cfg.training_params.batch_size,
+            'persistent_workers': True,
+            'drop_last': training,
+        }
+        
+        if cfg.training_params.weighted_random_sampler and training:
+            print("Using Weighted Random Sampler")
+            sampler = self._create_weighted_sampler_optimized(dataset, cfg)
+            loader_kwargs['sampler'] = sampler
+        else:
+            loader_kwargs['shuffle'] = True
+        
+        return DataLoader(dataset, **loader_kwargs)
 
-        return DataLoader(dataset, **self._dataloader_args(dataset, training, **loader_kwargs))
-    
-    def fit(self, training_dataset, validation_dataset=None, epochs=1, batch_size=8, **loader_kwargs):
-        loader_kwargs.setdefault('batch_size', batch_size)
-        loader_kwargs = self._optimize_dataloader_kwargs(**loader_kwargs)
-        training_dataloader = self._make_dataloader(training_dataset, training=True, **loader_kwargs)
+
+    def _extract_labels_parallel(self, dataset, num_workers=None):
+        """Extract labels using threading (avoids pickling issues)"""
+        if num_workers is None:
+            num_workers = min(8, multiprocessing.cpu_count())
+        
+        def extract_label(idx):
+            return dataset[idx]['graph'].y.item()
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            y = list(tqdm.tqdm(
+                executor.map(extract_label, range(len(dataset))), 
+                total=len(dataset),
+                desc="Extracting labels"
+            ))
+        return y
+
+    def _create_weighted_sampler_optimized(self, dataset, cfg):
+        """Optimized weighted sampler creation"""
+        if cfg.dataset_params.name == "TUEV":
+            # Use pre-computed counts to avoid dataset iteration
+            # {0: 567, 1: 4677, 2: 1998, 3: 329, 4: 2204, 5: 19646}
+            label_count = {0: 645, 1: 11254, 2: 6184, 3: 1070, 4: 11053, 5: 53726}
+            print(f"Using pre-computed label counts: {label_count}")
+            
+            # Only extract labels, don't recompute counts
+            y = self._extract_labels_parallel(dataset, num_workers=cfg.training_params.num_workers)
+                
+        elif cfg.dataset_params.name == "TUAB":
+            label_count = {0: 0, 1: 0}
+            y = []
+            for i in tqdm.tqdm(range(len(dataset)), desc="Computing label counts"):
+                label = dataset[i]['graph'].y.item()
+                label_count[label] += 1
+                y.append(label)
+            print(f"Computed label counts: {label_count}")
+        
+        # Vectorized weight computation
+        label_counts_arr = np.array(list(label_count.values()))
+        class_weights = 1.0 / label_counts_arr
+        sample_weights = class_weights[y]
+        
+        return WeightedRandomSampler(
+            weights=sample_weights, 
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+
+    def _setup_experiment(self, cfg, rank, train_sampler=None, val_sampler=None):
+        # We cannot log models to MlFlow due to our custom modules.
+        assert self.train_dataset != None, "Train Dataset not specified."
+        assert self.validation_dataset != None, "Validation Dataset not specified."
+        if rank == 0:
+            mlflow.set_experiment(cfg.meta_params.experiment_name)
+        training_dataloader = self._make_dataloader(self.train_dataset, cfg, training=True, sampler=train_sampler)
         print("Training on {} sample batches.".format(len(training_dataloader)))
 
         validation_dataloader = None
-        if validation_dataset != None:
-            validation_dataloader = self._make_dataloader(validation_dataset, training=False, **loader_kwargs)
+        if self.validation_dataset != None:
+            validation_dataloader = self._make_dataloader(self.validation_dataset, cfg, training=False, sampler=val_sampler)
             print("Validation on {} sample batches.".format(len(validation_dataloader)))
 
-        mlflow.start_run()
-        self.logger = MENDRLogger()
+        if rank == 0:
+            mlflow.start_run(run_name=cfg.meta_params.run_name,
+            log_system_metrics=cfg.meta_params.log_system_metrics)
 
-        signature = None
-        if self.loaded_from_ckpt == False:
-            self.optimizer.set_scheduler_t0(len(training_dataloader))
-        for epoch in range(epochs):
-            epoch_metrics = {}
-            self.epoch = epoch
+        if rank == 0 and cfg.meta_params.log_model_params_and_grads:
+            self.logger = MENDRLogger()
 
-            ''' TRAINING '''
-            train_pbar = tqdm.trange(len(training_dataloader), desc="Epoch {}".format(epoch), ncols=400, position=0, leave=True)
-            train_data_iterator = iter(training_dataloader)
-            self.train(True)
-            for iteration in train_pbar:
-                input_batch = self._get_batch(train_data_iterator)
-                train_metrics = self.train_step(input_batch)
-                train_pbar.set_postfix(train_metrics)
-                mlflow.log_metrics(train_metrics, step=epoch*len(train_pbar) + iteration)
-                epoch_metrics = self._epoch_metrics(epoch_metrics, train_metrics, "training")
-                if self.scheduler_after_batch:
-                    self.optimizer.scheduler_step(epoch*len(train_pbar) + iteration)
-                # Logging
-                self.logger.log_model_gradients(self.mendr_model.mendr_encoder, epoch=epoch * len(train_pbar) + iteration)
-                self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer, epoch=epoch * len(train_pbar) + iteration)
-                if self.mendr_model.contextualizer_size.upper() == "LARGE":
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.temp1, epoch=epoch * len(train_pbar) + iteration, name="Temperature")
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
-                elif self.mendr_model.contextualizer_size.upper() == "TINY":
-                    self.logger.log_model_gradients(self.mendr_model.mendr_contextualizer.Contextualizer.mask, epoch=epoch * len(train_pbar) + iteration, name="Mask")
-                else:
-                    raise ValueError("Unidentified Contextualizer Type")
-
-            ''' VALIDATION '''
-            if validation_dataloader != None:
-                self.train(False)
-                pbar = tqdm.trange(len(validation_dataloader), desc="Predicting", ncols=400, position=0, leave=True)
-                val_data_iterator = iter(validation_dataloader)
-                for iteration in pbar:
-                    input_batch = self._get_batch(val_data_iterator)
-                    val_metrics = self.evaluate_step(input_batch, iteration)
-                    epoch_metrics = self._epoch_metrics(epoch_metrics, val_metrics, "validation")
-                    pbar.set_postfix(val_metrics)
-
-                
-                ''' SAVE '''
-                self._retain_best(epoch, epoch_metrics)
-                self.standard_logging(epoch_metrics, "End of Epoch")
-                self.logger.logEncoderParams(self.mendr_model.mendr_encoder, step=epoch)
-                self.logger.logContextualizerParams(self.mendr_model.mendr_contextualizer, step=epoch)
-                if self.mendr_model.contextualizer_size.upper() == 'LARGE':
-                    self.logger.logMENDRTrainerParams(self.mendr_model.mendr_contextualizer.temp1, self.mendr_model.mendr_contextualizer.CombinedContextualizer.mask, step=epoch)
-                elif self.mendr_model.contextualizer_size.upper() == 'TINY':
-                    self.logger.logMENDRTrainerParams(None, self.mendr_model.mendr_contextualizer.Contextualizer.mask, step=epoch)
-                else:
-                    raise ValueError("Unidentified Contextualizer Type")
-                mlflow.log_metrics(epoch_metrics, step=epoch)
-                print("Epoch: ", epoch, "Total Training Loss: ", epoch_metrics['total_epoch_training_Combined Riemannian Loss'], "Total Validation Loss: ", epoch_metrics['total_epoch_validation_Combined Riemannian Loss'])
-                if self.ckpt_dir != None:
-                    print(f"Saved Model to: {self.ckpt_dir}/{mlflow.active_run().info.run_id}_{self.epoch}_{self.mendr_model.contextualizer_size.upper()}")
-            if not self.scheduler_after_batch:
-                self.optimizer.scheduler_step(epoch)
-
-        mlflow.end_run()
-        self.logger.closeWriter()
-
+        return training_dataloader, validation_dataloader
+    
     def _epoch_metrics(self, aggregated_metrics, metric_dict, step):
         for metric in metric_dict:
             if metric != 'lr':
-                if metric not in aggregated_metrics :
+                if f'total_epoch_{step}_{metric}' not in aggregated_metrics:
                     aggregated_metrics[f'total_epoch_{step}_{metric}'] = metric_dict[metric]
                 else:
                     aggregated_metrics[f'total_epoch_{step}_{metric}'] += metric_dict[metric]
         return aggregated_metrics
+
+    
+    def fit(self, training_dataset, cfg, validation_dataset=None):
+        """
+        Fit the specific model to the training dataset. This must be implemented in the child class.
+        """
+        raise NotImplementedError

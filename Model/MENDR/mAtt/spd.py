@@ -7,21 +7,21 @@ import numpy as np
 from .utils import *
 from . import StiefelParameter
 from ..safeSVD import SVD
+svd = SVD.apply
 
 '''
 Modified from https://github.com/CECNL/MAtt/blob/main/mAtt/spd.py
 '''
 class SPDTransform(nn.Module):
 
-    def __init__(self, input_size, output_size, device):
+    def __init__(self, input_size, output_size):
         super(SPDTransform, self).__init__()
-        self.device = device
         self.increase_dim = None
         if output_size > input_size:
-            self.increase_dim = SPDIncreaseDim(input_size, output_size, self.device)
+            self.increase_dim = SPDIncreaseDim(input_size, output_size)
             input_size = output_size
-        self.weight = StiefelParameter(torch.FloatTensor(input_size, output_size).to(self.device), requires_grad=True)
-        nn.init.orthogonal_(self.weight)
+        self.weight = StiefelParameter(torch.FloatTensor(input_size, output_size), requires_grad=True)
+        nn.init.orthogonal_(self.weight, gain=1)
 
     def forward(self, input):
         output = input
@@ -35,12 +35,10 @@ class SPDTransform(nn.Module):
 
 class SPDIncreaseDim(nn.Module):
 
-    def __init__(self, input_size, output_size, device):
+    def __init__(self, input_size, output_size):
         super(SPDIncreaseDim, self).__init__()
-        self.device = device
-        self.register_buffer('eye', torch.eye(output_size, input_size).to(self.device))
+        self.register_buffer('eye', torch.eye(output_size, input_size))
         add = torch.as_tensor([0] * input_size + [1] * (output_size-input_size), dtype=torch.float32)
-        add = add.to(self.device)
         self.register_buffer('add', torch.diag(add))
 
     def forward(self, input):
@@ -71,12 +69,11 @@ class ParametricVectorize(nn.Module):
 
 class SPDVectorize(nn.Module):
 
-    def __init__(self, input_size, device):
+    def __init__(self, input_size):
         super(SPDVectorize, self).__init__()
-        self.device = device
         row_idx, col_idx = torch.triu_indices(input_size, input_size)
-        self.register_buffer('row_idx', torch.LongTensor(row_idx).to(self.device))
-        self.register_buffer('col_idx', torch.LongTensor(col_idx).to(self.device))
+        self.register_buffer('row_idx', torch.LongTensor(row_idx))
+        self.register_buffer('col_idx', torch.LongTensor(col_idx))
 
     def forward(self, input):
         output = input[:, self.row_idx, self.col_idx]
@@ -135,14 +132,28 @@ class SPDTangentSpaceFunction(Function):
 
         return output
         '''
+
+        '''
+        #assert not torch.isnan(input).any(), f"SPDTangentSpace Function contains NaN values: {input}"
+        # Perform batch eigen decomposition
         ctx.save_for_backward(input)
-         # Perform batch eigen decomposition
         s, u = torch.linalg.eigh(input)  # Batch eigen decomposition
         # Take the logarithm of the eigenvalues
         s = s.log()
+        #assert not torch.isnan(s).any(), f"SPDTangentSpace Function contains NaN values: {s}"
+        #assert not torch.isnan(u).any(), f"SPDTangentSpace Function contains NaN values: {u}"
         # Reconstruct the output using batch operations
         output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
+        #assert not torch.isnan(output).any(), f"SPDTangentSpace Function contains NaN values: {output}"
         return output
+        '''
+
+        ctx.save_for_backward(input)
+        u, s, _ = svd(input)
+        s = s.log()
+        output = torch.bmm(u, torch.bmm(s.diag_embed(), u.transpose(1, 2)))
+        return output
+        
 
     '''
     @staticmethod
@@ -202,7 +213,8 @@ class SPDTangentSpaceFunction(Function):
             eye = torch.eye(input.size(1), device=input.device).unsqueeze(0).expand(input.size(0), -1, -1)
 
             # Perform batch eigen decomposition
-            s, u = torch.linalg.eigh(input)
+            #s, u = torch.linalg.eigh(input)
+            u, s, _ = svd(input)
             #print(f"s (eigenvalues): {s}")
             #print(f"u (eigenvectors): {u}")
 
@@ -239,11 +251,11 @@ class SPDTangentSpaceFunction(Function):
     
 class SPDTangentSpace(nn.Module):
 
-    def __init__(self, input_size, device, vectorize=True):
+    def __init__(self, input_size, vectorize=True):
         super().__init__()
         self.vectorize = vectorize
         if vectorize:
-            self.vec = SPDVectorize(input_size, device)
+            self.vec = SPDVectorize(input_size)
 
     def forward(self, input):
         output = SPDTangentSpaceFunction.apply(input)
@@ -355,7 +367,7 @@ class SPDRectifiedFunction(Function):
             grad_output = symmetric(grad_output)
 
             # Perform eigen decomposition
-            s, u = torch.linalg.eigh(input)  # Batch eigen decomposition
+            u, s, _ = svd(input)  # Batch eigen decomposition
 
             # Compute masks and diagonal matrices
             max_mask = s > epsilon
@@ -411,6 +423,9 @@ class SPDRectifiedFunction(Function):
 
                 grad_input[k] = u.mm(symmetric(P.t() * u.t().mm(dLdV))+dLdS).mm(u.t())
             '''
+        #torch.set_printoptions(profile="full", linewidth=1000)
+        #print(f"SPDTransform Gradient Input Shape: {grad_input.shape}")
+        #print(f"grad_input: {grad_input}")
         return grad_input, None
     
 class SPDRectified(nn.Module):

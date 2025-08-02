@@ -4,6 +4,9 @@ from numbers import Real
 from torch.fft import fft, ifft
 from sklearn.utils import check_random_state
 
+'''
+NONE OF THESE ARE REALLY USED
+'''
 
 '''
 Based on: https://github.com/SPOClab-ca/dn3/blob/master/dn3/transforms/batch.py

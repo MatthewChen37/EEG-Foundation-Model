@@ -1,0 +1,173 @@
+import os
+import gc
+import random
+import numpy as np
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+import hydra
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
+
+from math import ceil
+from Model.MENDR.MENDR import MENDR_model
+from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
+from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
+from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
+from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder
+from Model.MENDR.mAtt.optimizer import MixOptimizer
+from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
+from Datasets.datasetTUAB import WaveletTUABDataset
+from Datasets.datasetTUEV import WaveletTUEVDataset
+
+METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa'}
+
+@hydra.main(version_base="1.2", 
+            config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
+            config_name="TUEV")
+def main(cfg:DictConfig) -> None:
+    # Start Run
+    print("Job Started. Parameters:")
+    print(OmegaConf.to_yaml(cfg))
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    assert cfg.dataset_params.task in ['binary', 'multiclass'], "Task not found"
+    for metric in cfg.dataset_params.metrics:
+        if metric not in METRICS:
+            raise Exception(f"Metric {metric} not found")
+
+    ### Seed ###
+    torch.cuda.empty_cache()
+    random.seed(cfg.training_params.random_seed)
+    os.environ['PYTHONHASHSEED'] = str(cfg.training_params.random_seed)
+    np.random.seed(cfg.training_params.random_seed)
+    torch.manual_seed(cfg.training_params.random_seed)
+    torch.cuda.manual_seed(cfg.training_params.random_seed)
+    torch.cuda.manual_seed_all(cfg.training_params.random_seed)
+    ## CUDNN ##
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+    # Load Dataset
+    print("*" * 50)
+    if cfg.dataset_params.name == "TUAB":
+        finetune_train_dataset = WaveletTUABDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
+        finetune_eval_dataset = WaveletTUABDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
+        model_decoder = TUABFinetuneDecoder().to(device)
+    elif cfg.dataset_params.name == "TUEV":
+        finetune_train_dataset = WaveletTUEVDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
+        finetune_eval_dataset = WaveletTUEVDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
+        model_decoder = TUEVFinetuneDecoder().to(device)
+    else:
+        raise Exception("Dataset not found")
+    print("Dataset Loaded. Length of Train Dataset: ", len(finetune_train_dataset))
+    print("Dataset Loaded. Length of Validation Dataset: ", len(finetune_eval_dataset))
+
+    ### Model ###
+    mendr_autoencoder = MENDRPatchEncoder(**cfg.patch_encoder_params,
+                                        device=device)
+
+    for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
+        encoder_decoder.disableDecoder()
+
+    if cfg.meta_params.contextualizer_size == "TINY":
+        contextualizer = MENDRContextualizerTiny(
+            num_channels=19,
+            out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
+            include_high=cfg.patch_encoder_params.include_high,
+        ).to(device)
+    elif cfg.meta_params.contextualizer_size == "LARGE":
+        wavelet_contextualizer = MENDRWaveletContextualizer(
+            num_channels=19,
+            out_dim=mendr_autoencoder.encoder_decoders['delta'].out_dim,
+            include_high=cfg.patch_encoder_params.include_high,
+            n_transformer_layers=6,
+        )
+        combined_contextualizer = MENDRCombinedContextualizer(
+            num_channels=6,
+            n_transformer_layers=6,
+        )
+    else:
+        raise Exception("Contextualizer size not found")
+
+    if cfg.meta_params.pretrained_autoencoder_path is not None:
+        print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
+        mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
+        mendr_autoencoder.eval()
+        for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
+            encoder_decoder.disableDecoder()
+        for param in mendr_autoencoder.parameters():
+            param.requires_grad = False
+    if cfg.meta_params.pretrained_contextualizer_path is not None:
+        if cfg.meta_params.contextualizer_size == "TINY":
+            contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            contextualizer.train()
+            for param in contextualizer.parameters():
+                param.requires_grad = True
+        elif cfg.meta_params.contextualizer_size == "LARGE":
+            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            wavelet_contextualizer.train()
+            combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            combined_contextualizer.train()
+            for param in wavelet_contextualizer.parameters():
+                param.requires_grad = True
+            for param in combined_contextualizer.parameters():
+                param.requires_grad = True
+
+    if cfg.meta_params.contextualizer_size == "TINY":
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
+    elif cfg.meta_params.contextualizer_size == "LARGE":
+        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder=cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        contextualizer_params = sum(p.numel() for p in combined_contextualizer.parameters() if p.requires_grad) + sum(p.numel() for p in wavelet_contextualizer.parameters() if p.requires_grad)
+    else:
+        raise Exception("Contextualizer size not found")
+
+    optim_params = []
+    optim_params += model.parameters()
+    optim_params += list(model_decoder.parameters())
+    optimizer = torch.optim.AdamW(optim_params, lr=cfg.training_params.learning_rate, weight_decay=cfg.training_params.l2_weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                            T_max=cfg.training_params.epochs*ceil(len(finetune_train_dataset) / cfg.training_params.batch_size),
+                                                            eta_min=cfg.training_params.eta_min)
+    optimizer = MixOptimizer(optimizer, scheduler)
+
+    foundation_model_params = sum(p.numel() for p in model.parameters() if p.requires_grad) 
+    decoder_params = sum(p.numel() for p in model_decoder.parameters() if p.requires_grad)
+    print(f"Total Foundation Model Parameters: {foundation_model_params}")
+    if cfg.meta_params.pretrained_autoencoder_path is None:
+        encoder_params = sum(p.numel() for p in mendr_autoencoder.parameters() if p.requires_grad)
+        print(f"Total Encoder Parameters: {encoder_params}")
+    print(f"Total Contextualizer Parameters: {contextualizer_params}")
+    print(f"Total Decoder Parameters: {decoder_params}")
+    print(f"Total Parameters: {foundation_model_params + decoder_params}")
+    '''
+    print("Named Modules with requires_grad and Parameter Count:")
+    for name, module in model.named_modules():
+        num_params = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        all_params_require_grad = all(p.requires_grad for p in module.parameters()) if list(module.parameters()) else False
+        
+        print(f"Module: {name}")
+        print(f"  Requires Grad (all parameters): {all_params_require_grad}")
+        print(f"  Number of trainable parameters: {num_params}")
+    '''
+
+    trainer = MENDRFinetuner(MENDR=model, Decoder=model_decoder, optimizer=optimizer, cfg=cfg, cuda=device)
+
+    ### Training ###
+    model, model_decoder = trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
+
+    ### Evaluation and Visualization ###
+    trainer.evaluate(cfg=cfg, validation_dataset=finetune_eval_dataset)
+
+    '''
+    ### Save ###
+    trainer.save_best(epoch_ckpt_dir=cfg.training_params.ckpt_dir)
+    '''
+
+if __name__ == '__main__':
+    main()

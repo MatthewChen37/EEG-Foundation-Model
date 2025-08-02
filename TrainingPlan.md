@@ -17,4 +17,10 @@ $L_{recon}$ represents the reconstruction loss of the reconstructed signal from 
 		- Training Parameters:
 
 2. Downstream tasks
-	- TBD
+	- TUAB
+	- TUEV
+	- SEED-V
+	- MOBI
+	- PhysioNet-MI
+	- ISRUC
+	- CHB-MIT

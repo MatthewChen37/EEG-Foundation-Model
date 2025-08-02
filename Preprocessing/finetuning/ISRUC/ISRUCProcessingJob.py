@@ -102,11 +102,14 @@ def _determine_channels(raw):
 		'O2-A1',
 	}
 
+	'''
+	Approximate mapping of electrode positions	
+	'''
 	new_mapping = {
 		'F3-A2': 'F3',
 		'C3-A2': 'C3',
 		'O1-A2': 'O1',
-		'F4-A1': 'F4',
+		'F4-A1': 'F4', 
 		'C4-A1': 'C4',
 		'O2-A1': 'O2',
 	}

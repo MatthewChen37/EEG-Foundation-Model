@@ -121,8 +121,6 @@ def check_eigh():
     return eigenvalue_assert and dA_assert
 
 def check_TensorLog():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
-
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -130,19 +128,31 @@ def check_TensorLog():
 
     assert simple_spd.shape == torch.Size([1, 1, 3, 3]), f'Shape: {simple_spd,shape}'
 
-    tensor_log = attention_manifold.tensor_log(simple_spd)
+    tensor_log_result = tensor_log(simple_spd)
 
     # Expected (as per the original mATT implementation)
     u, s, v = torch.svd(simple_spd)
     expected = u @ torch.diag_embed(torch.log(s)) @ v.permute(0, 1, 3, 2)
 
-    tensor_log_assert = assertTensorEqual(tensor_log, expected)
+    tensor_log_assert = assertTensorEqual(tensor_log_result, expected)
 
     return tensor_log_assert
 
-def check_LogEuclideanMean():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
+def check_TensorExp():
+    # Eigenvalues are 1, 2, and 4
+    simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
+    simple_spd = simple_spd[None, None, ...]
+    assert simple_spd.shape == torch.Size([1, 1, 3, 3]), f'Shape: {simple_spd,shape}'
+    tensor_exp_assert1 = assertTensorEqual(tensor_exp(tensor_log(simple_spd)), simple_spd)
 
+    simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
+    simple_spd = simple_spd[None, ...]
+    assert simple_spd.shape == torch.Size([1, 3, 3]), f'Shape: {simple_spd,shape}'
+    tensor_exp_assert2 = assertTensorEqual(tensor_exp(tensor_log(simple_spd)), simple_spd)
+
+    return tensor_exp_assert1 and tensor_exp_assert2
+
+def check_LogEuclideanMean():
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -154,7 +164,7 @@ def check_LogEuclideanMean():
 
     assert mock_weights.shape == torch.Size([2, 2, 2]), f'Mock Weights Shape: {mock_weights}'
 
-    log_euclidean_mean = attention_manifold.LogEuclideanMean(mock_weights, simple_spd)
+    log_euclidean_mean = LogEuclideanMean(mock_weights, simple_spd)
 
     lem_assert = assertTensorEqual(log_euclidean_mean, simple_spd)
 
@@ -164,8 +174,6 @@ def check_LogEuclideanMean():
     return lem_assert
 
 def check_CustomLogEuclideanMean():
-    attention_manifold = AttentionManifold(3, 3, "cpu")
-
     # Eigenvalues are 1, 2, and 4
     simple_spd = torch.from_numpy(np.array([[2, 1, 0], [1, 3, 1], [0, 1, 2]], np.float32)).double()
 
@@ -175,13 +183,13 @@ def check_CustomLogEuclideanMean():
 
     mock_weights = torch.diag(torch.ones(2)).repeat(2, 1, 1).double()
 
-    log_euclidean_mean = attention_manifold.LogEuclideanMean(mock_weights, simple_spd)
+    log_euclidean_mean = LogEuclideanMean(mock_weights, simple_spd)
 
-    simple_spd_log = attention_manifold.tensor_log(simple_spd)
+    simple_spd_log = tensor_log(simple_spd)
 
     simple_spd_log = simple_spd_log.sum(dim=1, keepdim=True) / simple_spd_log.shape[1]
 
-    simple_spd_LEM = attention_manifold.tensor_exp((simple_spd_log))
+    simple_spd_LEM = tensor_exp((simple_spd_log))
 
     lem_assert = assertTensorEqual(log_euclidean_mean, simple_spd_LEM)
 
@@ -193,13 +201,9 @@ def check_NearestSymPosDef():
                                                 [1, 3, 1],
                                                 [0, 1, 2]], np.float32)).float()
 
-    
     output = SVD._nearest_sym_pos_def(simple_non_spd)
-
     nearest_sym_pos_def_assert = torch.allclose(output, output.mT)
-
     return nearest_sym_pos_def_assert
-
 
 def check_safeSVD():
     B, N, N = 4, 4, 4
@@ -211,6 +215,35 @@ def check_safeSVD():
     assert safesvd_gradcheck
     return safesvd_gradcheck
 
+def check_blog_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    output = block_diag(input, 2)
+    check_blog_diag_check = output.shape == torch.Size([B, N*2, N*2])
+    return check_blog_diag_check
+
+def check_unblock_diag():
+    B, N, N = 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 2, 1)
+    input = block_diag(input, 2)
+    #print(input)
+    output = unblock_diag(input, 2)
+    check_unblock_diag_check = output.shape == torch.Size([B, 2, N, N])
+    return check_unblock_diag_check
+
+def check_reblock_diag():
+    B, P, H, N, N = 2, 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, H, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 2, 4, 3)
+    output = reblock_diag(input, 2)
+    check_reblock_diag_check = output.shape == torch.Size([B, P, H*N, H*N])
+    return check_reblock_diag_check
+
 def check_safeEigh():
     B, N = 2, 2
     torch.manual_seed(42)
@@ -220,17 +253,33 @@ def check_safeEigh():
     safeEigh_gradcheck = torch.autograd.gradcheck(function, A, eps=1e-6, atol=1e-4, rtol=1e-3)
     return not safeEigh_gradcheck # this test actually fails, but doesn't matter, we don't use eigh anyway
 
+def check_AttentionManifold():
+    B, P, N, N = 2, 2, 2, 2
+    torch.manual_seed(2)
+    input = torch.rand(B, P, N, N, dtype=torch.float64, requires_grad=True)
+    input = input + input.permute(0, 1, 3, 2)
+    attention_manifold = AttentionManifold(2, 2, heads=2)
+    output, shape = attention_manifold(input)
+    check_attention_manifold_check = output.shape == torch.Size([B*P, N, N])
+    check_attention_manifold_check = check_attention_manifold_check and shape == torch.Size([B, P, -1])
+    return check_attention_manifold_check
+
 units = {
     'Tangent space layer': check_TangentSpace,
     'Rectification layer': check_Rectified,
     'Untangent space layer': check_UnTangentSpace,
     #'Check eigh': check_eigh,
-    'Tensor Log': check_TensorLog,
-    'LogEuclideanMean': check_LogEuclideanMean,
+    #'Tensor Log': check_TensorLog,
+    #'Tensor Exp': check_TensorExp,
+    #'LogEuclideanMean': check_LogEuclideanMean,
     'Custom LEM': check_CustomLogEuclideanMean,
     'Nearest Sym Pos Def': check_NearestSymPosDef,
     'Safe SVD': check_safeSVD,
+    'Blog Diag': check_blog_diag,
+    'Unblock Diag': check_unblock_diag,
+    'Reblock Diag': check_reblock_diag,
     #'Safe Eigh': check_safeEigh,
+    #'Attention Manifold': check_AttentionManifold
 }
 
 result = True

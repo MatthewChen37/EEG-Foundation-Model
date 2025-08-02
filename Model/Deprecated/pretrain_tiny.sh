@@ -1,0 +1,25 @@
+python pretrain.py --input_dir=/storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz \
+ --train_frac=0.8 \
+ --val_frac=0.1 \
+ --learning_rate=0.001\
+ --l2_weight_decay=0.0005 \
+ --batch_size=256 \
+ --negatives_loo=20 \
+ --training_epochs=15 \
+ --temp=10.0 \
+ --mask_ratio=0.2\
+ --model_size=TINY \
+ --ckpt_dir=./checkpoint \
+ --contrastive_loss_pref=1.0 \
+ --contrastive_combined_loss_coeff=1.0 \
+ --contrastive_wavelet_loss_coeff=900.0 \
+ --delta_reconstructive_loss_pref=1.0 \
+ --theta_reconstructive_loss_pref=1.0 \
+ --alpha_reconstructive_loss_pref=1.0 \
+ --beta_reconstructive_loss_pref=1.0 \
+ --gamma_reconstructive_loss_pref=1.0 \
+ --gradient_clip_value=1e7 \
+ --n_gnn_transformer_layers=1 \
+ --multi_objective_loss_balancing_strategy=jacobian
+# --input_dir=/storage/ice1/shared/bmed6780/mip_group_6/ef/HBN-128Hz \
+# Note that the small model has only ONE GNN Transformer layer

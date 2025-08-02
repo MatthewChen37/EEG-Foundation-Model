@@ -1,0 +1,44 @@
+meta_params:
+  experiment_name: TUEV_Downstream
+  bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
+  run_name: finetune_TUEV_downstream
+  model_name: MENDR
+  pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
+  pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
+  contextualizer_size: TINY
+  log_system_metrics: False
+  log_model_params_and_grads: False
+  save_model: False
+  save_final_model: False
+dataset_params:
+  name: TUEV
+  train_data_dir: "/home/hice1/mchen439/scratch/TUEV_small/train"
+  eval_data_dir: "/home/hice1/mchen439/scratch/TUEV_small/eval"
+  train_frac: 1.0
+  eval_frac: 1.0
+  metrics: ['accuracy', 'balanced_accuracy', 'f1', 'cohens_kappa']
+  task: multiclass
+training_params:
+  task_loss: CrossEntropyLoss
+  task_loss_params:
+    label_smoothing: 0.1
+  learning_rate: 0.001
+  l2_weight_decay: 0.1
+  ckpt_dir: ./checkpoints
+  random_seed: 210
+  epochs: 10
+  batch_size: 256
+  scheduler_after_batch: True
+  num_workers: 32
+  eta_min: 1.0e-7
+  weighted_random_sampler: True
+patch_encoder_params:
+  num_channels: 19
+  sampling_rate: 128
+  super_patch_seconds: 2
+  hidden_gnn_mlp_ratio: 2
+  n_gnn_transformer_layers: 3
+  n_gnn_heads: 2
+  num_subjects: 13190
+  include_high: True
+  channel_dropout_p: 0.1
