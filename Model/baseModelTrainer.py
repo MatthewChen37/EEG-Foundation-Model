@@ -69,9 +69,11 @@ class BaseModelTrainer(object):
         batch = next(iterator)
         for key, value in batch.items():
             if isinstance(value, torch.Tensor):
-                # Perform batch normalization across channels 
                 # Note all data are float32!
-                batch[key] = value.float().to(self.device)
+                if len(value.shape) == 4:
+                    batch[key] = value.float().to(self.device).reshape(-1, value.shape[-2], value.shape[-1])
+                else:
+                    batch[key] = value.float().to(self.device)
         return batch
     
     def parameters(self):

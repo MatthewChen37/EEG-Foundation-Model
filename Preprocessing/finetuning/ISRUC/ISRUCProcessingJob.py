@@ -24,7 +24,7 @@ import traceback
 def main(args):
 	psg_f_names = []
 	label_f_names = []
-	for i in range(1, 101):
+	for i in range(1, 2):
 		numstr = str(i)
 		psg_f_names.append(f'{args.input_dir}/{numstr}.rec')
 		label_f_names.append(f'{args.input_dir}/{numstr}_1.txt')

@@ -5,66 +5,31 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace
 class TUABFinetuneDecoder(nn.Module):
     def __init__(self):
         super().__init__()
-        self.tangent = SPDTangentSpace(19)
+        #self.tangent = SPDTangentSpace(19)
+        self.tangent = SPDTangentSpace(6)
         self.flatten = nn.Flatten()
-        self.seq = nn.Sequential(nn.Linear(5*19*10, 5*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*19*10, 5*19*10))
-        #self.seq = nn.Sequential(nn.Linear(1*1*10, 1*1*10), nn.LayerNorm(1*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*10, 1*1*10))
-        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*5*11+5*19*1, 1))
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(0.1), nn.Linear(5*19*10, 1))
-        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
-        #self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
-
-        '''
-        self.decoders = nn.ParameterDict({
-            'delta': nn.Sequential(nn.Linear(5*19*96, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)), 
-            'theta': nn.Sequential(nn.Linear(5*19*96, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
-            'alpha': nn.Sequential(nn.Linear(5*19*192, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
-            'beta': nn.Sequential(nn.Linear(5*19*384, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
-            'gamma': nn.Sequential(nn.Linear(5*19*768, 1*19*32), nn.LayerNorm(1*19*32), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*32, 1*19*1)),
-            #'high': nn.Sequential(nn.Linear(5*19*512, 1*19*512), nn.LayerNorm(1*19*512), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*512, 1*19*1), nn.LayerNorm(1*19*1)),
-        })
-        '''
-        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(5*19*1, 1))
-
-    '''
-    def forward(self, encodings):
-        feautrizations = dict()
-        for band, decoder in self.decoders.items():
-            feautrizations[band] = decoder(self.flatten(encodings[band]))
-        x = torch.cat(list(feautrizations.values()), dim=-1)
-        return self.final_decoder(x)
-    '''
-        
+        #self.seq = nn.Sequential(nn.Linear(5*19*10, 1*19*10), nn.LayerNorm(1*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(1*19*10, 1*19*10))
+        #self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(1*19*10, 1))
+        self.seq = nn.Sequential(nn.Linear(5*3*7, 5*3*7), nn.LayerNorm(5*3*7), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*3*7, 5*3*7))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(p=0.1), nn.Linear(5*3*7, 1))
     def forward(self, x):
         batch_size = x.shape[0]
         num_patches = x.shape[1]
         embedding_dim = x.shape[2]
         x = self.tangent(x.view(batch_size*num_patches, embedding_dim, embedding_dim))
-        #print(x.shape)
-        #x = self.adaptive_pool(x)
         x = x.view(batch_size, num_patches, -1)
-        #print(x.shape)
         x = self.flatten(x)
-        #print(x.shape)
-        #x = self.seq(x)
-        #print(x.shape)
-        '''
-        feautrizations = dict()
-        for band, decoder in self.decoders.items():
-            feautrizations[band] = decoder(self.flatten(encodings[band]))
-        feautrizations = torch.cat(list(feautrizations.values()), dim=-1)
-        return self.final_decoder(feautrizations)
-        #return self.final_decoder(torch.cat([x, feautrizations], dim=-1))
-        '''
         x = self.seq(x)
         return self.final_decoder(x)
 
 class TUEVFinetuneDecoder(nn.Module):
     def __init__(self):
         super().__init__()
-        self.tangent = SPDTangentSpace(19)
+        #self.tangent = SPDTangentSpace(19)
         self.flatten = nn.Flatten()
-        self.flattened = (19 * 20) // 2
+        #self.flattened = (19 * 20) // 2
+        self.tangent = SPDTangentSpace(6)
+        self.flattened = (3 * 7)
         
         #self.combined_seq = nn.Sequential(nn.LayerNorm(5 * 100), nn.GELU(), nn.Linear(5*100, 100), nn.LayerNorm(100), nn.GELU())
         #self.final_lin = nn.Linear(100, 6)
@@ -132,7 +97,8 @@ class TUEVFinetuneDecoder(nn.Module):
         '''
          
         #self.combined_seq = nn.Sequential(nn.Linear(1 * 19 * 10, 100), nn.LayerNorm(100), nn.Dropout(p=0.1))
-        self.seq = nn.Sequential(nn.Linear(3*19*10, 3*19*10),
+        '''
+        self.seq = nn.Sequential(nn.Linear(3*3*7, 3*3*7),
                                         nn.LayerNorm(3*19*10),
                                         nn.GELU(),
                                         nn.Dropout(p=0.1),
@@ -142,6 +108,17 @@ class TUEVFinetuneDecoder(nn.Module):
                                         nn.Dropout(p=0.1),
                                         nn.Linear(3*19*10, 3*19*10))
         self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(0.1), nn.Linear(3*19*10, 6))
+        '''
+        self.seq = nn.Sequential(nn.Linear(3*3*7, 3*3*7),
+                                        nn.LayerNorm(3*3*7),
+                                        nn.GELU(),
+                                        nn.Dropout(p=0.1),
+                                        nn.Linear(3*3*7, 3*3*7),
+                                        nn.LayerNorm(3*3*7),
+                                        nn.GELU(),
+                                        nn.Dropout(p=0.1),
+                                        nn.Linear(3*3*7, 3*3*7))
+        self.final_decoder = nn.Sequential(nn.GELU(), nn.Dropout(0.1), nn.Linear(3*3*7, 6))
         self._init_weights()
     '''
     def forward(self, encodings):
@@ -231,22 +208,41 @@ class TUEVFinetuneDecoder(nn.Module):
                     nn.init.constant_(module.bias, 0)
 
 class ISRUCFinetuneDecoder(nn.Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        self.tangent = SPDTangentSpace(19)
-        self.flatten = nn.Flatten()
-        self.seq = nn.TransformerDecoderLayer(d_model=190, nhead=4, dim_feedforward=1024, dropout=0.1, batch_first=True)
+        self.tangent = SPDTangentSpace(6)
+        self.flatten = nn.Flatten(start_dim=2)
+        self.cfg = cfg
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=3*7, nhead=3, dim_feedforward=64, dropout=0.1, batch_first=True, norm_first=True)
+
+        self.seq = nn.Sequential(
+                nn.Linear(15 * 3 * 7, 1 * 3 * 7),
+                nn.GELU(),
+                nn.Linear(1 * 3 * 7, 1 * 3 * 7),
+                nn.TransformerEncoder(self.encoder_layer, num_layers=2, enable_nested_tensor=False),
+            )
         #self.seq = nn.Sequential(nn.Linear(30*19*10, 30*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(30*19*10, 30*19*10))
-        self.final_decoder = nn.Sequential(nn.GELU(), nn.Linear(30*19*10, 5))
+        self.final_decoder = nn.Sequential(nn.Linear(1*3*7, 5))
+        self._init_weights()
 
     def forward(self, x):
-        batch_size = x.shape[0]
+        first_dim = x.shape[0]
+        batch_size = first_dim // self.cfg.training_params.seq_of_patch_len
         num_patches = x.shape[1]
         embedding_dim = x.shape[2]
-        x = self.tangent(x.view(batch_size*num_patches, embedding_dim, embedding_dim))
+
+        x = self.tangent(x.view(batch_size*self.cfg.training_params.seq_of_patch_len*num_patches, embedding_dim, embedding_dim))
+        x = x.reshape(batch_size, self.cfg.training_params.seq_of_patch_len, num_patches, x.shape[-1])
         x = self.flatten(x)
-        x = x.view(batch_size, num_patches, 30*19*10)
+        x = x.reshape(batch_size, self.cfg.training_params.seq_of_patch_len, 15*7*3)
         x = self.seq(x)
-        x = self.flatten(x)
         x = self.final_decoder(x)
         return x
+
+    def _init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=0.1)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+

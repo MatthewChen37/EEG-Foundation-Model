@@ -19,11 +19,11 @@ class MENDRContextualizerLarge(nn.Module):
 		self.combined_contextualizer = combined_contextualizer
 		self.tangent_space = SPDTangentSpace(self.wavelet_contextualizer.num_channels)
 
-	def forward(self, x, batch_size, num_patches):
+	def forward(self, x, batch_size, num_patches, mask_ratio):
 		wavelet_manifold_output = self.wavelet_contextualizer(x, batch_size, num_patches)
 		# Never mask when calling it from here
-		combined_manifold_output, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0)
-		return combined_manifold_output, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
+		_, combined_manifold_output_masked, mask_idxes = self.combined_contextualizer(wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0)
+		return combined_manifold_output_masked, wavelet_manifold_output, mask_idxes # Adding this for consistency of API
 
 class MENDRWaveletContextualizer(nn.Module):
 	def __init__(self, num_channels, out_dim,
@@ -198,6 +198,8 @@ class MENDRCombinedContextualizer(nn.Module):
 
 		self.riemannian_residual = _RiemannianResidual()
 
+		self.tangent_space = SPDTangentSpace(self.num_channels)
+
 		manifold_transformers = []
 		for i in range(n_transformer_layers):
 			if i == n_transformer_layers - 1:
@@ -211,13 +213,13 @@ class MENDRCombinedContextualizer(nn.Module):
 		# We indirectly optimize on the SPD manifold because by Cholesky Decomposition 
 		# X * X.T is always SPD
 		self.mask = torch.from_numpy(np.random.rand(self.num_channels, self.num_channels)).float()
-		# self.mask = nn.Parameter(self.mask, requires_grad=True)
+		self.mask = nn.Parameter(self.mask, requires_grad=True)
 
 	def forward(self, wavelet_manifold_output, batch_size, num_patches, mask_ratio=0.0):
 		x = []
 		for band in wavelet_manifold_output.keys():
 			wavelet_manifold_output[band] = rearrange(wavelet_manifold_output[band], 'B P C1 C2 -> (B P) C1 C2', B=batch_size, P=num_patches, C1=self.num_channels, C2=self.num_channels)
-			x.append(wavelet_manifold_output[band])
+			x.append(self.wavelet_preattention_spd_transform[band](wavelet_manifold_output[band]))
 		x = torch.stack(x, dim=1)
 		x, shape = self.wavelet_attention(x)
 		x = rearrange(x, '(B P) C1 C2 -> B P C1 C2', B=shape[0], P=shape[1], C1=self.num_channels, C2=self.num_channels)

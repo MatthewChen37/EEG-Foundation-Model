@@ -88,8 +88,9 @@ class MENDRContextualizerTiny(nn.Module):
 
 		self.wavelet_masks = dict()
 		for band in self.patch_lens.keys():
-			self.wavelet_masks[band] = torch.rand(19, out_dim*self.patch_lens[band])
-		
+			self.wavelet_masks[band] = torch.nn.Parameter(torch.rand(19, out_dim*self.patch_lens[band]), requires_grad=True)
+		self.wavelet_masks = nn.ParameterDict(self.wavelet_masks)
+			
 	def forward(self, x, batch_size, num_patches, mask_ratio=0.0):
 		# x is a dict of wavelet bands of shape [Batch, #patch, #num_channels, #time_step* #out_dim]
 		# Each patch gets coagulated into the same time scale through the covariance matrix

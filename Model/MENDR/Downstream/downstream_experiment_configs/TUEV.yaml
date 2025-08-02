@@ -5,7 +5,9 @@ meta_params:
   model_name: MENDR
   pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
   pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
-  contextualizer_size: TINY
+  pretrained_wavelet_contextualizer_path: null #"./checkpoint/pretrained_wavelet_contextualizer_trace/wavelet_contextualizer_weights.pth"
+  pretrained_combined_contextualizer_path: null #"./checkpoint/pretrained_combined_contextualizer_trace/combined_contextualizer_weights.pth"
+  contextualizer_size: LARGE
   log_system_metrics: False
   log_model_params_and_grads: False
   save_model: False
@@ -26,12 +28,13 @@ training_params:
   l2_weight_decay: 0.1
   ckpt_dir: ./checkpoints
   random_seed: 210
-  epochs: 10
+  epochs: 15
   batch_size: 256
   scheduler_after_batch: True
   num_workers: 32
   eta_min: 1.0e-7
   weighted_random_sampler: True
+  gradient_clip_value: 1.0e8
 patch_encoder_params:
   num_channels: 19
   sampling_rate: 128

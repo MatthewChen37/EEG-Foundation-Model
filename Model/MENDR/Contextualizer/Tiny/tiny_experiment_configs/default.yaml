@@ -23,7 +23,7 @@ contextualizer_params:
 training_params:
   input_dir: /storage/ice1/shared/bmed6780/mip_group_6/ef/TUH-128Hz
   pretrained_patch_encoder_dir: null
-  train_frac: 0.9
+  train_frac: 0.2
   val_frac: 0.1   
   random_seed: 42
   learning_rate: 0.001

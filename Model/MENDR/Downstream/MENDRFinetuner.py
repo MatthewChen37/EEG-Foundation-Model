@@ -46,7 +46,12 @@ class MENDRFinetuner(BaseModelTrainer):
 			l2_weight_decay=cfg.training_params.l2_weight_decay,
             metrics=dict(),
             ckpt_dir=cfg.training_params.ckpt_dir, **kwargs)
-    
+        ''' 
+        for p in self.parameters():
+            p.register_hook(lambda grad: torch.clamp(grad,
+                                                -cfg.training_params.gradient_clip_value,
+                                                cfg.training_params.gradient_clip_value))
+        '''
     def forward(self, inputs):
         '''
 		Looks similar to MENDR_model forward
@@ -142,6 +147,8 @@ class MENDRFinetuner(BaseModelTrainer):
         if self.cfg.dataset_params.name == "TUAB":
             ground_truth = torch.repeat_interleave(ground_truth, patchified_inputs['delta'].shape[1])
         '''
+        if len(prediction.shape) == 3: # ISRUC
+            prediction = prediction.reshape(-1, prediction.shape[-1])
         task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         with torch.no_grad():
             metrics = self.calculate_metrics(prediction, ground_truth)
@@ -162,6 +169,8 @@ class MENDRFinetuner(BaseModelTrainer):
                 ground_truth = inputs['graph'].y.to(self.device).long()
             else:
                 raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
+            if len(prediction.shape) == 3: # ISRUC
+                prediction = prediction.reshape(-1, prediction.shape[-1])
             task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         return prediction, ground_truth, task_loss
 
@@ -252,26 +261,44 @@ class MENDRFinetuner(BaseModelTrainer):
                 else:
                     raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
 
+                if len(prediction.shape) == 3: # ISRUC
+                    prediction = prediction.reshape(-1, prediction.shape[-1])
+
                 loss = self.loss_fn(prediction.squeeze(), ground_truth)
                 pbar.set_postfix(loss=loss.item())
                 output_labels.append(ground_truth)
 
-                batch_size = combined_manifold_output.shape[0]
-                num_patches = combined_manifold_output.shape[1]
-                embedding_dim = combined_manifold_output.shape[2]
+                if cfg.dataset_params.name == "ISRUC":
+                    first_dim = combined_manifold_output.shape[0]
+                    batch_size = first_dim // self.cfg.training_params.seq_of_patch_len
+                    num_patches = combined_manifold_output.shape[1]
+                    embedding_dim = combined_manifold_output.shape[2]
 
-                x = combined_manifold_output.reshape(batch_size*num_patches, embedding_dim, embedding_dim)
-                combined_vector = self.mendr_model.combined_contextualizer.tangent_space(x)
-                combined_vector = combined_vector.reshape(batch_size, num_patches, -1)
-                x = self.decoder.flatten(combined_vector.clone())
-                final_embedding = self.decoder.seq(x)
-                prediction = self.decoder.final_decoder(final_embedding.clone()).float()
+                    combined_vector = self.decoder.tangent(combined_manifold_output.view(batch_size*self.cfg.training_params.seq_of_patch_len*num_patches, embedding_dim, embedding_dim))
+                    combined_vector = combined_vector.reshape(batch_size, self.cfg.training_params.seq_of_patch_len, num_patches, combined_vector.shape[-1])
+                    x = self.decoder.flatten(combined_vector.clone())
+                    x = x.reshape(batch_size, self.cfg.training_params.seq_of_patch_len, 15*3*7)
+                    final_embedding = self.decoder.seq(x)
+                    prediction = self.decoder.final_decoder(final_embedding.clone()).float()
+                else:
+                    batch_size = combined_manifold_output.shape[0]
+                    num_patches = combined_manifold_output.shape[1]
+                    embedding_dim = combined_manifold_output.shape[2]
+                    x = combined_manifold_output.reshape(batch_size*num_patches, embedding_dim, embedding_dim)
+                    combined_vector = self.mendr_model.combined_contextualizer.tangent_space(x)
+                    combined_vector = combined_vector.reshape(batch_size, num_patches, -1)
+                    x = self.decoder.flatten(combined_vector.clone())
+                    final_embedding = self.decoder.seq(x)
+                    prediction = self.decoder.final_decoder(final_embedding.clone()).float()
 
                 for band, wavelet_manifold in wavelet_manifold_output.items():
                     if band not in encoding_outputs:
                         encoding_outputs[band] = []
+                    if len(wavelet_manifold.shape) == 3:
+                        wavelet_manifold = wavelet_manifold.reshape(batch_size, num_patches, embedding_dim, embedding_dim)
+                        wavelet_manifold = torch.flatten(wavelet_manifold, start_dim=1)
+
                     encoding_outputs[band].append(wavelet_manifold.cpu().numpy())
-                    #print(band, encoding_outputs[band][0].shape)
                     
                 for band, decoding in decodings.items():
                     if band not in decoding_outputs:
@@ -319,13 +346,14 @@ class MENDRFinetuner(BaseModelTrainer):
 
         for band in tqdm.tqdm(bands):
             if band == 'combined':
+                if cfg.dataset_params.name == "ISRUC":
+                    final_embeddings_eval_all = final_embeddings_eval_all.reshape(-1, final_embeddings_eval_all.shape[-1])
                 embeddings = reducer.fit_transform(final_embeddings_eval_all, job=-1)
             else:
                 data = encoding_output_eval_all[band].reshape(encoding_output_eval_all[band].shape[0], -1)
                 embeddings = reducer.fit_transform(data, jobs=-1)
             fig = plt.figure(figsize=(24, 12))
             ax = fig.add_subplot()
-
             ax.scatter(
                 embeddings[:, 0],
                 embeddings[:, 1],
@@ -362,6 +390,15 @@ class MENDRFinetuner(BaseModelTrainer):
                 Patch(facecolor=sns.color_palette()[3], label='eyem'),
                 Patch(facecolor=sns.color_palette()[4], label='artf'),
                 Patch(facecolor=sns.color_palette()[5], label='bckg'),
+            ]
+            ax.legend(handles=patches, loc='upper right')
+        elif cfg.dataset_params.name == 'ISRUC':
+            patches = [
+                Patch(facecolor=sns.color_palette()[0], label='Stage 1'),
+                Patch(facecolor=sns.color_palette()[1], label='Stage 2'),
+                Patch(facecolor=sns.color_palette()[2], label='Stage 3'),
+                Patch(facecolor=sns.color_palette()[3], label='Stage 4'),
+                Patch(facecolor=sns.color_palette()[4], label='Stage 5')
             ]
             ax.legend(handles=patches, loc='upper right')
 

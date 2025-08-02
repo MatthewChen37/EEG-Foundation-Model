@@ -17,17 +17,18 @@ from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
-from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder
+from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder, ISRUCFinetuneDecoder
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
 from Datasets.datasetTUEV import WaveletTUEVDataset
+from Datasets.datasetISRUC import WaveletISRUCDataset
 
 METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa'}
 
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUEV")
+            config_name="ISRUC")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
@@ -62,6 +63,10 @@ def main(cfg:DictConfig) -> None:
         finetune_train_dataset = WaveletTUEVDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
         finetune_eval_dataset = WaveletTUEVDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
         model_decoder = TUEVFinetuneDecoder().to(device)
+    elif cfg.dataset_params.name == "ISRUC":
+        finetune_train_dataset = WaveletISRUCDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
+        finetune_eval_dataset = WaveletISRUCDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
+        model_decoder = ISRUCFinetuneDecoder(cfg).to(device)
     else:
         raise Exception("Dataset not found")
     print("Dataset Loaded. Length of Train Dataset: ", len(finetune_train_dataset))
@@ -89,7 +94,8 @@ def main(cfg:DictConfig) -> None:
         )
         combined_contextualizer = MENDRCombinedContextualizer(
             num_channels=6,
-            n_transformer_layers=6,
+            patch_lens=wavelet_contextualizer.patch_lens,
+            n_transformer_layers=8,
         )
     else:
         raise Exception("Contextualizer size not found")
@@ -97,11 +103,11 @@ def main(cfg:DictConfig) -> None:
     if cfg.meta_params.pretrained_autoencoder_path is not None:
         print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
         mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
-        mendr_autoencoder.eval()
+        mendr_autoencoder.train()
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
         for param in mendr_autoencoder.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         if cfg.meta_params.contextualizer_size == "TINY":
             contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
@@ -109,9 +115,9 @@ def main(cfg:DictConfig) -> None:
             for param in contextualizer.parameters():
                 param.requires_grad = True
         elif cfg.meta_params.contextualizer_size == "LARGE":
-            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_wavelet_contextualizer_path, weights_only=True))
             wavelet_contextualizer.train()
-            combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_combined_contextualizer_path, weights_only=True), strict=False)
             combined_contextualizer.train()
             for param in wavelet_contextualizer.parameters():
                 param.requires_grad = True
@@ -119,10 +125,10 @@ def main(cfg:DictConfig) -> None:
                 param.requires_grad = True
 
     if cfg.meta_params.contextualizer_size == "TINY":
-        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder= cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=True).to(device) #train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
         contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
     elif cfg.meta_params.contextualizer_size == "LARGE":
-        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, freeze_autoencoder=cfg.meta_params.pretrained_autoencoder_path is not None).to(device)
+        model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
         contextualizer_params = sum(p.numel() for p in combined_contextualizer.parameters() if p.requires_grad) + sum(p.numel() for p in wavelet_contextualizer.parameters() if p.requires_grad)
     else:
         raise Exception("Contextualizer size not found")
@@ -141,7 +147,7 @@ def main(cfg:DictConfig) -> None:
     print(f"Total Foundation Model Parameters: {foundation_model_params}")
     if cfg.meta_params.pretrained_autoencoder_path is None:
         encoder_params = sum(p.numel() for p in mendr_autoencoder.parameters() if p.requires_grad)
-        print(f"Total Encoder Parameters: {encoder_params}")
+        print(f"Total Encoder Parameters: {encoder_params}, Training Encoder: {model.trainable_state['encoder']}")
     print(f"Total Contextualizer Parameters: {contextualizer_params}")
     print(f"Total Decoder Parameters: {decoder_params}")
     print(f"Total Parameters: {foundation_model_params + decoder_params}")

@@ -10,7 +10,7 @@ from Model.MENDR.mAtt.spd import SPDTangentSpace
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high']
 
 class MENDR_model(nn.Module):
-    def __init__(self, autoencoder, combined_contextualizer, device, wavelet_contextualizer=None, contextualizer_size="LARGE", freeze_autoencoder=True):
+    def __init__(self, autoencoder, combined_contextualizer, device, wavelet_contextualizer=None, contextualizer_size="LARGE", train_autoencoder=False):
         assert isinstance(autoencoder, MENDRPatchEncoder), f"Autoencoder must be of type MENDRPatchEncoder, but got {type(autoencoder)}"
         assert contextualizer_size in ["LARGE", "TINY"], f"Contextualizer size must be either 'LARGE' or 'TINY', but got {contextualizer_size}"
         if wavelet_contextualizer is not None:
@@ -19,7 +19,7 @@ class MENDR_model(nn.Module):
         super().__init__()
         self.device = device
         self.trainable_state = {
-            'encoder': freeze_autoencoder,
+            'encoder': train_autoencoder,
             'combined_contextualizer': True,
             'wavelet_contextualizer': False,
         }
@@ -31,11 +31,7 @@ class MENDR_model(nn.Module):
             self.mendr_contextualizer = MENDRContextualizerLarge(self.wavelet_contextualizer, self.combined_contextualizer).to(device)
             self.trainable_state['wavelet_contextualizer'] = True
 
-
-        
-
         self.tangent_space = SPDTangentSpace(self.encoder.num_channels)
-        
     def forward(self, data):
         """
         Returns the patchified inputs, encodings, decodings, wavelet manifold output (if size is LARGE), and combined manifold output.
@@ -75,8 +71,11 @@ class MENDR_model(nn.Module):
         params = []
         if self.trainable_state['encoder']:
             params += list(self.encoder.parameters())
+            print("Training Encoder")
         if self.trainable_state['combined_contextualizer']:
             params += list(self.combined_contextualizer.parameters())
+            print("Training Combined Contextualizer")
         if self.trainable_state['wavelet_contextualizer']:
             params += list(self.wavelet_contextualizer.parameters())
+            print("Training Wavelet Contextualizer")
         return params
