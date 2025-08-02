@@ -31,7 +31,7 @@ def simplePipeline(raw, sample_rate=128, low_pass=75, exclude_epochs=[0, -1], ex
 		raw.notch_filter(60, verbose=False)
 	elif raw.info['sfreq'] > 240:
 		raw.notch_filter((60, 120), verbose=False)
-	epochs = make_fixed_length_epochs(raw, duration=60, preload=True)
+	epochs = make_fixed_length_epochs(raw, duration=6, preload=True)
 	epochs = epochs.load_data()
 	if exclude_short_epochs and len(epochs) <= 3:
 		raise ValueError("Not enough epochs")
