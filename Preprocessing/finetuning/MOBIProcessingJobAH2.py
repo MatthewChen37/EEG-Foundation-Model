@@ -78,6 +78,9 @@ def _process_subject(args, subject, train_root, eval_root):
                 epochs_eval = simplePipeline(raw_eval, sample_rate=128, low_pass=49.5,
                                             exclude_epochs=[], exclude_short_epochs=False)
 
+                epochs_train = epochs_train.drop_channels(joint_chs)
+                epochs_eval = epochs_eval.drop_channels(joint_chs)
+
                 # Save all train epochs + labels in train_root
                 train_epo_dir = train_root / "epochs"
                 train_epo_dir.mkdir(parents=True, exist_ok=True)

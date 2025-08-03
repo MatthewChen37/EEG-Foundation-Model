@@ -246,3 +246,36 @@ class ISRUCFinetuneDecoder(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
 
+class MOBIFinetuneDecoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.tangent = SPDTangentSpace(19)
+        self.flatten = nn.Flatten()
+        self.flattened = (19 * 20) // 2
+
+        self.seq = nn.Sequential(nn.Linear(3*19*10, 3*19*10), nn.LayerNorm(3*19*10), nn.GELU(), nn.Dropout(p=0.1), nn.Linear(3*19*10, 3*19*10))
+
+        self.final_decoder_0 = nn.Sequential(nn.Linear(3*19*10, 768))
+        self.final_decoder_1 = nn.Sequential(nn.Linear(3*19*10, 768))
+        self.final_decoder_2 = nn.Sequential(nn.Linear(3*19*10, 768))
+        self.final_decoder_3 = nn.Sequential(nn.Linear(3*19*10, 768))
+        self.final_decoder_4 = nn.Sequential(nn.Linear(3*19*10, 768))
+        self.final_decoder_5 = nn.Sequential(nn.Linear(3*19*10, 768))
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+        num_patches = x.shape[1]
+        embedding_dim = x.shape[2]
+        x = self.tangent(x.view(batch_size*num_patches, embedding_dim, embedding_dim))
+        x = x.view(batch_size, num_patches, -1)
+        x = self.flatten(x)
+        x = self.seq(x)
+        x0 = self.final_decoder_0(x)
+        x1 = self.final_decoder_1(x)
+        x2 = self.final_decoder_2(x)
+        x3 = self.final_decoder_3(x)
+        x4 = self.final_decoder_4(x)
+        x5 = self.final_decoder_5(x)
+        x = torch.cat([x0, x1, x2, x3, x4, x5], dim=1)
+        return x

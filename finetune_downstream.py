@@ -24,18 +24,17 @@ from Datasets.datasetTUAB import WaveletTUABDataset
 from Datasets.datasetTUEV import WaveletTUEVDataset
 from Datasets.datasetISRUC import WaveletISRUCDataset
 
-METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa'}
-
+METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa', 'pearsons_correlation', 'r2_score', 'rmse'}
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="ISRUC")
+            config_name="TUEV")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
     print(OmegaConf.to_yaml(cfg))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    assert cfg.dataset_params.task in ['binary', 'multiclass'], "Task not found"
+    assert cfg.dataset_params.task in ['binary', 'multiclass', 'regression'], "Task not found"
     for metric in cfg.dataset_params.metrics:
         if metric not in METRICS:
             raise Exception(f"Metric {metric} not found")
@@ -67,6 +66,10 @@ def main(cfg:DictConfig) -> None:
         finetune_train_dataset = WaveletISRUCDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac, include_high=cfg.patch_encoder_params.include_high)
         finetune_eval_dataset = WaveletISRUCDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac, include_high=cfg.patch_encoder_params.include_high)
         model_decoder = ISRUCFinetuneDecoder(cfg).to(device)
+    elif cfg.dataset_params.name == "MOBI":
+        finetune_train_dataset = WaveletMOBIDataset(root=cfg.dataset_params.train_data_dir, frac=cfg.dataset_params.train_frac)
+        finetune_eval_dataset = WaveletMOBIDataset(root=cfg.dataset_params.eval_data_dir, frac=cfg.dataset_params.eval_frac)
+        model_decoder = MOBIFinetuneDecoder().to(device)
     else:
         raise Exception("Dataset not found")
     print("Dataset Loaded. Length of Train Dataset: ", len(finetune_train_dataset))
@@ -103,19 +106,19 @@ def main(cfg:DictConfig) -> None:
     if cfg.meta_params.pretrained_autoencoder_path is not None:
         print("Loading Pretrained Autoencoder from: ", cfg.meta_params.pretrained_autoencoder_path)
         mendr_autoencoder.load_state_dict(torch.load(cfg.meta_params.pretrained_autoencoder_path, weights_only=True))
-        mendr_autoencoder.train()
+        mendr_autoencoder.eval()
         for band, encoder_decoder in mendr_autoencoder.encoder_decoders.items():
             encoder_decoder.disableDecoder()
         for param in mendr_autoencoder.parameters():
-            param.requires_grad = True
+            param.requires_grad = False
     if cfg.meta_params.pretrained_contextualizer_path is not None:
         if cfg.meta_params.contextualizer_size == "TINY":
-            contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True))
+            contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_contextualizer_path, weights_only=True), strict=False)
             contextualizer.train()
             for param in contextualizer.parameters():
                 param.requires_grad = True
         elif cfg.meta_params.contextualizer_size == "LARGE":
-            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_wavelet_contextualizer_path, weights_only=True))
+            wavelet_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_wavelet_contextualizer_path, weights_only=True), strict=False)
             wavelet_contextualizer.train()
             combined_contextualizer.load_state_dict(torch.load(cfg.meta_params.pretrained_combined_contextualizer_path, weights_only=True), strict=False)
             combined_contextualizer.train()
@@ -125,7 +128,7 @@ def main(cfg:DictConfig) -> None:
                 param.requires_grad = True
 
     if cfg.meta_params.contextualizer_size == "TINY":
-        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=True).to(device) #train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
         contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
     elif cfg.meta_params.contextualizer_size == "LARGE":
         model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
@@ -168,7 +171,7 @@ def main(cfg:DictConfig) -> None:
     model, model_decoder = trainer.fit(training_dataset=finetune_train_dataset, cfg=cfg, validation_dataset=finetune_eval_dataset)
 
     ### Evaluation and Visualization ###
-    trainer.evaluate(cfg=cfg, validation_dataset=finetune_eval_dataset)
+    #trainer.evaluate(cfg=cfg, validation_dataset=finetune_eval_dataset)
 
     '''
     ### Save ###

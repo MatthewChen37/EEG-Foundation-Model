@@ -1,30 +1,30 @@
 meta_params:
-  experiment_name: ISRUC_Downstream
+  experiment_name: MOBI_Downstream
   bands: ['delta', 'theta', 'alpha', 'beta', 'gamma']
-  run_name: finetune_ISRUC_downstream
+  run_name: finetune_MOBI_downstream
   model_name: MENDR
   pretrained_autoencoder_path: "./checkpoint/pretrained_autoencoder_high_out_dim_12/autoencoder_weights.pth"
-  pretrained_contextualizer_path: null #"./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
-  contextualizer_size: LARGE
+  pretrained_contextualizer_path: "./checkpoint/pretrained_contextualizer_tiny_raw/contextualizer_weights.pth"
+  contextualizer_size: TINY
   log_system_metrics: False
   log_model_params_and_grads: False
   save_model: False
   save_final_model: False
 dataset_params:
-  name: ISRUC
-  train_data_dir: "/home/hice1/mchen439/scratch/ISRUC_Best/train"
-  eval_data_dir: "/home/hice1/mchen439/scratch/ISRUC_Best/test"
+  name: MOBI
+  train_data_dir: "/home/hice1/mchen439/scratch/MOBI/train/graphs"
+  eval_data_dir: "/home/hice1/mchen439/scratch/MOBI/eval/graphs"
   train_frac: 1.0
   eval_frac: 1.0
-  metrics: ['accuracy', 'balanced_accuracy', 'f1', 'cohens_kappa']
-  task: multiclass
+  metrics: ['pearsons_correlation', 'r2_score', 'rmse']
+  task: regression
 training_params:
-  task_loss: CrossEntropyLoss
-  learning_rate: 0.0005
+  task_loss: MeanSquaredError
+  learning_rate: 0.001
   l2_weight_decay: 0.1
   ckpt_dir: ./checkpoints
-  random_seed: 210
-  epochs: 8
+  random_seed: 42
+  epochs: 10
   batch_size: 32
   scheduler_after_batch: True
   num_workers: 32

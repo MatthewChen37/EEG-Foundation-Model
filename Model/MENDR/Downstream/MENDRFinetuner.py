@@ -23,8 +23,12 @@ from sklearn.metrics import (
 	precision_recall_curve,
 	auc,
 	f1_score,
-	cohen_kappa_score
+	cohen_kappa_score,
+    r2_score,
+    root_mean_squared_error,
 )
+from scipy.stats import pearsonr
+
 	
 BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma']
 
@@ -34,6 +38,8 @@ class MENDRFinetuner(BaseModelTrainer):
             self.loss_fn = nn.BCEWithLogitsLoss()
         elif cfg.training_params.task_loss == 'CrossEntropyLoss':
             self.loss_fn = nn.CrossEntropyLoss(label_smoothing=cfg.training_params.task_loss_params.label_smoothing)
+        elif cfg.training_params.task_loss == 'MeanSquaredError':
+            self.loss_fn = nn.MSELoss()
         else:
             raise ValueError(f"Unsupported task loss function: {cfg.training_params.task_loss}")
 
@@ -141,6 +147,8 @@ class MENDRFinetuner(BaseModelTrainer):
             ground_truth = inputs['graph'].y.to(self.device).float()
         elif self.cfg.training_params.task_loss == 'CrossEntropyLoss':
             ground_truth = inputs['graph'].y.to(self.device).long()
+        elif self.cfg.training_params.task_loss == 'MeanSquaredError':
+            ground_truth = inputs['graph'].y.to(self.device).float()
         else:
             raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
         '''
@@ -167,11 +175,16 @@ class MENDRFinetuner(BaseModelTrainer):
                 ground_truth = inputs['graph'].y.to(self.device).float()
             elif self.cfg.training_params.task_loss == 'CrossEntropyLoss':
                 ground_truth = inputs['graph'].y.to(self.device).long()
+            elif self.cfg.training_params.task_loss == 'MeanSquaredError':
+                ground_truth = inputs['graph'].y.to(self.device).float()
             else:
                 raise ValueError(f"Unsupported task loss function: {self.cfg.training_params.task_loss}")
             if len(prediction.shape) == 3: # ISRUC
                 prediction = prediction.reshape(-1, prediction.shape[-1])
-            task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
+            if self.cfg.training_params.task_loss == 'MeanSquaredError':
+                task_loss = self.loss_fn(prediction.squeeze(), ground_truth.squeeze())
+            else:
+                task_loss = self.loss_fn(prediction.squeeze(), ground_truth)
         return prediction, ground_truth, task_loss
 
     def calculate_metrics(self, prediction, ground_truth):
@@ -179,6 +192,8 @@ class MENDRFinetuner(BaseModelTrainer):
             metrics = self._calculate_metrics_binary(prediction, ground_truth)
         elif self.cfg.dataset_params.task == 'multiclass':
             metrics = self._calculate_metrics_multiclass(prediction, ground_truth)
+        elif self.cfg.dataset_params.task == 'regression':
+            metrics = self._calculate_metrics_regression(prediction, ground_truth)
         else:
             raise Exception("Task not found")
         return metrics
@@ -220,6 +235,17 @@ class MENDRFinetuner(BaseModelTrainer):
                 metrics['f1'] = f1_score(ground_truth.cpu().detach().numpy(), pred_y, average='weighted')
             elif metric == 'cohens_kappa':
                 metrics['cohens_kappa'] = cohen_kappa_score(ground_truth.cpu().detach().numpy(), pred_y)
+        return metrics
+
+    def _calculate_metrics_regression(self, prediction, ground_truth):
+        metrics = {}
+        for metric in self.cfg.dataset_params.metrics:
+            if metric == 'pearsons_correlation':
+                metrics['pearsons_correlation'] = pearsonr(ground_truth.cpu().numpy(), pred.cpu().numpy()).statistic
+            elif metric == 'r2_score':
+                metrics['r2_score'] = r2_score(ground_truth.cpu().numpy(), prediction.cpu().numpy())
+            elif metric == 'rmse':
+                metrics['rmse'] = root_mean_squared_error(ground_truth.cpu().numpy(), prediction.cpu().numpy())
         return metrics
 
     def evaluate(self, cfg, validation_dataset):
