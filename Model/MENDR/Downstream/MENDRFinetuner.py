@@ -241,11 +241,12 @@ class MENDRFinetuner(BaseModelTrainer):
         metrics = {}
         for metric in self.cfg.dataset_params.metrics:
             if metric == 'pearsons_correlation':
-                metrics['pearsons_correlation'] = pearsonr(ground_truth.cpu().numpy(), pred.cpu().numpy()).statistic
+                metrics['pearsons_correlation'] = pearsonr(ground_truth.cpu().numpy().flatten(), prediction.cpu().numpy().flatten()).statistic
             elif metric == 'r2_score':
                 metrics['r2_score'] = r2_score(ground_truth.cpu().numpy(), prediction.cpu().numpy())
             elif metric == 'rmse':
                 metrics['rmse'] = root_mean_squared_error(ground_truth.cpu().numpy(), prediction.cpu().numpy())
+
         return metrics
 
     def evaluate(self, cfg, validation_dataset):

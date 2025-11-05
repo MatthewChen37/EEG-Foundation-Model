@@ -5,7 +5,7 @@ from torch_geometric.data import Dataset
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
-BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'high', 'graph_name']
+BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma', 'graph_name']
 
 class WaveletMOBIDataset(Dataset):
     def __init__(self, root, frac=1.0, transform=None):
@@ -35,7 +35,7 @@ class WaveletMOBIDataset(Dataset):
                 continue
             graph_name = "_".join(graph_file.split("_")[:2])
             graph_path = os.path.join(graph_folder, graph_file)
-            graph = torch.load(graph_path)
+            graph = torch.load(graph_path, weights_only=False)
             graph.y = torch.tensor([-1])
             self.graphs[graph_name] = graph
 
@@ -79,9 +79,19 @@ class WaveletMOBIDataset(Dataset):
             "wavelet_folder": epoch_tuple[1],
         }
         for i, band in enumerate(BANDS):
-            data[band] = epoch_tuple[3 + i]
+            if band == "delta":
+                data[band] = epoch_tuple[3 + i][:, 3:27]
+            elif band == "theta":
+                data[band] = epoch_tuple[3 + i][:, 3:27]
+            elif band == "alpha":
+                data[band] = epoch_tuple[3 + i][:, 3:51]
+            elif band == "beta":
+                data[band] = epoch_tuple[3 + i][:, 3:99]
+            elif band == "gamma":
+                data[band] = epoch_tuple[3 + i][:, 2:194]
+            else: 
+                data[band] = epoch_tuple[3 + i]
         return data
-
 
 if __name__ == "__main__":
     train_dataset = WaveletMOBIDataset(root="/home/hice1/mchen439/scratch/MOBI/train/graphs")
@@ -96,7 +106,6 @@ if __name__ == "__main__":
                     "alpha", data['alpha'].shape,
                     "beta", data['beta'].shape,
                     "gamma", data['gamma'].shape,
-                    "high", data['high'].shape,
                     "Data Label:", data['graph'].y.shape,
                     data['graph'].edge_index.shape,
                     data['graph'].edge_attr.shape)

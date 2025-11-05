@@ -17,17 +17,18 @@ from Model.MENDR.MENDR import MENDR_model
 from Model.MENDR.Autoencoder.MENDREncoder import MENDRPatchEncoder
 from Model.MENDR.Contextualizer.Large.MENDRContextualizerLarge import MENDRContextualizerLarge, MENDRWaveletContextualizer, MENDRCombinedContextualizer
 from Model.MENDR.Contextualizer.Tiny.MENDRContextualizerTiny import MENDRContextualizerTiny
-from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder, ISRUCFinetuneDecoder
+from Model.MENDR.Downstream.DownstreamDecoders import TUABFinetuneDecoder, TUEVFinetuneDecoder, ISRUCFinetuneDecoder, MOBIFinetuneDecoder
 from Model.MENDR.mAtt.optimizer import MixOptimizer
 from Model.MENDR.Downstream.MENDRFinetuner import MENDRFinetuner
 from Datasets.datasetTUAB import WaveletTUABDataset
 from Datasets.datasetTUEV import WaveletTUEVDataset
 from Datasets.datasetISRUC import WaveletISRUCDataset
+from Datasets.datasetMOBI import WaveletMOBIDataset
 
 METRICS = {'accuracy', 'balanced_accuracy', 'auc_pr', 'auroc', 'f1', 'cohens_kappa', 'pearsons_correlation', 'r2_score', 'rmse'}
 @hydra.main(version_base="1.2", 
             config_path="Model/MENDR/Downstream/downstream_experiment_configs/",
-            config_name="TUEV")
+            config_name="MOBI")
 def main(cfg:DictConfig) -> None:
     # Start Run
     print("Job Started. Parameters:")
@@ -128,7 +129,7 @@ def main(cfg:DictConfig) -> None:
                 param.requires_grad = True
 
     if cfg.meta_params.contextualizer_size == "TINY":
-        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
+        model = MENDR_model(mendr_autoencoder, contextualizer, device=device, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=True) #train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
         contextualizer_params = sum(p.numel() for p in contextualizer.parameters() if p.requires_grad)
     elif cfg.meta_params.contextualizer_size == "LARGE":
         model = MENDR_model(mendr_autoencoder, combined_contextualizer, device=device, wavelet_contextualizer=wavelet_contextualizer, contextualizer_size=cfg.meta_params.contextualizer_size, train_autoencoder=cfg.meta_params.pretrained_autoencoder_path is None).to(device)
