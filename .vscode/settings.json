@@ -1,5 +1,18 @@
 {
 	"python-envs.defaultEnvManager": "ms-python.python:conda",
 	"python-envs.defaultPackageManager": "ms-python.python:conda",
-	"python-envs.pythonProjects": []
+	"python-envs.pythonProjects": [],
+	"[python]": {
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": true
+		}
+	},
+	"python.formatting.provider": "autopep8",
+	"python.linting.enabled": true,
+	"python.linting.pylintEnabled": true,
+	"python.linting.flake8Enabled": true,
+	"python.linting.flake8Args": [
+		"--max-line-length=120"
+	],
 }
