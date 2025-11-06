@@ -64,7 +64,7 @@ dependencies:
   - parso=0.8.4=pyhd8ed1ab_1
   - pexpect=4.9.0=pyhd8ed1ab_1
   - pickleshare=0.7.5=pyhd8ed1ab_1004
-  - pip=25.0.1=pyh8b19718_0
+  - pip=25.2=pyh8b19718_0
   - platformdirs=4.3.6=pyhd8ed1ab_1
   - prompt-toolkit=3.0.50=pyha770c72_0
   - psutil=7.0.0=py310ha75aee5_0
@@ -81,7 +81,6 @@ dependencies:
   - python_abi=3.10=5_cp310
   - pyzmq=26.3.0=py310h71f11fc_0
   - readline=8.2=h8c095d6_2
-  - scikit-learn=1.6.1=py310h27f47ee_0
   - scipy=1.15.2=py310h1d65ade_0
   - setuptools=75.8.2=pyhff2d567_0
   - six=1.17.0=pyhd8ed1ab_0
@@ -94,7 +93,6 @@ dependencies:
   - traitlets=5.14.3=pyhd8ed1ab_1
   - typing-extensions=4.12.2=hd8ed1ab_1
   - typing_extensions=4.12.2=pyha770c72_1
-  - tzdata=2025a=h78e105d_0
   - umap-learn=0.5.7=py310hff52083_1
   - wcwidth=0.2.13=pyhd8ed1ab_1
   - wheel=0.45.1=pyhd8ed1ab_1
@@ -104,6 +102,8 @@ dependencies:
   - pip:
       - antlr4-python3-runtime==4.9.3
       - attrs==25.3.0
+      - cffi==2.0.0
+      - cftime==1.6.5
       - charset-normalizer==2.1.1
       - contourpy==1.3.1
       - cycler==0.12.1
@@ -113,6 +113,7 @@ dependencies:
       - huggingface-hub==0.34.3
       - hydra-core==1.3.2
       - importlib-metadata==8.5.0
+      - iniconfig==2.3.0
       - jinja2==3.1.6
       - jsonschema==4.23.0
       - jsonschema-specifications==2024.10.1
@@ -120,7 +121,9 @@ dependencies:
       - kiwisolver==1.4.8
       - markupsafe==3.0.2
       - matplotlib==3.10.1
+      - mne-connectivity==0.7.0
       - narwhals==1.33.0
+      - netcdf4==1.7.3
       - numpy==1.26.4
       - nvidia-cublas-cu12==12.8.3.14
       - nvidia-cuda-cupti-cu12==12.8.57
@@ -139,18 +142,26 @@ dependencies:
       - nvidia-nvtx-cu12==12.8.55
       - omegaconf==2.3.0
       - plotly==6.0.1
+      - pluggy==1.6.0
+      - pycparser==2.23
       - pymanopt==2.2.1
       - pynvml==12.0.0
       - pyparsing==3.2.1
       - pyriemann==0.8
+      - pytest==8.4.2
       - pytz==2025.1
+      - pywavelets==1.8.0
       - pyyaml==6.0.2
       - referencing==0.36.2
       - requests==2.32.3
       - rpds-py==0.24.0
+      - scikit-learn==1.5.2
       - sympy==1.13.3
+      - tomli==2.3.0
       - torch==2.7.1+cu128
       - torchaudio==2.7.1+cu128
       - torchvision==0.22.1+cu128
       - triton==3.3.1
+      - tzdata==2025.2
+      - xarray==2025.6.1
 prefix: /home/hice1/mchen439/scratch/miniconda3/envs/Wavelet
